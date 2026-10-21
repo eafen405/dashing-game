@@ -4,13 +4,15 @@
  * 规则层只记录「角色驻守哪条轨道 / 是否在出招 / 双生下砸动画剩多久」，
  * 这里负责把这些状态翻译成动作：
  *
- * - **上轨**：跳起 + 向上挥棒（上勾式）。
- * - **下轨**：原地抡起后向下砸。
+ * - **默认**：在下轨的地面上跑，脚底跟着轨道光带。
+ * - **上轨**：从下轨跳进天空，约 1 秒的抛物线后受重力落回下轨；
+ *   跳到最高点时脚底正好贴上轨，并向上挥棒（上勾式）。
+ * - **下轨**：站在地上抡起后向下砸；若上跳途中改打下轨，会加速落地再砸。
  * - **双生击破**：大幅跳起，落到轨道上再狠狠下砸。
- * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打。
- * - **移动**：换轨时平滑走过去（腿随视觉时钟摆动）。
+ * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打；结束后落回下轨。
+ * - **换轨**：长按悬浮时平滑飞过去（腿随视觉时钟摆动）。
  *
- * 保留旧版角色已有的 FEVER 光环、脚下平台光、生命环与受击红闪。
+ * 保留旧版角色已有的 FEVER 光环、脚下地面光、生命环与受击红闪。
  * 所有动作都由 `FrameContext` 的只读快照驱动，渲染层不持有规则状态。
  */
 
@@ -20,9 +22,10 @@ import {
   LANE,
   LONG_COLOR,
   MAX_HP,
+  TOP_AIR_TIME,
 } from '../../game/constants';
 import type { FrameContext } from './context';
-import { FEET_OFFSET_R } from './ground';
+import { FEET_OFFSET_R, laneGroundY } from './ground';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
 import { hexA, roundRectPath, starPath } from './paths';
 
@@ -34,6 +37,10 @@ const LANE_FOLLOW = 11;
 const WALK_RATE = 13;
 /** 长按连击的周期（秒）。 */
 const HOLD_PERIOD = 0.24;
+/** 从空中落回地面的重力（px/s²）—— 只用于 airT 结束后还没落地的情况。 */
+const FALL_GRAVITY = 2400;
+/** 落地压缩 / 尘环的持续时间（秒）。 */
+const LAND_DUR = 0.18;
 
 const SKIN = '#ffcf9f';
 const SKIN_DARK = '#e2a76f';
@@ -55,13 +62,65 @@ export class PlayerView {
   private displayY = Number.NaN;
   /** 上一帧的视觉时钟（用来算 dt；`vt` 在所有阶段都推进）。 */
   private lastVt = -1;
+  /** 上一帧的游戏时间（检测新一局）。 */
+  private lastNow = 0;
+  /** 滞空结束后仍在空中时的下落速度（px/s）。 */
+  private fallV = 0;
+  /** 上一帧是否在空中（用于落地反馈）。 */
+  private airborne = false;
+  /** 落地压缩 / 尘环剩余时间（秒）。 */
+  private landT = 0;
 
   draw(fc: FrameContext): void {
     const ctx = fc.ctx;
-    const { height, playerR: s, playerX } = fc.layout;
+    const { playerR: s, playerX } = fc.layout;
 
-    const targetY = fc.playerLane ? fc.layout.laneY[fc.playerLane] : height / 2;
-    const y = this.followLane(fc, targetY);
+    const dt = this.frameDt(fc);
+
+    // 新一局：游戏时间归零，清掉上一局残留的滞空 / 下落状态
+    if (fc.now + 0.01 < this.lastNow) {
+      this.displayY = Number.NaN;
+      this.fallV = 0;
+      this.landT = 0;
+      this.airborne = false;
+    }
+    this.lastNow = fc.now;
+    if (this.landT > 0) this.landT = Math.max(0, this.landT - dt);
+
+    const bottomY = fc.layout.laneY.bottom;
+    const topY = fc.layout.laneY.top;
+    const lane = fc.playerLane ?? 'bottom';
+    const airT = clamp(fc.playerAirT, 0, TOP_AIR_TIME);
+    const jumping = airT > 0;
+    const groundFeet = laneGroundY(fc.layout, 'bottom');
+
+    /* ---------- 重力：上跳抛物线 / 下落 ---------- */
+    const targetY = lane === 'top' ? topY : bottomY;
+    let y: number;
+    let falling = false;
+
+    if (jumping) {
+      // 从下轨起跳：0.5 秒到最高点（脚底贴上轨），1 秒落回下轨
+      const p = 1 - airT / TOP_AIR_TIME;
+      y = bottomY - (bottomY - topY) * 4 * p * (1 - p);
+      this.displayY = y;
+      this.fallV = 0;
+    } else if (lane === 'bottom' && this.displayY > bottomY + 0.5) {
+      // airT 被下轨出招打断 / 长按结束：还在空中，受重力落回地面
+      falling = true;
+      if (dt > 0) {
+        this.fallV += FALL_GRAVITY * dt;
+        this.displayY = Math.min(bottomY, this.displayY + this.fallV * dt);
+      }
+      y = this.displayY;
+    } else {
+      y = this.followLane(targetY, dt);
+      this.fallV = 0;
+    }
+
+    const airborneNow = jumping || falling;
+    if (this.airborne && !airborneNow && lane === 'bottom') this.landT = LAND_DUR;
+    this.airborne = airborneNow;
 
     /* ---------- 当前动作 ---------- */
     const hm = fc.holdMonster;
@@ -72,10 +131,12 @@ export class PlayerView {
     const attackActive = fc.attackT > 0 && fc.attackLane !== null;
     const pairP = clamp(fc.pairSmash, 0, 1);
 
-    // 在跑动局里角色一直在往前走；出招 / 长按 / 双生跳砸时暂停步态
-    const walking = fc.phase === 'running' && !attackActive && !hold && pairP === 0;
+    // 只有踩在下轨地面上时才算「在走」；空中 / 悬浮 / 出招都暂停步态
+    const onGround = lane === 'bottom' && !jumping && !falling && Math.abs(y - bottomY) < 1.5;
+    const walking =
+      fc.phase === 'running' && !attackActive && !hold && pairP === 0 && onGround;
     const laneWalk = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
-    const walkAmp = Math.max(laneWalk, walking ? 1 : 0);
+    const walkAmp = jumping || falling || hold ? 0 : Math.max(laneWalk, walking ? 1 : 0);
     const walkPhase = fc.now * WALK_RATE;
 
     /* ---------- 姿态参数 ---------- */
@@ -138,11 +199,7 @@ export class PlayerView {
     } else if (attackActive) {
       const T = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
       if (fc.attackLane === 'top') {
-        // 上轨：蹲身 → 跳起 + 向上挥棒
-        const jump = T < 0.14 ? 0 : T < 0.62 ? Math.sin((Math.PI * (T - 0.14)) / 0.48) : 0;
-        lift = -jump * s * 0.55;
-        legTuck = jump;
-        bodyRot = -0.08 * jump;
+        // 上轨：高度由滞空抛物线控制，这里只负责向上挥棒
         if (T < 0.18) {
           squash = Math.sin(Math.PI * (T / 0.18)) * 0.55;
           clubA = lerp(IDLE_CLUB, 0.75, easeOutCubic(T / 0.18));
@@ -179,42 +236,58 @@ export class PlayerView {
       }
     }
 
+    // 滞空姿态：收腿、身体随上升 / 下落微微前倾
+    if (jumping) {
+      const p = 1 - airT / TOP_AIR_TIME;
+      legTuck = Math.max(legTuck, p < 0.55 ? 0.9 : 0.55);
+      bodyRot += p < 0.5 ? -0.06 : 0.06;
+    } else if (falling) {
+      legTuck = Math.max(legTuck, 0.35);
+      bodyRot += 0.05;
+    }
+
     // 落地压缩：身体略微压扁、重心下沉
+    if (this.landT > 0) squash = Math.max(squash, (this.landT / LAND_DUR) * 0.45);
     lift += squash * s * 0.1;
     const bob =
-      Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(walkPhase)) * s * 0.035 * walkAmp;
+      jumping || falling
+        ? 0
+        : Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(walkPhase)) * s * 0.035 * walkAmp;
 
     const actionLane = pairP > 0
-      ? (fc.playerLane ?? fc.attackLane)
+      ? (fc.playerLane ?? 'bottom')
       : hold
         ? hold.lane
         : attackActive
-          ? fc.attackLane
-          : fc.playerLane;
-    const laneColor = fc.frenzyActive
-      ? FRENZY_LANE[actionLane ?? 'top']
-      : LANE[actionLane ?? 'top'].color;
+          ? (fc.attackLane ?? lane)
+          : lane;
+    const laneColor = fc.frenzyActive ? FRENZY_LANE[actionLane] : LANE[actionLane].color;
 
-    /* ---------- 脚下平台光 ---------- */
-    const groundY = y + s * FEET_OFFSET_R;
-    const g = ctx.createRadialGradient(playerX, groundY, 2, playerX, groundY, s * 1.7);
-    g.addColorStop(0, 'rgba(96,200,255,.16)');
-    g.addColorStop(1, 'rgba(96,200,255,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(playerX, groundY, s * 1.65, s * 0.3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 悬浮时在脚下留一小块阴影，强调人已经离地
-    if (hover < -s * 0.2) {
-      ctx.fillStyle = 'rgba(0,0,0,.28)';
+    /* ---------- 脚下地面光 ---------- */
+    if (lane === 'bottom' && !jumping && !falling) {
+      const g = ctx.createRadialGradient(playerX, groundFeet, 2, playerX, groundFeet, s * 1.7);
+      g.addColorStop(0, 'rgba(96,200,255,.16)');
+      g.addColorStop(1, 'rgba(96,200,255,0)');
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.ellipse(playerX, y + s * FEET_OFFSET_R, s * 0.6, s * 0.13, 0, 0, Math.PI * 2);
+      ctx.ellipse(playerX, groundFeet, s * 1.65, s * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     /* ---------- 身体 ---------- */
     const bodyY = y + hover + lift + bob;
+
+    // 地面投影：越高越淡越小，给跳跃一个落脚参照
+    const feetWorld = bodyY + s * FEET_OFFSET_R;
+    const maxLift = Math.max(1, groundFeet - (topY + s * FEET_OFFSET_R));
+    const hk = clamp((groundFeet - feetWorld) / maxLift, 0, 1);
+    if (hk > 0.02) {
+      const rx = s * (0.62 - 0.3 * hk);
+      ctx.fillStyle = 'rgba(0,0,0,' + (0.3 - 0.12 * hk) + ')';
+      ctx.beginPath();
+      ctx.ellipse(playerX, groundFeet, rx, rx * 0.24, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 走路时在身后扬起一点尘土，让「在地面上走」更明确
     if (walking) {
@@ -287,6 +360,24 @@ export class PlayerView {
       ctx.stroke();
     }
 
+    /* ---------- 落地的尘环 ---------- */
+    if (this.landT > 0) {
+      const k = 1 - this.landT / LAND_DUR;
+      ctx.strokeStyle = 'rgba(200,230,220,' + (1 - k) * 0.3 + ')';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(
+        playerX,
+        groundFeet,
+        s * (0.7 + 1.2 * k),
+        s * (0.16 + 0.24 * k),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+
     /* ---------- 生命环 ---------- */
     this.drawHpRing(fc, playerX, bodyY, s);
   }
@@ -295,11 +386,16 @@ export class PlayerView {
    * 位置 / 姿态辅助
    * ------------------------------------------------------------------ */
 
-  /** 换轨平滑：指数逼近目标轨道中心。 */
-  private followLane(fc: FrameContext, target: number): number {
+  /** 每帧步长：用视觉时钟算，暂停时为 0（滞空 / 下落也跟着冻结）。 */
+  private frameDt(fc: FrameContext): number {
     const vt = fc.vt;
-    const dt = this.lastVt < 0 ? 1 / 60 : clamp(vt - this.lastVt, 0, 0.05);
+    const raw = this.lastVt < 0 ? 1 / 60 : clamp(vt - this.lastVt, 0, 0.05);
     this.lastVt = vt;
+    return fc.phase === 'paused' ? 0 : raw;
+  }
+
+  /** 换轨平滑：指数逼近目标轨道中心。 */
+  private followLane(target: number, dt: number): number {
     if (Number.isNaN(this.displayY)) {
       this.displayY = target;
       return target;

@@ -17,6 +17,14 @@ export const HIT_DAMAGE = 20;
 /** 出招动作时长（秒）。 */
 export const ATTACK_DUR = 0.44; // 出招动作时长（秒）
 
+/**
+ * 上跳滞空时间（秒）。
+ *
+ * 角色默认在下轨跑，打下轨怪时不离开地面；打上轨怪会跳进天空，
+ * 约 1 秒后受重力落回下轨。滞空期间只算「在上轨上方」。
+ */
+export const TOP_AIR_TIME = 1;
+
 export const FEVER_COMBO = 50; // 每累计 50 连击触发一次 FEVER
 export const FEVER_TIME = 10; // FEVER 持续 10 秒
 export const FEVER_MULT = 1.5; // FEVER 期间得分 ×1.5

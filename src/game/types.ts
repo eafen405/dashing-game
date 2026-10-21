@@ -184,12 +184,19 @@ export interface GameState {
   /** 出招轨道。 */
   attackLane: Lane | null;
   /**
-   * 角色当前驻守的轨道；`null` 表示还站在两轨之间（尚未出招）。
+   * 角色当前驻守的轨道。默认 `'bottom'`（在下轨地面上跑）；上跳打上轨时
+   * 变为 `'top'`，落回下轨后再变回 `'bottom'`。
    *
    * 角色只在自己驻守的轨道上才会**碰到**漏过来的怪：另一轨的怪会从身边擦过，
    * 不扣血，但连击清零。双生怪两轨各有一只，因此触线时必定撞上角色。
    */
   playerLane: Lane | null;
+  /**
+   * 上跳滞空剩余秒数（仅 `playerLane === 'top'` 且不在长按悬浮时生效）。
+   *
+   * 到 0 时角色落回下轨（`playerLane` 改回 `'bottom'`）。
+   */
+  airT: number;
 
   /** 下一个怪物 id 计数器。 */
   nextMonsterId: number;

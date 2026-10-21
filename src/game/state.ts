@@ -6,7 +6,7 @@
  *
  * 重置清单（逐条对照 `legacy-semantics.md` §0）：
  *   hp / score / combo / maxCombo / kills / critCount / normalCount
- *   monsters / attackT / attackLane / playerLane / spawnTimer / frenzyActive / feverT
+ *   monsters / attackT / attackLane / playerLane / airT / spawnTimer / frenzyActive / feverT
  *   nextFeverAt / pairSeq / pairCooldown / pairHintShown / longCooldown
  *   longHintShown / holdMon / holdId
  *
@@ -66,7 +66,9 @@ export function createGameState(options: {
 
     attackT: 0,
     attackLane: null,
-    playerLane: null,
+    // 默认在下轨地面上跑；上跳打上轨时才短暂变成 'top'
+    playerLane: 'bottom',
+    airT: 0,
 
     nextMonsterId: 1,
   };

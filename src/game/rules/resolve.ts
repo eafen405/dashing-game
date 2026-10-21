@@ -429,6 +429,8 @@ export function startHold(
     attackT: ATTACK_DUR,
     attackLane: m.lane,
     playerLane: m.lane,
+    // 长按是悬浮，不受滞空时间约束；结束后（下一次 tick）落回下轨
+    airT: 0,
     monsters: patch(state.monsters, monsterId, (x) =>
       x.kind === 'hold' ? { ...x, holding: true, anchored: true, waitT: LONG_WAIT } : x,
     ),
@@ -673,8 +675,8 @@ export function hurtPlayer(
     monsters: patch(state.monsters, monsterId, (x) => ({ ...x, removed: true })),
   };
 
-  // 受击反馈画在角色驻守的那条轨道上（未出招时在两轨之间）
-  const playerY = state.playerLane ? state.layout.laneY[state.playerLane] : state.layout.height / 2;
+  // 受击反馈画在角色驻守的轨道上（默认下轨）
+  const playerY = state.layout.laneY[state.playerLane ?? 'bottom'];
   const effects: Effect[] = [
     { type: 'player-flash' },
     { type: 'shake-set', amount: 14 },

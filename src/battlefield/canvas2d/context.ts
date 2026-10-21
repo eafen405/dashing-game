@@ -51,8 +51,10 @@ export class FrameContext {
   attackT = 0;
   /** 出招轨道。 */
   attackLane: Lane | null = null;
-  /** 角色驻守的轨道；`null` = 站在两轨之间。 */
+  /** 角色驻守的轨道；默认下轨。 */
   playerLane: Lane | null = null;
+  /** 上跳滞空剩余秒数（0 = 已落地）。 */
+  playerAirT = 0;
   /** 双生击破下砸动画进度（0 = 未播放，1 = 刚触发）。 */
   pairSmash = 0;
   /** 正在被长按的那只长按怪（没有则为 `null`）。 */

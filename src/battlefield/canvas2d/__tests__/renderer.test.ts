@@ -105,7 +105,8 @@ function frame(overrides: Partial<FrameView> = {}): FrameView {
     monsters: [],
     attackT: 0,
     attackLane: null,
-    playerLane: null,
+    playerLane: 'bottom',
+    playerAirT: 0,
     effects: NO_EFFECTS,
     shake: 0,
     playerFlash: 0,
@@ -259,12 +260,14 @@ describe('Canvas 2D 渲染器', () => {
     expect(shaken).toBe(still + 1);
   });
 
-  it('角色换轨 / 下砸 / 长按悬浮的帧都能画出来', () => {
+  it('角色上跳 / 下砸 / 长按悬浮的帧都能画出来', () => {
     const renderer = createCanvas2dRenderer();
     renderer.mount(host as unknown as HTMLElement);
     renderer.resize(LAYOUT);
 
-    renderer.render(frame({ playerLane: 'top', attackLane: 'top', attackT: 0.2 }));
+    renderer.render(
+      frame({ playerLane: 'top', playerAirT: 0.5, attackLane: 'top', attackT: 0.2 }),
+    );
     renderer.render(
       frame({ playerLane: 'bottom', attackLane: 'bottom', attackT: 0.2, pairSmash: 0.5 }),
     );

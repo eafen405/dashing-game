@@ -175,6 +175,14 @@ export function tick(
     if (s.phase !== 'running') break;
   }
 
+  // ── 3.5 滞空 / 落地 ─────────────────────────────────────
+  // 上跳打上轨：约 1 秒后受重力落回下轨。长按是悬浮，不消耗滞空时间。
+  if (s.playerLane === 'top' && s.holdMonsterId === null) {
+    const airT = Math.max(0, s.airT - step);
+    s = { ...s, airT };
+    if (airT <= 0) s = { ...s, playerLane: 'bottom' };
+  }
+
   // ── 4. 触线伤害 ─────────────────────────────────────────
   for (const id of breached) {
     if (s.phase !== 'running') break;
@@ -182,8 +190,8 @@ export function tick(
     if (!m || m.removed) continue;
     // 双生一同触线：只结算一次伤害，另一只随锁链自毁
     const mateId = m.kind === 'twin' ? m.partnerId : null;
-    // 角色只驻守一条轨道：另一轨的怪擦身而过，不扣血。
-    // 双生两轨各有一只，必定撞上角色；尚未出招（playerLane = null）时两轨都会撞。
+    // 角色默认在下轨地面上；上跳的 1 秒内视为在上轨上方。
+    // 另一轨的怪擦身而过，不扣血；双生两轨各有一只，必定撞上角色。
     const collides = mateId !== null || s.playerLane === null || s.playerLane === m.lane;
     if (mateId !== null) {
       const mate = findMonster(s.monsters, mateId);

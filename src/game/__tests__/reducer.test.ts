@@ -27,7 +27,8 @@ describe('规则层事件归约器', () => {
     expect(state.nextFeverAt).toBe(50);
     expect(state.pairCooldown).toBeCloseTo(4.5, 10);
     expect(state.longCooldown).toBeCloseTo(6, 10);
-    expect(state.playerLane).toBeNull();
+    expect(state.playerLane).toBe('bottom');
+    expect(state.airT).toBe(0);
   });
 
   it('Tick 推进一帧', () => {

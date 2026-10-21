@@ -26,7 +26,7 @@ export class MonsterView {
     const w = m.w;
     const h = m.h;
 
-    // 地面阴影：怪物悬浮在轨道上方，影子落在地面线上
+    // 只有下轨在地面上；上轨是天空，飞行的怪不投影
     this.drawShadow(fc, m.x, m.w, m.lane, c);
 
     // 预警：接近判定区时闪烁
@@ -127,6 +127,7 @@ export class MonsterView {
     lane: NormalMonster['lane'],
     color: string,
   ): void {
+    if (lane !== 'bottom') return;
     const ctx = fc.ctx;
     const gy = laneGroundY(fc.layout, lane);
     ctx.fillStyle = hexA(color, 0.08);

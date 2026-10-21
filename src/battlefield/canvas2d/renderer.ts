@@ -159,6 +159,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     fc.attackT = frame.attackT;
     fc.attackLane = frame.attackLane;
     fc.playerLane = frame.playerLane;
+    fc.playerAirT = frame.playerAirT;
     fc.pairSmash = frame.pairSmash;
     fc.monsters = frame.monsters;
     fc.effects = frame.effects;

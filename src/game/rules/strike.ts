@@ -12,7 +12,7 @@
  * （先中的那只按普攻 200 / 暴击 300 得分，另一只 `pairBlast` 自爆扣 20 血）。
  */
 
-import { ATTACK_DUR, LANE, PAIR_COLOR, PAIR_WINDOW } from '../constants';
+import { ATTACK_DUR, LANE, PAIR_COLOR, PAIR_WINDOW, TOP_AIR_TIME } from '../constants';
 import type { Effect } from '../effects';
 import type { GameState, Lane, Monster } from '../types';
 import { findLongInLane } from './spawn';
@@ -36,12 +36,15 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
   const effects: Effect[] = [];
 
   // 出招动作：同一挥击期间连点不重置，换轨则重新出招。
-  // 角色同时走到该轨道驻守 —— 之后只有这一轨的漏怪会撞到角色。
+  // 角色默认驻守下轨；打上轨会跳进天空，约 1 秒后落回下轨。
   let s = state;
   if (s.attackT <= ATTACK_DUR * 0.42 || s.attackLane !== lane) {
     s = { ...s, attackT: ATTACK_DUR, attackLane: lane };
   }
-  s = { ...s, playerLane: lane };
+  // 已经在空中时再打上轨不刷新滞空（重力不会因为挥棒重置）；
+  // 从下轨起跳才给满 1 秒。
+  const airT = lane === 'top' ? (s.playerLane === 'top' ? s.airT : TOP_AIR_TIME) : 0;
+  s = { ...s, playerLane: lane, airT };
 
   // 轨道受击高亮（旧实现给轨道 DOM 节点加 class）
   effects.push({ type: 'lane-flash', lane });

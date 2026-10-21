@@ -166,6 +166,7 @@ export class GameSession {
       attackT: s.attackT,
       attackLane: s.attackLane,
       playerLane: s.playerLane,
+      playerAirT: s.airT,
       effects: this.presentation.effects,
       shake: 0,
       playerFlash: 0,
@@ -341,12 +342,13 @@ export class GameSession {
     if (this.presentation.effects.particles.length >= MAX_PARTICLES) return;
     this.frenzySparkT = rand(0.035, 0.08);
 
-    const { playerX, playerR, height } = this.state.layout;
+    const { playerX, playerR, laneY } = this.state.layout;
+    const ringY = laneY[this.state.playerLane ?? 'bottom'];
     const a = rand(0, Math.PI * 2);
     const rr = playerR * rand(1.2, 2.1);
     this.presentation.effects.addSpark(
       playerX + Math.cos(a) * rr,
-      height / 2 + Math.sin(a) * rr,
+      ringY + Math.sin(a) * rr,
       -rand(40, 160),
       rand(-70, 20),
       rand(1.4, 3.2),
@@ -376,6 +378,7 @@ export class GameSession {
     f.attackT = s.attackT;
     f.attackLane = s.attackLane;
     f.playerLane = s.playerLane;
+    f.playerAirT = s.airT;
     f.effects = this.presentation.effects;
     f.shake = this.presentation.shake.value;
     f.playerFlash = this.presentation.playerFlash;

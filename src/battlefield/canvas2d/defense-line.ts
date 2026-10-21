@@ -1,9 +1,8 @@
 /**
  * 防线 —— 角色身前「碰到怪」的竖向接触面。
  *
- * 旧实现只是一小段竖向渐变线（`source.html:1553-1565`）；角色改成一直接地行走后，
- * 把这条线从顶轨地面拉到底轨地面，读成角色前进方向上的接触面，
- * 也解释了「漏怪走到这里会撞到角色」的规则。
+ * 角色默认在下轨地面上跑，所以接触面只画在下轨地面之上：
+ * 上轨是天空，上轨漏怪从头顶飞过，不会撞到地里的人。
  */
 
 import type { FrameContext } from './context';
@@ -26,14 +25,15 @@ export class DefenseLineView {
     }
     const { layout } = fc;
     const x = layout.playerX + layout.playerR * 1.15 + 8;
-    const y0 = laneGroundY(layout, 'top') - layout.playerR * 0.3;
-    const y1 = laneGroundY(layout, 'bottom') + layout.playerR * 0.1;
+    const gy = laneGroundY(layout, 'bottom');
+    const y0 = gy - layout.playerR * 1.45;
+    const y1 = gy + layout.playerR * 0.08;
 
     if (!this.gradient) {
       const g = ctx.createLinearGradient(x, y0, x, y1);
       g.addColorStop(0, 'rgba(255,255,255,0)');
-      g.addColorStop(0.18, 'rgba(255,255,255,.09)');
-      g.addColorStop(0.55, 'rgba(255,255,255,.13)');
+      g.addColorStop(0.35, 'rgba(255,255,255,.09)');
+      g.addColorStop(0.85, 'rgba(255,255,255,.14)');
       g.addColorStop(1, 'rgba(255,255,255,0)');
       this.gradient = g;
     }

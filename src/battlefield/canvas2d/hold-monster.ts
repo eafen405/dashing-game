@@ -34,17 +34,19 @@ export class HoldMonsterView {
     const headX = x + h * 0.46; // 旧 `longHeadX`（`source.html:1089-1091`）
     const inWindow = !m.anchored && !esc && Math.abs(headX - hitX) <= zoneHalf;
 
-    // 地面阴影：长条怪悬浮在轨道上方
-    const gy = laneGroundY(fc.layout, m.lane);
-    const cx = x + len / 2;
-    ctx.fillStyle = hexA(c, 0.06);
-    ctx.beginPath();
-    ctx.ellipse(cx, gy, len * 0.52, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,.3)';
-    ctx.beginPath();
-    ctx.ellipse(cx, gy, len * 0.44, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // 只有下轨在地面上；上轨的长条怪在天空里，不投影
+    if (m.lane === 'bottom') {
+      const gy = laneGroundY(fc.layout, m.lane);
+      const cx = x + len / 2;
+      ctx.fillStyle = hexA(c, 0.06);
+      ctx.beginPath();
+      ctx.ellipse(cx, gy, len * 0.52, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.3)';
+      ctx.beginPath();
+      ctx.ellipse(cx, gy, len * 0.44, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.save();
     ctx.globalAlpha = esc ? 0.55 : 1;

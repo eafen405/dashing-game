@@ -149,8 +149,10 @@ export interface FrameView {
   readonly attackT: number;
   /** 出招轨道。 */
   readonly attackLane: Lane | null;
-  /** 角色驻守的轨道；`null` = 站在两轨之间（尚未出招）。 */
+  /** 角色驻守的轨道；默认 `'bottom'`（下轨地面），上跳打上轨时为 `'top'`。 */
   readonly playerLane: Lane | null;
+  /** 上跳滞空剩余秒数（0 = 已落地）。 */
+  readonly playerAirT: number;
 
   // ---- 表现层可变状态 ----
 

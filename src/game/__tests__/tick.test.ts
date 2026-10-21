@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { TOP_AIR_TIME } from '../constants';
 import { createRng } from '../rng';
 import { strike } from '../rules/strike';
 import { tick } from '../rules/tick';
@@ -121,13 +122,25 @@ describe('主推进', () => {
     expect(next.hp).toBe(230);
   });
 
-  it('漏怪扣 20 血', () => {
-    const state = makeState({ monsters: [normalMonster({ x: 130, sf: 1 })] });
+  it('漏怪扣 20 血（默认驻守下轨）', () => {
+    const state = makeState({
+      monsters: [normalMonster({ lane: 'bottom', y: 360, x: 130, sf: 1 })],
+    });
 
     const { state: next } = tick(state, FRAME, createRng(1));
 
     expect(next.hp).toBe(230);
     expect(next.combo).toBe(0);
+  });
+
+  it('默认在下轨：上轨漏怪从头顶飞过，不扣血只清连击', () => {
+    const state = makeState({ monsters: [normalMonster({ x: 130 })], combo: 7 });
+
+    const { state: next, effects } = tick(state, FRAME, createRng(1));
+
+    expect(next.hp).toBe(250);
+    expect(next.combo).toBe(0);
+    expect(effects.some((e) => e.type === 'player-flash')).toBe(false);
   });
 
   it('驻守上轨时，下轨漏怪不扣血，但连击清零', () => {
@@ -173,6 +186,26 @@ describe('主推进', () => {
     expect(next.hp).toBe(230);
     expect(next.combo).toBe(0);
     expect(effects.some((e) => e.type === 'player-flash')).toBe(true);
+  });
+
+  it('上跳约 1 秒后落回下轨', () => {
+    const struck = strike(makeState({ spawnTimer: 999 }), 'top').state;
+    expect(struck.playerLane).toBe('top');
+    expect(struck.airT).toBeCloseTo(TOP_AIR_TIME, 10);
+
+    let s = struck;
+    for (let i = 0; i < 20; i++) s = tick(s, 0.05, createRng(1)).state;
+
+    expect(s.playerLane).toBe('bottom');
+    expect(s.airT).toBe(0);
+  });
+
+  it('空中改打下轨：立即结束滞空', () => {
+    const air = strike(makeState({ spawnTimer: 999 }), 'top').state;
+    const down = strike(air, 'bottom').state;
+
+    expect(down.playerLane).toBe('bottom');
+    expect(down.airT).toBe(0);
   });
 
   it('双生触线时，即使角色只驻守一轨也必定受伤', () => {
