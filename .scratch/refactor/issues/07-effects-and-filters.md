@@ -16,7 +16,7 @@ Blocked by: 06
    - `AdvancedBloomFilter` 的 `resolution` 可调低以省像素成本；bloom 强度与阈值需要调（见 09）。
 
 2. **条件滤镜**（不是常驻）：
-   - `RGBShiftFilter`（色散）—— 仅 FEVER 期间启用，缓慢左右漂移。
+   - `RGBSplitFilter`（色散）—— 仅 FEVER 期间启用，缓慢左右漂移。
    - `ShockwaveFilter`（冲击波）—— 暴击 / 双生同时击破时瞬时触发。
    - 滤镜切换必须**不重建 filter 实例**（重建会导致每帧分配），用参数插值过渡。
 
@@ -45,5 +45,23 @@ Blocked by: 06
 ## 备注
 
 - `pixi-filters@6` 是 PixiJS 官方维护的，peer 要求 `pixi.js >=8`，与本项目匹配。
-- 可用的滤镜不止 bloom：`glow` / `rgb-split` / `shockwave` / `motion-blur` / `crt` / `noise` / `color-overlay` / `drop-shadow` / `outline`。不要一次全上 —— 每个都是像素成本。
+- 可用的滤镜不止 bloom：`glow` / `rgb-split`（`RGBSplitFilter`） / `shockwave` / `motion-blur` / `crt` / `noise` / `color-overlay` / `drop-shadow` / `outline`。不要一次全上 —— 每个都是像素成本。
 - **背景不动**（第一轮裁决）：现有 `bgStars` 星空保持原样，不要引入流体 / 粒子背景。
+
+## 实现备注（API 核实）
+
+以下 API 名经 `node_modules/pixi-filters@6.1.5` / `pixi.js@8.22.0` 的 `.d.ts` 核实后修正：
+
+| 票面写法 | 实际 API | 证据 |
+| --- | --- | --- |
+| `RGBShiftFilter` | `RGBSplitFilter` | `pixi-filters/lib/rgb-split/RGBSplitFilter.d.ts:28`；全库 grep `RGBShift` 零命中 |
+| `particleProperties` | `dynamicProperties` | `ParticleContainer.d.ts:106` |
+| `from 'pixi.js/particle-container'` | 从 `'pixi.js'` 根导入 | 该子路径无 `types` condition，`strict` 下报 TS7016 |
+
+另有两个**静默失效**风险（无报错但效果不出现）：
+
+- `AdvancedBloomFilter` 的 `padding` 恒为 0（内层 Kawase 的 padding 不向上传播）→ glow 被裁切，必须手设。
+- `ParticleContainer` 的 `bounds` 恒空 → 若 glow 层只有它，滤镜区域为空，
+  `FilterSystem` 会静默跳过整个滤镜 → 必须设 `boundsArea` + 图层 `filterArea`。
+
+完整核实报告见 `/home/eafen405/refactor-notes/pixi-fx-spec.md`（仓库外，交付时随工作流产出）。
