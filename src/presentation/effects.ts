@@ -34,7 +34,16 @@
  * 规则层只说「击破了」，不说「长什么样」。
  */
 
-import type { Effects, Floater, Particle, ParticleForm, Ring, RingTier, Slash, SlashKind } from '../battlefield/types';
+import type {
+  Effects,
+  Floater,
+  Particle,
+  ParticleForm,
+  Ring,
+  RingTier,
+  Slash,
+  SlashKind,
+} from '../battlefield/types';
 import type { Lane } from '../game/types';
 
 /** 粒子上限（与旧实现一致：`source.html:1258`）。 */

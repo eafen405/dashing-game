@@ -70,7 +70,11 @@ export class HitZoneView {
       for (const lane of ['top', 'bottom'] as const) {
         const crit = createLabel('暴击', 10, '600');
         const normal = createLabel('普攻', 10, '600');
-        const hit = createLabel(lane === 'top' ? '打击点 · 点击上半屏' : '打击点 · 点击下半屏', 11, '600');
+        const hit = createLabel(
+          lane === 'top' ? '打击点 · 点击上半屏' : '打击点 · 点击下半屏',
+          11,
+          '600',
+        );
         this.critLabels.push(crit);
         this.normalLabels.push(normal);
         this.hitLabels.push(hit);
@@ -103,13 +107,7 @@ export class HitZoneView {
   /**
    * 外圈光晕（径向渐变）—— 画在 `glow` 层（票 07：参与 bloom）。
    */
-  private drawHalo(
-    g: Graphics,
-    fc: FrameContext,
-    lane: Lane,
-    y: number,
-    pulse: number,
-  ): void {
+  private drawHalo(g: Graphics, fc: FrameContext, lane: Lane, y: number, pulse: number): void {
     const { layout } = fc;
     const R = layout.zoneHalf;
     const color = laneColorOf(lane, fc.frenzyActive);
@@ -121,13 +119,7 @@ export class HitZoneView {
     g.fill();
   }
 
-  private drawZone(
-    g: Graphics,
-    fc: FrameContext,
-    lane: Lane,
-    y: number,
-    pulse: number,
-  ): void {
+  private drawZone(g: Graphics, fc: FrameContext, lane: Lane, y: number, pulse: number): void {
     const { layout } = fc;
     const hitX = layout.hitX;
     const R = layout.zoneHalf; // 外圈半径 = 普攻判定范围

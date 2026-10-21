@@ -167,7 +167,14 @@ export class PresentationState {
           this.effects.addSlash(e.x, e.x0, e.y, e.life, e.lane, 'main');
           // 暴击追加**余晖**：同几何、更长寿命、更淡的金色拖尾（票 07）。
           if (this.sig.crit) {
-            this.effects.addSlash(e.x, e.x0, e.y, e.life * AFTERGLOW_LIFE_SCALE, e.lane, 'afterglow');
+            this.effects.addSlash(
+              e.x,
+              e.x0,
+              e.y,
+              e.life * AFTERGLOW_LIFE_SCALE,
+              e.lane,
+              'afterglow',
+            );
           }
           break;
         case 'floater':
@@ -262,8 +269,7 @@ export class PresentationState {
     const target = this.feverActive ? 1 : 0;
     const delta = target - this.fxState.rgbSplit;
     const maxStep = RGB_SPLIT_RATE * dt;
-    this.fxState.rgbSplit +=
-      Math.abs(delta) <= maxStep ? delta : Math.sign(delta) * maxStep;
+    this.fxState.rgbSplit += Math.abs(delta) <= maxStep ? delta : Math.sign(delta) * maxStep;
 
     // 冲击波：寿命走完就关掉（渲染层据此 `enabled = false`）。
     if (this.fxState.shockLevel > 0) {

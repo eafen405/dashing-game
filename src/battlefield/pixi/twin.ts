@@ -146,7 +146,14 @@ export class TwinView {
    *
    * @param phase 虚线相位（px）—— 旧版是 `lineDashOffset = -vt * 46`。
    */
-  private dashLine(g: Graphics, x0: number, y0: number, x1: number, y1: number, phase: number): void {
+  private dashLine(
+    g: Graphics,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    phase: number,
+  ): void {
     const dx = x1 - x0;
     const dy = y1 - y0;
     const len = Math.hypot(dx, dy);

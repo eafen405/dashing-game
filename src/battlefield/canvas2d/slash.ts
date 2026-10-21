@@ -102,12 +102,7 @@ export class SlashView {
   }
 
   /** 暴击余晖 —— 票 07（与 Pixi 版 `slash.ts` 的 `drawAfterglow` 同一口径）。 */
-  private drawAfterglow(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    p: number,
-  ): void {
+  private drawAfterglow(ctx: CanvasRenderingContext2D, x: number, y: number, p: number): void {
     const fade = 1 - p;
     const len = 22 + p * 54;
     ctx.save();

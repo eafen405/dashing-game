@@ -196,13 +196,7 @@ export function sectorPath(
 }
 
 /** 圆角矩形路径（4 段 `arcTo`，与 Canvas 2D 版的 `roundRectPath` 同口径）。 */
-export function roundRectPath(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): GraphicsPath {
+export function roundRectPath(x: number, y: number, w: number, h: number, r: number): GraphicsPath {
   const p = new GraphicsPath();
   roundRectInto(p, x, y, w, h, r);
   return p;
@@ -274,7 +268,13 @@ export function roundRectInto(
 }
 
 /** 往已有路径里追加一个 8 顶点星形。 */
-export function starInto(p: GraphicsPath, cx: number, cy: number, outer: number, inner: number): void {
+export function starInto(
+  p: GraphicsPath,
+  cx: number,
+  cy: number,
+  outer: number,
+  inner: number,
+): void {
   for (let i = 0; i < 8; i++) {
     const a = (Math.PI / 4) * i - Math.PI / 2;
     const r = i % 2 === 0 ? outer : inner;

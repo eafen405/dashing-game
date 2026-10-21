@@ -17,7 +17,15 @@ import { LONG_COLOR, LONG_HOLD_TIME } from '../../game/constants';
 import type { HoldMonster } from '../../game/types';
 import type { FrameContext } from './context';
 import { destroyGradient, linearGradient } from './gradient';
-import { arcInto, circleInto, roundRectInto, setFill, setFillGradient, setStroke, attachPath } from './gfx';
+import {
+  arcInto,
+  circleInto,
+  roundRectInto,
+  setFill,
+  setFillGradient,
+  setStroke,
+  attachPath,
+} from './gfx';
 import { clamp } from './math';
 import { hexA, laneColorOf } from './palette';
 import { createLabel } from './text';

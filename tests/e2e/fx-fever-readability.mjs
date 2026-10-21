@@ -108,7 +108,10 @@ function measureZone(stats, layout) {
 const browser = await launchBrowser();
 
 try {
-  const { page } = await openApp(browser, { viewport: { width: 1280, height: 720 }, query: '?renderer=pixi&debug' });
+  const { page } = await openApp(browser, {
+    viewport: { width: 1280, height: 720 },
+    query: '?renderer=pixi&debug',
+  });
   await page.locator('#startScreen h2').click();
   await page.waitForTimeout(600);
 

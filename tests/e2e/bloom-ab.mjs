@@ -104,19 +104,22 @@ try {
     await page.waitForTimeout(500);
     const layout = await page.evaluate(() => globalThis.__FX_DEBUG__.layout());
     // 一条寿命 60 秒的亮环 —— 几乎不动。
-    await page.evaluate((ring) => {
-      globalThis.__FX_DEBUG__.apply([
-        {
-          type: 'ring',
-          x: ring.x,
-          y: ring.y,
-          life: ring.life,
-          r0: ring.r0,
-          r1: ring.r1,
-          color: '#ffd24a',
-        },
-      ]);
-    }, { x: layout.hitX, y: layout.laneY.top, life: 60, r0: 90, r1: 92 });
+    await page.evaluate(
+      (ring) => {
+        globalThis.__FX_DEBUG__.apply([
+          {
+            type: 'ring',
+            x: ring.x,
+            y: ring.y,
+            life: ring.life,
+            r0: ring.r0,
+            r1: ring.r1,
+            color: '#ffd24a',
+          },
+        ]);
+      },
+      { x: layout.hitX, y: layout.laneY.top, life: 60, r0: 90, r1: 92 },
+    );
     await page.waitForTimeout(200);
     const path = join(OUT, `bloom-${name}.png`);
     await page.screenshot({ path });
@@ -150,14 +153,8 @@ try {
   console.log(`  📷 ${onPath}`);
   console.log(`  📷 ${offPath}`);
 
-  assert(
-    on.meanLum > off.meanLum,
-    'bloom 让平均亮度上升（辉光真的加出来了）',
-  );
-  assert(
-    on.litRatio > off.litRatio,
-    'bloom 让被点亮的像素变多（辉光溢出到了更远处）',
-  );
+  assert(on.meanLum > off.meanLum, 'bloom 让平均亮度上升（辉光真的加出来了）');
+  assert(on.litRatio > off.litRatio, 'bloom 让被点亮的像素变多（辉光溢出到了更远处）');
   console.log('\n✓ bloom 判据通过');
 } catch (err) {
   console.error(`\n✗ 失败：${String(err)}`);

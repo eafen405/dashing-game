@@ -83,6 +83,10 @@ if (samples.length === 0) {
 const fps = samples.map((s) => s.fps);
 const ms = samples.map((s) => s.frameMs);
 console.log(`渲染器：${KIND} · 采样 ${samples.length} 次`);
-console.log(`FPS  最低 ${Math.min(...fps)} · 最高 ${Math.max(...fps)} · 末值 ${fps[fps.length - 1]}`);
-console.log(`帧时 最大 ${Math.max(...ms)} ms · 末值 ${ms[ms.length - 1]} ms（16.67ms = 60fps 预算）`);
+console.log(
+  `FPS  最低 ${Math.min(...fps)} · 最高 ${Math.max(...fps)} · 末值 ${fps[fps.length - 1]}`,
+);
+console.log(
+  `帧时 最大 ${Math.max(...ms)} ms · 末值 ${ms[ms.length - 1]} ms（16.67ms = 60fps 预算）`,
+);
 if (errors.length > 0) console.log(`⚠ 页面错误：${errors.join(' | ')}`);

@@ -108,9 +108,18 @@ try {
   // 静止参照物：一圈寿命 60 秒的亮环（前后两帧完全一样 → 差值图只剩冲击波）。
   await page.evaluate(() => {
     const spots = [
-      [200, 120, 40], [200, 120, 70], [320, 300, 50], [480, 150, 60],
-      [560, 420, 45], [700, 220, 55], [820, 380, 50], [640, 120, 65],
-      [1100, 150, 50], [1150, 500, 60], [400, 560, 50], [900, 600, 45],
+      [200, 120, 40],
+      [200, 120, 70],
+      [320, 300, 50],
+      [480, 150, 60],
+      [560, 420, 45],
+      [700, 220, 55],
+      [820, 380, 50],
+      [640, 120, 65],
+      [1100, 150, 50],
+      [1150, 500, 60],
+      [400, 560, 50],
+      [900, 600, 45],
     ];
     globalThis.__FX_DEBUG__.apply(
       spots.map(([x, y, r]) => ({
@@ -172,7 +181,9 @@ try {
   console.log(`  |D_A - D_B| / |D_A - 基线| = ${ratio.toFixed(3)}`);
   console.log('  像素语义 → 两个波在两个地方 → 比值 ≈ 1');
   console.log('  归一化语义 → 两个波都在左上角 → 比值 ≈ 0');
-  console.log(`  差值重心：A=(${(cA.x / dpr).toFixed(0)}, ${(cA.y / dpr).toFixed(0)})  B=(${(cB.x / dpr).toFixed(0)}, ${(cB.y / dpr).toFixed(0)})`);
+  console.log(
+    `  差值重心：A=(${(cA.x / dpr).toFixed(0)}, ${(cA.y / dpr).toFixed(0)})  B=(${(cB.x / dpr).toFixed(0)}, ${(cB.y / dpr).toFixed(0)})`,
+  );
   console.log(`  📷 ${join(OUT, 'shockwave-center-probe.png')}`);
 
   assert(

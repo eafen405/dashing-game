@@ -184,7 +184,14 @@ describe('表现层状态 · 随机性', () => {
 describe('表现层状态 · 差异化粒子形态', () => {
   /** 规则层 `killMonster` 的主爆散签名（`resolve.ts:110-117`）。 */
   const killBurst = (crit: boolean): Effect[] => [
-    { type: 'burst', x: 100, y: 50, color: crit ? '#ffd24a' : '#4fd1ff', count: crit ? 36 : 26, power: crit ? 1.5 : 1.25 },
+    {
+      type: 'burst',
+      x: 100,
+      y: 50,
+      color: crit ? '#ffd24a' : '#4fd1ff',
+      count: crit ? 36 : 26,
+      power: crit ? 1.5 : 1.25,
+    },
     { type: 'burst', x: 100, y: 50, color: '#ffffff', count: crit ? 16 : 10, power: 0.9 },
   ];
 
@@ -310,9 +317,7 @@ describe('表现层状态 · 冲击环档位与冲击波', () => {
 
   it('冲击波的 age 逐帧推进，寿命走完就关掉', () => {
     const state = new PresentationState();
-    state.applyEffects([
-      { type: 'burst', x: 10, y: 20, color: '#ffd24a', count: 36, power: 1.5 },
-    ]);
+    state.applyEffects([{ type: 'burst', x: 10, y: 20, color: '#ffd24a', count: 36, power: 1.5 }]);
     expect(state.screenFx.shockAge).toBe(0);
 
     state.step(0.1);
