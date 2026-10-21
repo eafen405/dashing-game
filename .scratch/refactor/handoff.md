@@ -63,6 +63,7 @@
 | `npm run trace` | ✅ Golden trace 门禁通过（模式 A / B′ 逐帧一致，模式 C 分叉归因 D1） |
 | `npm run test:e2e` | ✅ 六个脚本全过（check-playable / flow-8-steps / input-desktop / portrait-progress / hud-stats / compare-legacy） |
 | `npm run format:check` | ✅ |
+| GitHub Actions（push 后） | ✅ 全绿 —— [run 39605253566](https://github.com/eafen405/dashing-game/actions/runs/39605253566) |
 
 `test:e2e` 跑的是 `dist/`，**必须先 `npm run build`**；`hud-stats` 单脚本约 70 秒。
 
