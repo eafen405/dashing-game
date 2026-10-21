@@ -239,8 +239,23 @@ for (const [k, label] of Object.entries(LABELS)) {
   console.log(`   ${n > 0 ? '✔' : '✘'} ${label}: ${n}`);
 }
 
+// 覆盖退化必须让门禁变红。
+//
+// 逐帧比对只能发现「新旧实现不一致」；如果某条结算路径在**两侧同时**变得不可达
+// （例如共享事件剧本被改动，不再触发双生窗口过期），
+// 逐帧比对会「一致地错」而照绿 —— 门禁从此静默失去对这条路径的覆盖。
+// 所以路径覆盖是独立的门禁条件：**全部轨迹的并集**必须覆盖全部十条路径。
+const uncovered = Object.keys(LABELS).filter((k) => (coverageTotals[k] ?? 0) === 0);
+if (uncovered.length > 0) {
+  failures += 1;
+  console.error(
+    `\n❌ 结算路径覆盖退化：以下路径在全部轨迹中一次都没被触发 → ` +
+      uncovered.map((k) => `${LABELS[k]}(${k})`).join('、'),
+  );
+}
+
 if (failures > 0) {
-  console.error(`\n❌ Golden trace 门禁失败：${failures} 条轨迹出现分叉`);
+  console.error(`\n❌ Golden trace 门禁失败：${failures} 项不满足`);
   process.exit(1);
 }
 console.log('\n✅ Golden trace 门禁通过');
