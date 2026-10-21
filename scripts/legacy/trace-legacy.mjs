@@ -28,7 +28,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /**
  * 在 headless Chromium 里跑一条旧版轨迹。
  *
- * @param {{mode?: string, seed?: number, diff?: number, frames?: number, noDraw?: boolean}} options
+ * @param {{mode?: string, seed?: number, diff?: number, frames?: number, noDraw?: boolean, scriptMode?: 'active'|'idle'}} options
  * @returns {Promise<{trace: object[], step: object, rulesDraws: number}>}
  */
 export async function runLegacyTrace(options = {}) {
@@ -37,6 +37,8 @@ export async function runLegacyTrace(options = {}) {
   const diff = Number(options.diff ?? 1);
   const frames = Number(options.frames ?? FRAMES);
   const noDraw = options.noDraw === true;
+  // 剧本模式：`idle` = 零输入（一个键都不按）→ 必然漏怪 → 走到 game over。
+  const scriptMode = options.scriptMode === 'idle' ? 'idle' : 'active';
 
   const harnessPath = resolve(HERE, `legacy-harness-${mode}.html`);
 
@@ -48,7 +50,8 @@ export async function runLegacyTrace(options = {}) {
     const url =
       `file://${harnessPath}?seed=${seed}&diff=${diff}` +
       `&fixedstep=1&w=${VIEWPORT.width}&h=${VIEWPORT.height}` +
-      (noDraw ? '&nodraw=1' : '');
+      (noDraw ? '&nodraw=1' : '') +
+      (scriptMode === 'idle' ? '&script=idle' : '');
 
     await page.goto(url);
     await page.waitForFunction(() => !!globalThis.window.__harness);
