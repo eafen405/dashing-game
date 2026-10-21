@@ -9,7 +9,6 @@ export default function App() {
     const host = hostRef.current;
     if (!host) return;
     let disposed = false;
-    let cleanup: (() => void) | undefined;
 
     runSpike(host).then((r) => {
       if (disposed) return;
@@ -18,7 +17,6 @@ export default function App() {
 
     return () => {
       disposed = true;
-      cleanup?.();
     };
   }, []);
 
