@@ -14,7 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "node scripts/verify-single-file.mjs"
+    "verify": "node scripts/verify-single-file.mjs",
+    "trace": "node scripts/trace-gate.mjs"
   },
   "dependencies": {
     "pixi.js": "^8.22.0",

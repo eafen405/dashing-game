@@ -34,6 +34,10 @@ out/
 coverage/
 .nyc_output/
 
+# ---- Golden trace 生成物（由 scripts/legacy/patch-legacy.mjs 生成，不入 git）----
+scripts/legacy/legacy-harness-*.html
+traces/
+
 # ---- 本地环境变量 / 密钥（不要提交到公开仓库）----
 .env
 .env.*
