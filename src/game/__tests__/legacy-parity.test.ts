@@ -4,10 +4,9 @@
  * 旧实现原样摘录在下面，作为**独立的事实来源**：
  * 新实现的生成路径必须与它逐字一致 —— 同样的随机数消费顺序、同样的字段取值。
  *
- * 唯一的例外是本票**有意修复**的两处：
- *   - D1：`clearLane()` 的轨道占用只算长按怪
- *   - D2：`computeLayout()` 按正确顺序重算 playerX → hitX
- * 下面的对照基准在这两处已经采用修好的语义，因此比对的是「修好之后应当一致」的部分。
+ * 唯一的例外是 D2：`computeLayout()` 按正确顺序重算 playerX → hitX。
+ * `clearLane()` 保持旧实现的「空轨」语义（D1 的误判已在票 11 回退），
+ * 所以下面的对照基准就是旧实现原样。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -86,11 +85,13 @@ function legacyLaneBlocked(st: LegacyState, lane: 'top' | 'bottom'): boolean {
 }
 
 /**
- * `source.html:803-810` —— **已按 D1 修好**：轨道占用只算长按怪。
+ * `source.html:803-810` —— 原样保留：一条轨道上**有任何在场怪物**就算占用。
+ *
+ * 长按怪必须独占一条空轨，否则会吞掉同轨普通怪的输入（见票 11）。
  */
 function legacyClearLane(st: LegacyState, rng: Rng): 'top' | 'bottom' | null {
-  const topBusy = st.monsters.some((m) => m.long && !m.done && m.lane === 'top');
-  const botBusy = st.monsters.some((m) => m.long && !m.done && m.lane === 'bottom');
+  const topBusy = st.monsters.some((m) => m.lane === 'top' && !m.done);
+  const botBusy = st.monsters.some((m) => m.lane === 'bottom' && !m.done);
   if (!topBusy && !botBusy) return rng.next() < 0.5 ? 'top' : 'bottom';
   if (!topBusy) return 'top';
   if (!botBusy) return 'bottom';

@@ -68,22 +68,29 @@ export function laneBlocked(monsters: readonly Monster[], lane: Lane): boolean {
 }
 
 /**
- * 找一条没有被长按怪占用的轨道 —— `source.html:803-810`。
+ * 找一条**完全空着**的轨道给长按怪 —— `source.html:803-810`。
  *
- * **修 Bug 1（已知差异 D1）**：旧实现用 `!m.done` 判占用，但 `done` 只在长按怪上
- * 赋值，普通怪与双生怪的 `done` 永远是 `undefined`（falsy）→ 只要场上有任何普通怪，
- * 两轨都判「占用」→ 本函数恒返回 `null` → 长按怪几乎刷不出来。
- * 新语义：**只有长按怪算占用**。
+ * 长按怪会独占一条轨道：`pressLane()` 里长按怪优先，整条轨道的输入都归它。
+ * 如果允许它和普通怪同轨，普通怪进了判定区也点不动（输入被长按逻辑吞掉），
+ * 看起来就像「判定坏了」。所以这里必须要求轨道上没有**任何**在场怪物。
+ *
+ * 关于 D1：旧实现用 `!m.done` 判占用，曾被误读为「普通怪会让两轨都不可用」。
+ * 实际上 `some()` 是逐轨判断的 —— 普通怪只占自己那条轨，另一条仍会被返回；
+ * 只有**两轨都有怪**时才返回 `null`（等下一次刷新再试）。这正是空轨语义。
+ * 若改成「只算长按怪占用」，长按怪就会刷进有普通怪的轨道并吞掉该轨输入，
+ * 是比刷新频率更严重的可玩性 bug。
  *
  * 随机数消费：两轨都空时消耗**一次** PRNG（`Math.random() < 0.5` 选轨）；
- * 只有一轨被占时直接返回那一条空轨，**不**消耗 PRNG。
+ * 只有一轨为空时直接返回该轨，**不**消耗 PRNG；两轨都有怪时也不消耗。
  */
 export function clearLane(monsters: readonly Monster[], rng: Rng): Lane | null {
-  const topBusy = monsters.some((m) => m.kind === 'hold' && !m.removed && m.lane === 'top');
-  const botBusy = monsters.some((m) => m.kind === 'hold' && !m.removed && m.lane === 'bottom');
-  if (!topBusy && !botBusy) return rng.next() < 0.5 ? 'top' : 'bottom';
-  if (!topBusy) return 'top';
-  if (!botBusy) return 'bottom';
+  const laneEmpty = (lane: Lane): boolean =>
+    monsters.every((m) => m.removed || m.lane !== lane);
+  const topEmpty = laneEmpty('top');
+  const botEmpty = laneEmpty('bottom');
+  if (topEmpty && botEmpty) return rng.next() < 0.5 ? 'top' : 'bottom';
+  if (topEmpty) return 'top';
+  if (botEmpty) return 'bottom';
   return null;
 }
 

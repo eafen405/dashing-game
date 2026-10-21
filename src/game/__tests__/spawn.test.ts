@@ -12,7 +12,7 @@ describe('轨道占用判断', () => {
     expect(hasActiveLong(monsters)).toBe(true);
   });
 
-  it('修 Bug 1：普通怪不占用轨道（旧实现用 !m.done 判占用，普通怪的 done 恒为 undefined）', () => {
+  it('普通怪不影响普通怪的选轨（只有长按怪占用轨道）', () => {
     const monsters = [normalMonster({ lane: 'top' }), normalMonster({ id: 2, lane: 'bottom' })];
 
     expect(laneBlocked(monsters, 'top')).toBe(false);
@@ -20,26 +20,24 @@ describe('轨道占用判断', () => {
     expect(hasActiveLong(monsters)).toBe(false);
   });
 
-  it('修 Bug 1：场上有普通怪时 clearLane 依然能给出轨道（旧实现恒返回 null）', () => {
+  it('普通怪只占用自己那条轨，不阻止长按怪刷到另一条空轨', () => {
     const monsters = [normalMonster({ lane: 'top' })];
+    const rng = recordingRng();
 
-    expect(clearLane(monsters, recordingRng([0.1]))).toBe('top');
+    expect(clearLane(monsters, rng)).toBe('bottom');
+    expect(rng.calls).toEqual([]);
   });
 
-  it('对照：旧口径（!m.done 判占用）在有普通怪时恒返回 null', () => {
-    // 旧实现里 `done` 只在长按怪上赋值，普通怪没有这个字段 → `!m.done` 恒真
-    // → 只要场上有任何普通怪，两轨都判「占用」→ clearLane 只能返回 null。
-    const legacyMonsters: { lane: string; done?: boolean }[] = [
-      { lane: 'top' },
-      { lane: 'bottom' },
-    ];
-    const topBusy = legacyMonsters.some((m) => m.lane === 'top' && !m.done);
-    const botBusy = legacyMonsters.some((m) => m.lane === 'bottom' && !m.done);
+  it('两轨都有普通怪时不刷长按怪 —— 长按怪必须独占一条空轨', () => {
+    const monsters = [normalMonster({ lane: 'top' }), normalMonster({ id: 2, lane: 'bottom' })];
 
-    expect(topBusy).toBe(true);
-    expect(botBusy).toBe(true);
-    // 两轨都被判占用 → 旧 clearLane 返回 null → 长按怪刷不出来
-    expect(topBusy && botBusy ? null : 'top').toBeNull();
+    expect(clearLane(monsters, recordingRng())).toBeNull();
+  });
+
+  it('一轨长按怪 + 另一轨普通怪时没有空轨', () => {
+    const monsters = [holdMonster({ lane: 'top' }), normalMonster({ id: 2, lane: 'bottom' })];
+
+    expect(clearLane(monsters, recordingRng())).toBeNull();
   });
 
   it('长按怪所在轨道被占用，另一条轨道可用', () => {
@@ -180,6 +178,37 @@ describe('生成怪物', () => {
     expect(b.partnerId).toBe(a.id);
     expect(a.sf).toBe(b.sf);
     expect(a.phase).toBe(b.phase);
+  });
+
+  it('长按怪不会刷进已经有普通怪的轨道', () => {
+    const state = makeState({
+      now: 9,
+      longCooldown: 0,
+      pairCooldown: 10,
+      monsters: [normalMonster({ lane: 'top' })],
+    });
+    // clearLane 无随机；随后是 28% 判定、长按怪相位、14~18 秒冷却
+    const rng = recordingRng([0.1, 0.5, 0.5]);
+
+    const { state: next } = spawnMonster(state, rng);
+    const hold = next.monsters.find((m) => m.kind === 'hold');
+
+    expect(hold?.lane).toBe('bottom');
+    expect(next.monsters.filter((m) => m.kind === 'normal')).toHaveLength(1);
+  });
+
+  it('两轨都有普通怪时本轮不刷长按怪', () => {
+    const state = makeState({
+      now: 9,
+      longCooldown: 0,
+      pairCooldown: 10,
+      monsters: [normalMonster({ lane: 'top' }), normalMonster({ id: 2, lane: 'bottom' })],
+    });
+    const rng = recordingRng([0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+
+    const { state: next } = spawnMonster(state, rng);
+
+    expect(next.monsters.some((m) => m.kind === 'hold')).toBe(false);
   });
 
   it('长按怪在场时不再生成普通怪到同一条轨道', () => {
