@@ -27,6 +27,7 @@ describe('规则层事件归约器', () => {
     expect(state.nextFeverAt).toBe(50);
     expect(state.pairCooldown).toBeCloseTo(4.5, 10);
     expect(state.longCooldown).toBeCloseTo(6, 10);
+    expect(state.playerLane).toBeNull();
   });
 
   it('Tick 推进一帧', () => {
@@ -46,6 +47,7 @@ describe('规则层事件归约器', () => {
 
     expect(next.kills).toBe(1);
     expect(next.score).toBe(200);
+    expect(next.playerLane).toBe('top');
   });
 
   it('Press 遇到长按怪时起手长按', () => {
@@ -59,6 +61,7 @@ describe('规则层事件归约器', () => {
 
     expect(next.holdMonsterId).toBe(1);
     expect(next.holdInputId).toBe('p1');
+    expect(next.playerLane).toBe('top');
   });
 
   it('Release 只在指针 id 匹配时判罚', () => {

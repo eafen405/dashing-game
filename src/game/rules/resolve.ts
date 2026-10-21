@@ -287,6 +287,8 @@ export function killPair(
   }
   effects.push({ type: 'shake-add', amount: critPair ? 16 : 13, cap: 20 });
   effects.push({ type: 'vibrate', pattern: critPair ? [0, 30, 40, 60] : 40 });
+  // 双生击破：角色做一次大幅度的跳起下砸
+  effects.push({ type: 'pair-smash' });
 
   return { state: s, effects };
 }
@@ -426,6 +428,7 @@ export function startHold(
     holdInputId: inputId,
     attackT: ATTACK_DUR,
     attackLane: m.lane,
+    playerLane: m.lane,
     monsters: patch(state.monsters, monsterId, (x) =>
       x.kind === 'hold' ? { ...x, holding: true, anchored: true, waitT: LONG_WAIT } : x,
     ),
@@ -628,13 +631,36 @@ export function cancelHold(state: GameState): { state: GameState; effects: Effec
 
 /**
  * 角色受伤（漏怪）—— `source.html:1215-1232`。
+ *
+ * @param collides 角色是否**碰到**了这只怪。角色只驻守一条轨道，
+ *   另一轨漏过来的怪会从身边擦过：不扣血、不闪红，但连击 / FEVER 照样清零。
+ *   双生怪两轨各有一只，触线时必定撞上角色（调用方传 `true`）。
  */
 export function hurtPlayer(
   state: GameState,
   monsterId: number,
+  collides = true,
 ): { state: GameState; effects: Effect[] } {
   const m = findMonster(state.monsters, monsterId);
   if (!m || m.removed) return { state, effects: [] };
+
+  // 擦身而过：只断连击，不扣血
+  if (!collides) {
+    const s: GameState = {
+      ...state,
+      combo: 0,
+      frenzyActive: false,
+      feverT: 0,
+      nextFeverAt: FEVER_COMBO,
+      monsters: patch(state.monsters, monsterId, (x) => ({ ...x, removed: true })),
+    };
+    const effects: Effect[] = [
+      { type: 'burst', x: m.x, y: m.y, color: '#9fb0cf', count: 12, power: 0.7 },
+      { type: 'ring', x: m.x, y: m.y, life: 0.3, r0: 6, r1: 30, color: '#9fb0cf' },
+      { type: 'toast', text: '错过 · COMBO 清零', color: '#ffcf6b' },
+    ];
+    return { state: s, effects };
+  }
 
   const hp = Math.max(0, state.hp - HIT_DAMAGE);
   let s: GameState = {
@@ -647,6 +673,8 @@ export function hurtPlayer(
     monsters: patch(state.monsters, monsterId, (x) => ({ ...x, removed: true })),
   };
 
+  // 受击反馈画在角色驻守的那条轨道上（未出招时在两轨之间）
+  const playerY = state.playerLane ? state.layout.laneY[state.playerLane] : state.layout.height / 2;
   const effects: Effect[] = [
     { type: 'player-flash' },
     { type: 'shake-set', amount: 14 },
@@ -655,7 +683,7 @@ export function hurtPlayer(
     {
       type: 'ring',
       x: s.layout.playerX + s.layout.playerR,
-      y: s.layout.height / 2,
+      y: playerY,
       life: 0.45,
       r0: 14,
       r1: 70,

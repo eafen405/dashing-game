@@ -41,11 +41,14 @@ export interface EffectSink {
   gameOver(): void;
 }
 
+/** 双生击破时角色「大幅跳起下砸」的动画时长（秒）。 */
+export const PAIR_SMASH_DUR = 0.62;
+
 /**
  * 表现层状态。
  *
- * 会话层（04b）持有它，每帧：应用效果事件 → 推进 → 读出 `FrameView` 需要的三个字段
- * （`effects` / `shake` / `playerFlash`）。
+ * 会话层（04b）持有它，每帧：应用效果事件 → 推进 → 读出 `FrameView` 需要的表现字段
+ * （`effects` / `shake` / `playerFlash` / `pairSmash`）。
  */
 export class PresentationState {
   /** 粒子 / 刀光 / 冲击环 / 飘字。 */
@@ -54,6 +57,8 @@ export class PresentationState {
   readonly shake = new ShakeState();
   /** 角色受击红闪强度（0 = 正常）。 */
   playerFlash = 0;
+  /** 双生击破下砸动画的剩余时间（秒）；0 = 未播放。 */
+  pairSmashT = 0;
 
   private readonly sink: EffectSink | null;
 
@@ -111,6 +116,9 @@ export class PresentationState {
         case 'fever-end':
           this.sink?.feverEnd();
           break;
+        case 'pair-smash':
+          this.pairSmashT = PAIR_SMASH_DUR;
+          break;
         case 'game-over':
           this.sink?.gameOver();
           break;
@@ -135,6 +143,7 @@ export class PresentationState {
   step(dt: number): void {
     this.effects.step(dt);
     this.playerFlash = Math.max(0, this.playerFlash - dt * 2.4);
+    this.pairSmashT = Math.max(0, this.pairSmashT - dt);
     this.shake.decay(dt);
   }
 
@@ -143,5 +152,6 @@ export class PresentationState {
     this.effects.clear();
     this.shake.reset();
     this.playerFlash = 0;
+    this.pairSmashT = 0;
   }
 }

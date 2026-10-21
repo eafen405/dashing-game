@@ -331,6 +331,28 @@ describe('受伤与结束', () => {
     expect(effects.some((e) => e.type === 'game-over')).toBe(true);
   });
 
+  it('擦身而过：不扣血、不闪红，但连击 / FEVER 清零', () => {
+    const state = makeState({
+      monsters: [normalMonster()],
+      combo: 12,
+      frenzyActive: true,
+      feverT: 4,
+      nextFeverAt: 100,
+    });
+
+    const { state: next, effects } = hurtPlayer(state, 1, false);
+
+    expect(next.hp).toBe(250);
+    expect(next.combo).toBe(0);
+    expect(next.frenzyActive).toBe(false);
+    expect(next.feverT).toBe(0);
+    expect(next.nextFeverAt).toBe(50);
+    expect(next.monsters[0]?.removed).toBe(true);
+    expect(effects.some((e) => e.type === 'player-flash')).toBe(false);
+    expect(effects.some((e) => e.type === 'hurt')).toBe(false);
+    expect(effects.some((e) => e.type === 'toast')).toBe(true);
+  });
+
   it('游戏结束会取消长按', () => {
     const state = makeState({ monsters: [holdMonster()] });
     const held = startHold(state, 1, 'p1').state;

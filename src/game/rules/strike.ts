@@ -35,11 +35,13 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
   const { layout } = state;
   const effects: Effect[] = [];
 
-  // 出招动作：同一挥击期间连点不重置，换轨则重新出招
+  // 出招动作：同一挥击期间连点不重置，换轨则重新出招。
+  // 角色同时走到该轨道驻守 —— 之后只有这一轨的漏怪会撞到角色。
   let s = state;
   if (s.attackT <= ATTACK_DUR * 0.42 || s.attackLane !== lane) {
     s = { ...s, attackT: ATTACK_DUR, attackLane: lane };
   }
+  s = { ...s, playerLane: lane };
 
   // 轨道受击高亮（旧实现给轨道 DOM 节点加 class）
   effects.push({ type: 'lane-flash', lane });

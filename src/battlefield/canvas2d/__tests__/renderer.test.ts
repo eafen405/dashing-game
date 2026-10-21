@@ -104,9 +104,11 @@ function frame(overrides: Partial<FrameView> = {}): FrameView {
     monsters: [],
     attackT: 0,
     attackLane: null,
+    playerLane: null,
     effects: NO_EFFECTS,
     shake: 0,
     playerFlash: 0,
+    pairSmash: 0,
     ...overrides,
   };
 }
@@ -254,6 +256,27 @@ describe('Canvas 2D 渲染器', () => {
     // 震动多一次 translate 调用（`ctx.translate(rand(...), rand(...))` 一次调用、
     // 两个独立取随机 —— 旧 `source.html:1463` 就是这样）
     expect(shaken).toBe(still + 1);
+  });
+
+  it('角色换轨 / 下砸 / 长按悬浮的帧都能画出来', () => {
+    const renderer = createCanvas2dRenderer();
+    renderer.mount(host as unknown as HTMLElement);
+    renderer.resize(LAYOUT);
+
+    renderer.render(frame({ playerLane: 'top', attackLane: 'top', attackT: 0.2 }));
+    renderer.render(
+      frame({ playerLane: 'bottom', attackLane: 'bottom', attackT: 0.2, pairSmash: 0.5 }),
+    );
+    renderer.render(
+      frame({
+        playerLane: 'bottom',
+        monsters: [
+          holdMonster({ lane: 'bottom', anchored: true, holding: true, headAwarded: true }),
+        ],
+      }),
+    );
+
+    expect(canvasOf(host).ctx.count('fill')).toBeGreaterThan(0);
   });
 
   it('FEVER 时轨道配色切换，判定区会多画一层', () => {

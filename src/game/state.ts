@@ -6,7 +6,7 @@
  *
  * 重置清单（逐条对照 `legacy-semantics.md` §0）：
  *   hp / score / combo / maxCombo / kills / critCount / normalCount
- *   monsters / attackT / attackLane / spawnTimer / frenzyActive / feverT
+ *   monsters / attackT / attackLane / playerLane / spawnTimer / frenzyActive / feverT
  *   nextFeverAt / pairSeq / pairCooldown / pairHintShown / longCooldown
  *   longHintShown / holdMon / holdId
  *
@@ -66,6 +66,7 @@ export function createGameState(options: {
 
     attackT: 0,
     attackLane: null,
+    playerLane: null,
 
     nextMonsterId: 1,
   };

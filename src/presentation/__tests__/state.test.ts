@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Effect } from '../../game/effects';
-import { MAX_PARTICLES, PresentationState, type EffectSink } from '../index';
+import { MAX_PARTICLES, PAIR_SMASH_DUR, PresentationState, type EffectSink } from '../index';
 
 function makeSink(): EffectSink & { calls: string[] } {
   const calls: string[] = [];
@@ -94,6 +94,19 @@ describe('表现层状态 · 效果事件', () => {
     state.applyEffects([{ type: 'player-flash' }]);
 
     expect(state.playerFlash).toBe(1);
+  });
+
+  it('pair-smash 触发双生下砸动画并随时间衰减', () => {
+    const state = new PresentationState();
+
+    state.applyEffects([{ type: 'pair-smash' }]);
+    expect(state.pairSmashT).toBe(PAIR_SMASH_DUR);
+
+    state.step(PAIR_SMASH_DUR / 2);
+    expect(state.pairSmashT).toBeCloseTo(PAIR_SMASH_DUR / 2, 10);
+
+    state.reset();
+    expect(state.pairSmashT).toBe(0);
   });
 
   it('上层事件转交给 sink', () => {

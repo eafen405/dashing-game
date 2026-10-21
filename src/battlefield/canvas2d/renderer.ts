@@ -152,6 +152,8 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     fc.playerFlash = frame.playerFlash;
     fc.attackT = frame.attackT;
     fc.attackLane = frame.attackLane;
+    fc.playerLane = frame.playerLane;
+    fc.pairSmash = frame.pairSmash;
     fc.monsters = frame.monsters;
     fc.effects = frame.effects;
   }
@@ -175,13 +177,18 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     fc.longInLane.top = false;
     fc.longInLane.bottom = false;
+    fc.holdMonster = null;
     fc.twinLinkCount = 0;
 
     this.monsterIndex.clear();
     for (const m of monsters) this.monsterIndex.set(m.id, m);
 
     for (const m of monsters) {
-      if (m.kind === 'hold' && !m.removed) fc.longInLane[m.lane] = true;
+      if (m.kind === 'hold' && !m.removed) {
+        fc.longInLane[m.lane] = true;
+        // 正在被按住的那只（同一时刻最多一只）驱动角色的悬浮连击动画
+        if (m.anchored && !m.escaped) fc.holdMonster = m;
+      }
     }
 
     for (const m of monsters) {

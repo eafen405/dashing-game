@@ -183,6 +183,13 @@ export interface GameState {
   attackT: number;
   /** 出招轨道。 */
   attackLane: Lane | null;
+  /**
+   * 角色当前驻守的轨道；`null` 表示还站在两轨之间（尚未出招）。
+   *
+   * 角色只在自己驻守的轨道上才会**碰到**漏过来的怪：另一轨的怪会从身边擦过，
+   * 不扣血，但连击清零。双生怪两轨各有一只，因此触线时必定撞上角色。
+   */
+  playerLane: Lane | null;
 
   /** 下一个怪物 id 计数器。 */
   nextMonsterId: number;

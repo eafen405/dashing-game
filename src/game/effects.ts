@@ -27,6 +27,7 @@ import type { Lane } from './types';
  * - `vibrate` —— 旧 `nudgeVibrate(ms | ms[])`
  * - `fever-start` —— 旧 `enterFrenzy()`
  * - `fever-end` —— 旧 `endFever()`
+ * - `pair-smash` —— 双生击破：角色大幅跳起下砸（纯表现，规则层不关心）
  * - `game-over` —— 旧 `gameOverNow()`
  */
 export type Effect =
@@ -44,6 +45,7 @@ export type Effect =
   | { type: 'vibrate'; pattern: number | number[] }
   | { type: 'fever-start' }
   | { type: 'fever-end' }
+  | { type: 'pair-smash' }
   | { type: 'game-over' };
 
 /** 效果事件类型名（表现层按类型分派）。 */

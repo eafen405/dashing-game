@@ -1,134 +1,695 @@
 /**
- * 角色 —— `drawPlayer` / `drawLegs` / `drawTorso` / `drawHead` / `drawSwordArm`。
+ * 角色 —— 一个会走路的棒子人。
  *
- * 逐字搬自 `source.html:1654-1959`。
+ * 规则层只记录「角色驻守哪条轨道 / 是否在出招 / 双生下砸动画剩多久」，
+ * 这里负责把这些状态翻译成动作：
  *
- * 出招时间线（蓄力 → 挥击 → 收招）、FEVER 光环、脚下平台光、生命环、
- * 能量刃的渐变与枪尖闪光全部照抄，数值一个都没改。
+ * - **上轨**：跳起 + 向上挥棒（上勾式）。
+ * - **下轨**：原地抡起后向下砸。
+ * - **双生击破**：大幅跳起，落到轨道上再狠狠下砸。
+ * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打。
+ * - **移动**：换轨时平滑走过去（腿随视觉时钟摆动）。
  *
- * 唯一的适配：旧代码读全局 `hp` / `vt` / `frenzyActive` / `playerFlash`，
- * 这里改成读 `FrameContext`（渲染层不持有状态，只读快照）。
+ * 保留旧版角色已有的 FEVER 光环、脚下平台光、生命环与受击红闪。
+ * 所有动作都由 `FrameContext` 的只读快照驱动，渲染层不持有规则状态。
  */
 
-import { ATTACK_DUR, MAX_HP } from '../../game/constants';
-import { FRENZY_LANE, LANE } from '../../game/constants';
+import {
+  ATTACK_DUR,
+  FRENZY_LANE,
+  LANE,
+  LONG_COLOR,
+  MAX_HP,
+} from '../../game/constants';
 import type { FrameContext } from './context';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
 import { hexA, roundRectPath, starPath } from './paths';
 
-/** 残刃的采样位置（旧 `source.html:1882` 的 `[0.35, 0.7]`）。 */
-const BLADE_T = [0.35, 0.7] as const;
-/** 残刃的两个采样点（解构后类型确定，不需要 `!` 断言）。 */
-const [BLADE_T0, BLADE_T1] = BLADE_T;
+/** 待机时棒子搭在肩上的角度（弧度；0 = 指向右，负 = 向上）。 */
+const IDLE_CLUB = -0.62;
+/** 换轨平滑速度（每秒的指数逼近系数）。 */
+const LANE_FOLLOW = 11;
+/** 长按连击的周期（秒）。 */
+const HOLD_PERIOD = 0.24;
 
-/** 腿的两侧（旧 `source.html:1779` / `1791` 的 `[-1, 1]`）—— 提到模块级，避免每帧建数组。 */
+const SKIN = '#ffcf9f';
+const SKIN_DARK = '#e2a76f';
+const JERSEY = '#d94f4a';
+const JERSEY_DARK = '#8f2f34';
+const TRIM = '#f4ead6';
+const PANTS = '#1d2c3d';
+const SHOE = '#ece4d2';
+const CAP = '#14232f';
+const CAP_BRIM = '#c9433f';
+const BAT = '#e0a25e';
+const BAT_DARK = '#a86b32';
+const BAT_GRIP = '#3a2a20';
+
 const SIDES = [-1, 1] as const;
-/** 左腿 / 右腿。 */
-const [SIDE_L, SIDE_R] = SIDES;
 
 export class PlayerView {
+  /** 平滑后的身体中心纵坐标（换轨时走过去，而不是瞬移）。 */
+  private displayY = Number.NaN;
+  /** 上一帧的视觉时钟（用来算 dt；`vt` 在所有阶段都推进）。 */
+  private lastVt = -1;
+
   draw(fc: FrameContext): void {
     const ctx = fc.ctx;
-    const { height, playerR, playerX } = fc.layout;
-    const y = height / 2;
-    const s = playerR;
-    const flash = fc.playerFlash;
+    const { height, playerR: s, playerX } = fc.layout;
 
-    /* ---------- 出招时间线：蓄力 → 挥击 → 收招 ---------- */
-    const active = fc.attackT > 0 && !!fc.attackLane;
-    const T = active ? clamp(1 - fc.attackT / ATTACK_DUR, 0, 1) : 0;
-    const dir = fc.attackLane === 'top' ? -1 : 1; // -1 上轨 / +1 下轨
+    const targetY = fc.playerLane ? fc.layout.laneY[fc.playerLane] : height / 2;
+    const y = this.followLane(fc, targetY);
+    const walkAmp = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
 
-    const idleA = 0.18;
-    const windA = -dir * 0.85; // 蓄力：向反方向抬
-    const hitA = dir * 1.05; // 挥出：斜指对应轨道
+    /* ---------- 当前动作 ---------- */
+    const hm = fc.holdMonster;
+    const hold =
+      hm && hm.anchored && !hm.escaped && (fc.playerLane === null || hm.lane === fc.playerLane)
+        ? hm
+        : null;
+    const attackActive = fc.attackT > 0 && fc.attackLane !== null;
+    const pairP = clamp(fc.pairSmash, 0, 1);
 
-    let armA = idleA;
-    let swing = 0;
-    if (active) {
-      if (T < 0.2) {
-        armA = lerp(idleA, windA, easeOutCubic(T / 0.2));
-      } else if (T < 0.44) {
-        const k = easeOutCubic((T - 0.2) / 0.24);
-        armA = lerp(windA, hitA, k);
-        swing = k;
+    /* ---------- 姿态参数 ---------- */
+    let lift = 0; // 负值 = 跳起
+    let hover = 0; // 长按悬浮
+    let squash = 0; // 落地压缩
+    let bodyRot = 0;
+    let clubA = IDLE_CLUB + Math.sin(fc.vt * 2.2) * 0.04;
+    let trailFrom = clubA;
+    let trail = 0;
+    let impact = 0;
+    let legTuck = 0;
+
+    if (pairP > 0) {
+      // 双生击破：蓄力 → 大幅跳起 → 落下时把棒子砸到底
+      if (pairP < 0.16) {
+        squash = Math.sin(Math.PI * (pairP / 0.16)) * 0.7;
+        clubA = lerp(IDLE_CLUB, -1.95, easeOutCubic(pairP / 0.16));
+      } else if (pairP < 0.58) {
+        const k = easeOutCubic((pairP - 0.16) / 0.42);
+        lift = -s * 2.5 * k;
+        legTuck = k;
+        clubA = -1.95;
+      } else if (pairP < 0.8) {
+        const k = (pairP - 0.58) / 0.22;
+        lift = -s * 2.5 * (1 - k * k * k);
+        legTuck = 1 - k;
+        clubA = lerp(-1.95, 1.25, k * k);
+        trailFrom = -1.95;
+        trail = k;
+        impact = clamp((pairP - 0.72) / 0.06, 0, 1);
+        bodyRot = 0.16 * k;
       } else {
-        const k = easeInOutCubic((T - 0.44) / 0.56);
-        armA = lerp(hitA, idleA, k);
-        swing = 1 - k;
+        squash = 1 - easeOutCubic((pairP - 0.8) / 0.2);
+        impact = 1 - clamp((pairP - 0.8) / 0.14, 0, 1);
+        trail = 1 - clamp((pairP - 0.8) / 0.12, 0, 1);
+        clubA = lerp(1.25, IDLE_CLUB, easeInOutCubic((pairP - 0.82) / 0.18));
+      }
+    } else if (hold) {
+      // 长按：悬浮在轨道上方，按固定周期连续向下敲击
+      hover = -s * 1.15 + Math.sin(fc.vt * 4.6) * s * 0.05;
+      legTuck = 0.9;
+      bodyRot = 0.05;
+      if (hold.holding) {
+        const h = ((fc.vt + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
+        if (h < 0.45) {
+          const k = easeOutCubic(h / 0.45);
+          clubA = lerp(-1.5, 1.15, k);
+          trailFrom = -1.5;
+          trail = k;
+        } else {
+          const k = easeInOutCubic((h - 0.45) / 0.55);
+          clubA = lerp(1.15, -1.5, k);
+        }
+        impact = h > 0.32 && h < 0.6 ? 1 - Math.abs(h - 0.46) / 0.14 : 0;
+      } else {
+        // 暂停 / 续按宽限：举棒等待
+        clubA = -1.35 + Math.sin(fc.vt * 3) * 0.05;
+      }
+    } else if (attackActive) {
+      const T = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
+      if (fc.attackLane === 'top') {
+        // 上轨：蹲身 → 跳起 + 向上挥棒
+        const jump = T < 0.14 ? 0 : T < 0.62 ? Math.sin((Math.PI * (T - 0.14)) / 0.48) : 0;
+        lift = -jump * s * 0.55;
+        legTuck = jump;
+        bodyRot = -0.08 * jump;
+        if (T < 0.18) {
+          squash = Math.sin(Math.PI * (T / 0.18)) * 0.55;
+          clubA = lerp(IDLE_CLUB, 0.75, easeOutCubic(T / 0.18));
+        } else if (T < 0.42) {
+          const k = easeOutCubic((T - 0.18) / 0.24);
+          clubA = lerp(0.75, -1.05, k);
+          trailFrom = 0.75;
+          trail = k;
+          impact = clamp((T - 0.34) / 0.06, 0, 1);
+        } else {
+          clubA = T < 0.6 ? -1.05 : lerp(-1.05, IDLE_CLUB, easeInOutCubic((T - 0.6) / 0.4));
+          impact = 1 - clamp((T - 0.42) / 0.2, 0, 1);
+        }
+      } else {
+        // 下轨：抡到头顶 → 向下砸
+        if (T < 0.2) {
+          clubA = lerp(IDLE_CLUB, -1.95, easeOutCubic(T / 0.2));
+          squash = Math.sin(Math.PI * (T / 0.2)) * 0.25;
+        } else if (T < 0.4) {
+          const k = easeInOutCubic((T - 0.2) / 0.2);
+          clubA = lerp(-1.95, 1.2, k);
+          trailFrom = -1.95;
+          trail = k;
+          squash = k;
+          bodyRot = 0.13 * k;
+          impact = clamp((T - 0.34) / 0.05, 0, 1);
+        } else {
+          const k = easeInOutCubic((T - 0.4) / 0.6);
+          clubA = lerp(1.2, IDLE_CLUB, k);
+          squash = 1 - k;
+          bodyRot = 0.13 * (1 - k);
+          impact = 1 - clamp((T - 0.44) / 0.24, 0, 1);
+        }
       }
     }
 
-    const lunge = dir * s * 0.42 * swing; // 上半身整体冲向轨道
-    const bodyRot = dir * 0.2 * swing; // 躯干前倾
+    // 落地压缩：身体略微压扁、重心下沉
+    lift += squash * s * 0.1;
+    const bob =
+      Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(fc.vt * 18)) * s * 0.035 * walkAmp;
+
+    const actionLane = pairP > 0
+      ? (fc.playerLane ?? fc.attackLane)
+      : hold
+        ? hold.lane
+        : attackActive
+          ? fc.attackLane
+          : fc.playerLane;
     const laneColor = fc.frenzyActive
-      ? FRENZY_LANE[dir < 0 ? 'top' : 'bottom']
-      : dir < 0
-        ? LANE.top.color
-        : LANE.bottom.color;
-    const bob = Math.sin(fc.vt * 2.2) * s * 0.03;
-
-    /* ---------- FEVER 光环 ---------- */
-    if (fc.frenzyActive) {
-      const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 6);
-      ctx.save();
-      ctx.translate(playerX, y);
-      // 外层金色呼吸光环
-      const ag = ctx.createRadialGradient(0, 0, s * 0.9, 0, 0, s * (2.3 + pulse * 0.35));
-      ag.addColorStop(0, 'rgba(255,210,74,0)');
-      ag.addColorStop(0.55, 'rgba(255,210,74,' + (0.1 + pulse * 0.08) + ')');
-      ag.addColorStop(1, 'rgba(255,140,40,0)');
-      ctx.fillStyle = ag;
-      ctx.beginPath();
-      ctx.arc(0, 0, s * (2.3 + pulse * 0.35), 0, Math.PI * 2);
-      ctx.fill();
-      // 金色电弧环：宽底描边代替 shadowBlur
-      for (let i = 0; i < 3; i++) {
-        const rr = s * (1.55 + i * 0.28 + pulse * 0.06);
-        const a0 = fc.vt * (1.6 + i * 0.5) + i * 2.1;
-        ctx.beginPath();
-        ctx.arc(0, 0, rr, a0, a0 + Math.PI * 1.05);
-        ctx.strokeStyle = 'rgba(255,190,60,.16)';
-        ctx.lineWidth = 9;
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,226,120,' + (0.35 + pulse * 0.35) + ')';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
+      ? FRENZY_LANE[actionLane ?? 'top']
+      : LANE[actionLane ?? 'top'].color;
 
     /* ---------- 脚下平台光 ---------- */
-    const g = ctx.createRadialGradient(playerX, y + s * 1.35, 2, playerX, y + s * 1.35, s * 2);
+    const groundY = y + s * 1.32;
+    const g = ctx.createRadialGradient(playerX, groundY, 2, playerX, groundY, s * 2);
     g.addColorStop(0, 'rgba(96,200,255,.22)');
     g.addColorStop(1, 'rgba(96,200,255,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(playerX, y + s * 1.35, s * 1.95, s * 0.42, 0, 0, Math.PI * 2);
+    ctx.ellipse(playerX, groundY, s * 1.95, s * 0.42, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    /* ---------- 双腿（脚掌钉在原地，随冲刺屈伸） ---------- */
-    this.drawLegs(fc, s, y, lunge, dir);
+    // 悬浮时在脚下留一小块阴影，强调人已经离地
+    if (hover < -s * 0.2) {
+      ctx.fillStyle = 'rgba(0,0,0,.28)';
+      ctx.beginPath();
+      ctx.ellipse(playerX, groundY - s * 0.14, s * 0.6, s * 0.13, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    /* ---------- 上半身 ---------- */
+    /* ---------- 身体 ---------- */
+    const bodyY = y + hover + lift + bob;
+    const pivotX = s * 0.1;
+    const pivotY = -s * 0.26;
+    const gripDist = s * 0.42;
+    const gripX = pivotX + Math.cos(clubA) * gripDist;
+    const gripY = pivotY + Math.sin(clubA) * gripDist;
+
+    /* ---------- 长按冲击波：把「连续击打」连到怪物身上 ---------- */
+    if (hold && hold.holding) {
+      this.drawHoldBeam(fc, s, playerX, fc.layout.laneY[hold.lane], impact);
+    }
+
+    /* ---------- FEVER 光环 ---------- */
+    if (fc.frenzyActive) this.drawFever(fc, playerX, bodyY, s);
+
     ctx.save();
-    ctx.translate(playerX, y + bob + lunge);
+    ctx.translate(playerX, bodyY);
     ctx.rotate(bodyRot);
-    ctx.scale(1, 1 - 0.06 * swing);
-    this.drawTorso(fc, s, swing);
+    const stretch = 1 + squash * 0.05;
+    ctx.scale(1 / stretch, stretch);
+
+    // 腿（在躯干后面）
+    this.drawLegs(fc, s, walkAmp, legTuck);
+
+    // 挥棒残影（在身体后面）
+    this.drawSwingGhosts(ctx, s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
+
+    // 后手（深色）
+    this.drawArm(ctx, s, -s * 0.28, -s * 0.3, gripX, gripY, SKIN_DARK, JERSEY_DARK);
+
+    // 躯干 + 头
+    this.drawTorso(fc, s);
     this.drawHead(fc, s);
-    this.drawSwordArm(fc, s, armA, swing, dir, laneColor, windA);
-    if (flash > 0) {
-      ctx.fillStyle = 'rgba(255,60,90,' + flash * 0.42 + ')';
-      roundRectPath(ctx, -s * 0.9, -s * 1.2, s * 2.1, s * 2.3, s * 0.4);
+
+    // 前手 + 棒子
+    this.drawArm(ctx, s, s * 0.1, -s * 0.3, gripX, gripY, SKIN, JERSEY);
+    this.drawBat(fc, s, gripX, gripY, clubA, trail, impact, laneColor);
+
+    // 受击红闪
+    if (fc.playerFlash > 0) {
+      ctx.fillStyle = 'rgba(255,60,90,' + fc.playerFlash * 0.42 + ')';
+      roundRectPath(ctx, -s * 0.78, -s * 1.16, s * 1.62, s * 2.2, s * 0.4);
       ctx.fill();
     }
     ctx.restore();
 
+    /* ---------- 双生落地的冲击环 ---------- */
+    if (pairP > 0.72 && pairP < 1) {
+      const k = clamp((pairP - 0.72) / 0.28, 0, 1);
+      ctx.strokeStyle = 'rgba(255,255,255,' + (1 - k) * 0.55 + ')';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(playerX, y + s * 1.15, s * (0.5 + 1.7 * k), s * (0.12 + 0.4 * k), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     /* ---------- 生命环 ---------- */
+    this.drawHpRing(fc, playerX, bodyY, s);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 位置 / 姿态辅助
+   * ------------------------------------------------------------------ */
+
+  /** 换轨平滑：指数逼近目标轨道中心。 */
+  private followLane(fc: FrameContext, target: number): number {
+    const vt = fc.vt;
+    const dt = this.lastVt < 0 ? 1 / 60 : clamp(vt - this.lastVt, 0, 0.05);
+    this.lastVt = vt;
+    if (Number.isNaN(this.displayY)) {
+      this.displayY = target;
+      return target;
+    }
+    const k = 1 - Math.exp(-dt * LANE_FOLLOW);
+    this.displayY += (target - this.displayY) * k;
+    if (Math.abs(target - this.displayY) < 0.25) this.displayY = target;
+    return this.displayY;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 绘制
+   * ------------------------------------------------------------------ */
+
+  /** 双腿：走路时前后摆，跳起 / 悬浮时收腿。 */
+  private drawLegs(fc: FrameContext, s: number, walkAmp: number, tuck: number): void {
+    const ctx = fc.ctx;
+    const hipY = s * 0.24;
+    const footY = s * 0.94 - tuck * s * 0.16;
+    const swing = Math.sin(fc.vt * 18) * 0.26 * walkAmp;
+    const lift = tuck * s * 0.18;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const sgn of SIDES) {
+      const phase = sgn * swing;
+      const hipX = sgn * s * 0.15;
+      const footX = sgn * s * 0.2 + phase * s + tuck * s * 0.18;
+      const kneeX = (hipX + footX) / 2 + sgn * s * 0.02;
+      const kneeY = (hipY + footY - lift) / 2;
+
+      ctx.strokeStyle = PANTS;
+      ctx.lineWidth = s * 0.21;
+      ctx.beginPath();
+      ctx.moveTo(hipX, hipY);
+      ctx.quadraticCurveTo(kneeX, kneeY, footX, footY - lift);
+      ctx.stroke();
+
+      // 鞋
+      ctx.fillStyle = SHOE;
+      roundRectPath(ctx, footX - s * 0.16, footY - lift - s * 0.05, s * 0.34, s * 0.14, s * 0.06);
+      ctx.fill();
+      ctx.strokeStyle = '#22303c';
+      ctx.lineWidth = s * 0.035;
+      ctx.beginPath();
+      ctx.moveTo(footX - s * 0.14, footY - lift + s * 0.07);
+      ctx.lineTo(footX + s * 0.16, footY - lift + s * 0.07);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 躯干：红色球衣 + 奶油色条纹。 */
+  private drawTorso(fc: FrameContext, s: number): void {
+    const ctx = fc.ctx;
+    const bodyGrad = ctx.createLinearGradient(-s * 0.45, -s * 0.55, s * 0.45, s * 0.35);
+    bodyGrad.addColorStop(0, '#ef6a5f');
+    bodyGrad.addColorStop(0.55, JERSEY);
+    bodyGrad.addColorStop(1, JERSEY_DARK);
+    ctx.fillStyle = bodyGrad;
+    ctx.strokeStyle = 'rgba(40,16,20,.55)';
+    ctx.lineWidth = s * 0.045;
+
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.4, -s * 0.46);
+    ctx.quadraticCurveTo(0, -s * 0.58, s * 0.4, -s * 0.46);
+    ctx.lineTo(s * 0.3, s * 0.26);
+    ctx.quadraticCurveTo(0, s * 0.36, -s * 0.3, s * 0.26);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 奶油色胸带
+    ctx.strokeStyle = TRIM;
+    ctx.lineWidth = s * 0.075;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.33, -s * 0.06);
+    ctx.quadraticCurveTo(0, s * 0.02, s * 0.33, -s * 0.06);
+    ctx.stroke();
+
+    // 领口
+    ctx.strokeStyle = '#3a1519';
+    ctx.lineWidth = s * 0.05;
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.46, s * 0.16, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+
+    // 背号（一个简单的 7）
+    ctx.strokeStyle = 'rgba(244,234,214,.85)';
+    ctx.lineWidth = s * 0.035;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.11, s * 0.06);
+    ctx.lineTo(s * 0.1, s * 0.02);
+    ctx.lineTo(-s * 0.03, s * 0.2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.13, s * 0.2);
+    ctx.lineTo(s * 0.06, s * 0.24);
+    ctx.stroke();
+  }
+
+  /** 头：棒球帽 + 侧脸。 */
+  private drawHead(fc: FrameContext, s: number): void {
+    const ctx = fc.ctx;
+    const hx = s * 0.04;
+    const hy = -s * 0.78;
+    const hr = s * 0.28;
+
+    // 脖子
+    ctx.fillStyle = SKIN_DARK;
+    roundRectPath(ctx, -s * 0.09, -s * 0.58, s * 0.2, s * 0.18, s * 0.05);
+    ctx.fill();
+
+    // 脸
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,50,30,.5)';
+    ctx.lineWidth = s * 0.035;
+    ctx.stroke();
+
+    // 耳朵
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.arc(hx - hr * 0.92, hy + hr * 0.14, s * 0.075, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,50,30,.35)';
+    ctx.lineWidth = s * 0.025;
+    ctx.stroke();
+
+    // 帽顶
+    ctx.fillStyle = CAP;
+    ctx.beginPath();
+    ctx.arc(hx, hy - s * 0.04, hr * 1.02, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = CAP_BRIM;
+    roundRectPath(ctx, hx + s * 0.03, hy - s * 0.16, hr * 0.98, s * 0.1, s * 0.045);
+    ctx.fill();
+    ctx.fillStyle = '#2b3f52';
+    roundRectPath(ctx, hx - hr * 0.18, hy - s * 0.29, hr * 0.36, s * 0.08, s * 0.035);
+    ctx.fill();
+
+    // 眼睛：血量低时变红
+    const eyeCol = fc.hp / MAX_HP <= 0.3 ? '#ff4d6d' : '#1a2836';
+    ctx.fillStyle = eyeCol;
+    ctx.beginPath();
+    ctx.ellipse(hx + s * 0.12, hy + s * 0.03, s * 0.045, s * 0.065, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 眉毛：出手时更凶
+    ctx.strokeStyle = '#3a2a24';
+    ctx.lineWidth = s * 0.03;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx + s * 0.03, hy - s * 0.06);
+    ctx.lineTo(hx + s * 0.2, hy - s * 0.02);
+    ctx.stroke();
+
+    // 嘴
+    ctx.strokeStyle = 'rgba(120,60,40,.7)';
+    ctx.lineWidth = s * 0.028;
+    ctx.beginPath();
+    ctx.moveTo(hx + s * 0.05, hy + s * 0.17);
+    ctx.lineTo(hx + s * 0.19, hy + s * 0.15);
+    ctx.stroke();
+  }
+
+  /** 手臂：上臂球衣袖 + 前臂皮肤。 */
+  private drawArm(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    shoulderX: number,
+    shoulderY: number,
+    gripX: number,
+    gripY: number,
+    skin: string,
+    sleeve: string,
+  ): void {
+    const midX = lerp(shoulderX, gripX, 0.42);
+    const midY = lerp(shoulderY, gripY, 0.42);
+
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = sleeve;
+    ctx.lineWidth = s * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(shoulderX, shoulderY);
+    ctx.lineTo(midX, midY);
+    ctx.stroke();
+
+    ctx.strokeStyle = skin;
+    ctx.lineWidth = s * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(midX, midY);
+    ctx.lineTo(gripX, gripY);
+    ctx.stroke();
+
+    // 手掌
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(gripX, gripY, s * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /** 棒子：木纹渐变 + 挥击时的光晕。 */
+  private drawBat(
+    fc: FrameContext,
+    s: number,
+    gripX: number,
+    gripY: number,
+    angle: number,
+    swing: number,
+    impact: number,
+    laneColor: string,
+  ): void {
+    const ctx = fc.ctx;
+    ctx.save();
+    ctx.translate(gripX, gripY);
+    ctx.rotate(angle);
+    ctx.lineCap = 'round';
+
+    // 挥击光晕
+    if (swing > 0.03) {
+      ctx.strokeStyle = hexA(laneColor, 0.24 * swing);
+      ctx.lineWidth = s * 0.34;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.02, 0);
+      ctx.lineTo(s * 1.18, 0);
+      ctx.stroke();
+    }
+
+    // 握把
+    ctx.strokeStyle = BAT_GRIP;
+    ctx.lineWidth = s * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.02, 0);
+    ctx.lineTo(s * 0.34, 0);
+    ctx.stroke();
+
+    // 握把防滑纹
+    ctx.strokeStyle = 'rgba(220,190,150,.35)';
+    ctx.lineWidth = s * 0.02;
+    for (let i = 1; i <= 3; i++) {
+      const x = s * (0.05 + i * 0.07);
+      ctx.beginPath();
+      ctx.moveTo(x, -s * 0.045);
+      ctx.lineTo(x, s * 0.045);
+      ctx.stroke();
+    }
+
+    // 棒身（前端更粗）
+    const grad = ctx.createLinearGradient(0, -s * 0.13, 0, s * 0.13);
+    grad.addColorStop(0, '#f0c088');
+    grad.addColorStop(0.45, BAT);
+    grad.addColorStop(1, BAT_DARK);
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = 'rgba(70,40,20,.55)';
+    ctx.lineWidth = s * 0.025;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.28, -s * 0.07);
+    ctx.quadraticCurveTo(s * 1.02, -s * 0.13, s * 1.16, -s * 0.06);
+    ctx.quadraticCurveTo(s * 1.24, 0, s * 1.16, s * 0.06);
+    ctx.quadraticCurveTo(s * 1.02, s * 0.13, s * 0.28, s * 0.07);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 高光
+    ctx.strokeStyle = 'rgba(255,240,215,.5)';
+    ctx.lineWidth = s * 0.025;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.42, -s * 0.035);
+    ctx.quadraticCurveTo(s * 0.92, -s * 0.075, s * 1.08, -s * 0.035);
+    ctx.stroke();
+
+    // 尾端旋钮
+    ctx.fillStyle = '#2a1d16';
+    ctx.beginPath();
+    ctx.arc(-s * 0.02, 0, s * 0.075, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 击打闪光
+    if (impact > 0.02) {
+      ctx.fillStyle = hexA(laneColor, 0.35 * impact);
+      starPath(ctx, s * 1.2, 0, s * (0.2 + 0.2 * impact), s * (0.07 + 0.07 * impact));
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,' + 0.9 * impact + ')';
+      starPath(ctx, s * 1.2, 0, s * (0.1 + 0.12 * impact), s * (0.04 + 0.04 * impact));
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  /** 挥棒残影：沿挥击弧线留几道半透明的棒影（避免大块扇形遮住角色）。 */
+  private drawSwingGhosts(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    pivotX: number,
+    pivotY: number,
+    gripDist: number,
+    from: number,
+    to: number,
+    color: string,
+    strength: number,
+  ): void {
+    if (strength <= 0.04 || Math.abs(to - from) < 0.06) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+
+    // 棒端扫过的细弧线
+    const r = gripDist + s * 1.14;
+    ctx.beginPath();
+    ctx.arc(pivotX, pivotY, r, from, to, to < from);
+    ctx.strokeStyle = hexA(color, 0.32 * strength);
+    ctx.lineWidth = s * 0.055;
+    ctx.stroke();
+
+    // 三道淡棒影，越接近当前角度越实
+    const alphas = [0.1, 0.15, 0.21];
+    for (let i = 0; i < alphas.length; i++) {
+      const a = lerp(from, to, 0.42 + i * 0.22);
+      const gx = pivotX + Math.cos(a) * gripDist;
+      const gy = pivotY + Math.sin(a) * gripDist;
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(a);
+      ctx.globalAlpha = (alphas[i] ?? 0) * strength;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.05);
+      ctx.quadraticCurveTo(s * 0.62, -s * 0.09, s * 1.2, -s * 0.055);
+      ctx.quadraticCurveTo(s * 1.26, 0, s * 1.2, s * 0.055);
+      ctx.quadraticCurveTo(s * 0.62, s * 0.09, 0, s * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /** 长按时的能量冲击带：从角色身前一直连到怪物身上。 */
+  private drawHoldBeam(
+    fc: FrameContext,
+    s: number,
+    fromX: number,
+    laneY: number,
+    strike: number,
+  ): void {
+    const ctx = fc.ctx;
+    const x0 = fromX + s * 0.9;
+    const x1 = fc.layout.hitX + s * 0.9;
+    if (x1 <= x0) return;
+
+    const alpha = 0.12 + 0.5 * strike;
+    const half = s * (0.05 + 0.09 * strike);
+    const grad = ctx.createLinearGradient(x0, laneY, x1, laneY);
+    grad.addColorStop(0, hexA(LONG_COLOR, alpha));
+    grad.addColorStop(0.75, hexA(LONG_COLOR, alpha * 0.6));
+    grad.addColorStop(1, hexA(LONG_COLOR, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x0, laneY - half);
+    ctx.lineTo(x1, laneY - half * 0.35);
+    ctx.lineTo(x1, laneY + half * 0.35);
+    ctx.lineTo(x0, laneY + half);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = hexA('#ffffff', 0.35 * strike);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x0, laneY);
+    ctx.lineTo(x1, laneY);
+    ctx.stroke();
+  }
+
+  /** FEVER 光环 —— 保留旧版效果。 */
+  private drawFever(fc: FrameContext, x: number, y: number, s: number): void {
+    const ctx = fc.ctx;
+    const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 6);
+    ctx.save();
+    ctx.translate(x, y);
+    const ag = ctx.createRadialGradient(0, 0, s * 0.9, 0, 0, s * (2.3 + pulse * 0.35));
+    ag.addColorStop(0, 'rgba(255,210,74,0)');
+    ag.addColorStop(0.55, 'rgba(255,210,74,' + (0.1 + pulse * 0.08) + ')');
+    ag.addColorStop(1, 'rgba(255,140,40,0)');
+    ctx.fillStyle = ag;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * (2.3 + pulse * 0.35), 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 3; i++) {
+      const rr = s * (1.55 + i * 0.28 + pulse * 0.06);
+      const a0 = fc.vt * (1.6 + i * 0.5) + i * 2.1;
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, a0, a0 + Math.PI * 1.05);
+      ctx.strokeStyle = 'rgba(255,190,60,.16)';
+      ctx.lineWidth = 9;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,226,120,' + (0.35 + pulse * 0.35) + ')';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 生命环 —— 保留旧版效果。 */
+  private drawHpRing(fc: FrameContext, x: number, y: number, s: number): void {
+    const ctx = fc.ctx;
     const frac = fc.hp / MAX_HP;
     ctx.save();
-    ctx.translate(playerX, y);
+    ctx.translate(x, y);
     ctx.strokeStyle = 'rgba(255,255,255,.07)';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
@@ -151,249 +712,5 @@ export class PlayerView {
     ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.restore();
-  }
-
-  /** 双腿 —— `source.html:1768-1800`。 */
-  private drawLegs(fc: FrameContext, s: number, y: number, lunge: number, dir: number): void {
-    const ctx = fc.ctx;
-    const { playerX } = fc.layout;
-    const hipY = y + lunge * 0.5;
-    const footY = y + s * 0.96;
-    const kneeY = (hipY + footY) * 0.5;
-    const spread = s * 0.26;
-    const lean = (dir * s * 0.06 * Math.abs(lunge)) / (s * 0.26);
-
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#17364d';
-    ctx.lineWidth = s * 0.24;
-    this.drawLeg(ctx, SIDE_L, playerX, spread, lean, hipY, kneeY, footY);
-    this.drawLeg(ctx, SIDE_R, playerX, spread, lean, hipY, kneeY, footY);
-    // 脚掌
-    ctx.strokeStyle = 'rgba(120,238,255,.55)';
-    ctx.lineWidth = s * 0.1;
-    this.drawFoot(ctx, SIDE_L, playerX, s, spread, lean, footY);
-    this.drawFoot(ctx, SIDE_R, playerX, s, spread, lean, footY);
-    ctx.restore();
-  }
-
-  /** 一条腿 —— 旧 `source.html:1780-1786`。 */
-  private drawLeg(
-    ctx: CanvasRenderingContext2D,
-    side: number,
-    playerX: number,
-    spread: number,
-    lean: number,
-    hipY: number,
-    kneeY: number,
-    footY: number,
-  ): void {
-    const front = side > 0;
-    const footX = playerX + side * spread + (front ? lean : lean * 0.5);
-    const kneeX = playerX + side * spread * 0.85 + (front ? lean * 0.7 : lean * 0.3);
-    ctx.beginPath();
-    ctx.moveTo(playerX + side * spread * 0.7, hipY);
-    ctx.quadraticCurveTo(kneeX, kneeY, footX, footY);
-    ctx.stroke();
-  }
-
-  /** 一只脚掌 —— 旧 `source.html:1792-1797`。 */
-  private drawFoot(
-    ctx: CanvasRenderingContext2D,
-    side: number,
-    playerX: number,
-    s: number,
-    spread: number,
-    lean: number,
-    footY: number,
-  ): void {
-    const front = side > 0;
-    const footX = playerX + side * spread + (front ? lean : lean * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(footX - s * 0.1, footY);
-    ctx.lineTo(footX + s * 0.14, footY);
-    ctx.stroke();
-  }
-
-  /** 躯干 —— `source.html:1802-1840`。 */
-  private drawTorso(fc: FrameContext, s: number, swing: number): void {
-    const ctx = fc.ctx;
-    const bodyGrad = ctx.createLinearGradient(-s * 0.6, -s * 0.5, s * 0.6, s * 0.5);
-    bodyGrad.addColorStop(0, '#2b5a7a');
-    bodyGrad.addColorStop(0.5, '#16313f');
-    bodyGrad.addColorStop(1, '#0d1e2b');
-    ctx.fillStyle = bodyGrad;
-    roundRectPath(ctx, -s * 0.62, -s * 0.52, s * 1.24, s * 0.95, s * 0.24);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(90,210,255,.18)';
-    ctx.lineWidth = 7;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(110,225,255,.75)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(120,230,255,.35)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.34, s * 0.16);
-    ctx.lineTo(s * 0.3, s * 0.16);
-    ctx.stroke();
-
-    const core = clamp(0.45 + 0.35 * Math.sin(fc.vt * 3.4) + 0.3 * swing, 0, 1);
-    ctx.fillStyle = 'rgba(95,225,255,' + core * 0.22 + ')';
-    ctx.beginPath();
-    ctx.arc(-s * 0.08, -s * 0.12, s * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(95,225,255,' + core + ')';
-    ctx.beginPath();
-    ctx.arc(-s * 0.08, -s * 0.12, s * 0.14, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 双肩
-    ctx.fillStyle = '#1d435c';
-    ctx.strokeStyle = 'rgba(110,225,255,.6)';
-    ctx.lineWidth = 1.8;
-    roundRectPath(ctx, -s * 0.82, -s * 0.58, s * 0.34, s * 0.36, s * 0.1);
-    ctx.fill();
-    ctx.stroke();
-    roundRectPath(ctx, s * 0.48, -s * 0.58, s * 0.34, s * 0.36, s * 0.1);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  /** 头部 —— `source.html:1842-1857`。 */
-  private drawHead(fc: FrameContext, s: number): void {
-    const ctx = fc.ctx;
-    ctx.fillStyle = '#102232';
-    ctx.strokeStyle = 'rgba(130,235,255,.8)';
-    ctx.lineWidth = 2;
-    roundRectPath(ctx, -s * 0.3, -s * 1.1, s * 0.62, s * 0.56, s * 0.16);
-    ctx.fill();
-    ctx.stroke();
-
-    const eyeA = 0.75 + 0.25 * Math.sin(fc.vt * 4.2);
-    ctx.fillStyle =
-      (fc.hp / MAX_HP <= 0.3 ? 'rgba(255,77,109,' : 'rgba(120,240,255,') + eyeA + ')';
-    ctx.globalAlpha = 0.3;
-    roundRectPath(ctx, -s * 0.2, -s * 0.98, s * 0.48, s * 0.24, s * 0.09);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    roundRectPath(ctx, -s * 0.16, -s * 0.94, s * 0.4, s * 0.16, s * 0.06);
-    ctx.fill();
-  }
-
-  /** 持剑臂 —— `source.html:1859-1959`。 */
-  private drawSwordArm(
-    fc: FrameContext,
-    s: number,
-    armA: number,
-    swing: number,
-    dir: number,
-    laneColor: string,
-    windA: number,
-  ): void {
-    const ctx = fc.ctx;
-    const sx = s * 0.38;
-    const sy = -s * 0.2;
-
-    ctx.save();
-    ctx.translate(sx, sy);
-
-    /* 挥击扇形：柔和光幕 + 亮边 */
-    if (swing > 0.04) {
-      const a0 = Math.min(windA, armA);
-      const a1 = Math.max(windA, armA);
-      if (a1 - a0 > 0.02) {
-        const grad = ctx.createRadialGradient(0, 0, s * 0.5, 0, 0, s * 2.15);
-        grad.addColorStop(0, hexA(laneColor, 0));
-        grad.addColorStop(0.55, hexA(laneColor, 0.16 * swing));
-        grad.addColorStop(1, hexA(laneColor, 0));
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.arc(0, 0, s * 2.15, a0, a1);
-        ctx.closePath();
-        ctx.fill();
-
-        // 两道残刃
-        for (let i = 0; i < 2; i++) {
-          const ga = lerp(a0, a1, i === 0 ? BLADE_T0 : BLADE_T1);
-          ctx.save();
-          ctx.rotate(ga);
-          ctx.globalAlpha = 0.22 * swing;
-          ctx.strokeStyle = '#dffaff';
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(s * 0.55, 0);
-          ctx.lineTo(s * 1.55, 0);
-          ctx.stroke();
-          ctx.restore();
-        }
-        ctx.globalAlpha = 1;
-
-        // 弧形亮边
-        ctx.strokeStyle = hexA(laneColor, 0.55 * swing);
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.arc(0, 0, s * 1.98, a0, a1);
-        ctx.stroke();
-      }
-    }
-
-    ctx.rotate(armA);
-
-    // 上臂
-    ctx.strokeStyle = '#1b3c52';
-    ctx.lineWidth = s * 0.24;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(s * 0.5, 0);
-    ctx.stroke();
-
-    // 护手
-    ctx.fillStyle = '#2b6c8c';
-    ctx.strokeStyle = 'rgba(120,235,255,.7)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(s * 0.54, 0, s * 0.16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // 能量刃（前半段实、后半段渐隐）
-    const bladeA = clamp(0.55 + 0.18 * Math.sin(fc.vt * 3) + 0.4 * swing, 0, 1);
-    const bx = s * 0.58;
-    const bx1 = s * (1.3 + 0.62 * swing);
-    const bg = ctx.createLinearGradient(bx, 0, bx1, 0);
-    bg.addColorStop(0, 'rgba(235,253,255,' + bladeA + ')');
-    bg.addColorStop(0.55, 'rgba(150,238,255,' + bladeA * 0.75 + ')');
-    bg.addColorStop(1, 'rgba(120,230,255,0)');
-    ctx.strokeStyle = 'rgba(120,230,255,.18)';
-    ctx.lineWidth = s * (0.3 + 0.12 * swing);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(bx, 0);
-    ctx.lineTo(bx1, 0);
-    ctx.stroke();
-    ctx.strokeStyle = bg;
-    ctx.lineWidth = s * (0.12 + 0.08 * swing);
-    ctx.stroke();
-
-    // 枪尖闪光
-    if (swing > 0.55) {
-      const f = clamp((swing - 0.55) / 0.45, 0, 1);
-      ctx.globalAlpha = f;
-      ctx.fillStyle = hexA(laneColor, 0.35);
-      starPath(ctx, bx1 - s * 0.05, 0, s * (0.22 + 0.2 * f), s * (0.08 + 0.07 * f));
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      starPath(ctx, bx1 - s * 0.05, 0, s * (0.12 + 0.13 * f), s * (0.04 + 0.04 * f));
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-    void dir;
   }
 }

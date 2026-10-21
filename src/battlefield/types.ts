@@ -143,6 +143,8 @@ export interface FrameView {
   readonly attackT: number;
   /** 出招轨道。 */
   readonly attackLane: Lane | null;
+  /** 角色驻守的轨道；`null` = 站在两轨之间（尚未出招）。 */
+  readonly playerLane: Lane | null;
 
   // ---- 表现层可变状态 ----
 
@@ -152,6 +154,8 @@ export interface FrameView {
   readonly shake: number;
   /** 角色受击红闪强度（0 = 正常）。 */
   readonly playerFlash: number;
+  /** 双生击破下砸动画进度（0 = 未播放，1 = 刚触发）。 */
+  readonly pairSmash: number;
 }
 
 /**

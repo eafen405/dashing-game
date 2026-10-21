@@ -130,6 +130,63 @@ describe('主推进', () => {
     expect(next.combo).toBe(0);
   });
 
+  it('驻守上轨时，下轨漏怪不扣血，但连击清零', () => {
+    const struck = strike(
+      makeState({
+        monsters: [normalMonster({ lane: 'bottom', y: 360, x: 130 })],
+        combo: 9,
+        frenzyActive: true,
+        feverT: 3,
+      }),
+      'top',
+    ).state;
+
+    const { state: next, effects } = tick(struck, FRAME, createRng(1));
+
+    expect(next.hp).toBe(250);
+    expect(next.combo).toBe(0);
+    expect(next.frenzyActive).toBe(false);
+    expect(effects.some((e) => e.type === 'player-flash')).toBe(false);
+    expect(next.monsters[0]?.removed).toBe(true);
+  });
+
+  it('驻守下轨时，上轨漏怪不扣血，但连击清零', () => {
+    const struck = strike(
+      makeState({ monsters: [normalMonster({ x: 130 })], combo: 4 }),
+      'bottom',
+    ).state;
+
+    const { state: next } = tick(struck, FRAME, createRng(1));
+
+    expect(next.hp).toBe(250);
+    expect(next.combo).toBe(0);
+  });
+
+  it('驻守上轨时，上轨漏怪仍然扣血', () => {
+    const struck = strike(
+      makeState({ monsters: [normalMonster({ x: 130 })], combo: 4 }),
+      'top',
+    ).state;
+
+    const { state: next, effects } = tick(struck, FRAME, createRng(1));
+
+    expect(next.hp).toBe(230);
+    expect(next.combo).toBe(0);
+    expect(effects.some((e) => e.type === 'player-flash')).toBe(true);
+  });
+
+  it('双生触线时，即使角色只驻守一轨也必定受伤', () => {
+    const [a, b] = twinPair();
+    a.x = 130;
+    b.x = 130;
+    const struck = strike(makeState({ monsters: [a, b], combo: 6 }), 'top').state;
+
+    const { state: next } = tick(struck, FRAME, createRng(1));
+
+    expect(next.hp).toBe(230);
+    expect(next.combo).toBe(0);
+  });
+
   it('生成节奏：倒计时归零时生成一只怪并重置倒计时', () => {
     const state = makeState({ spawnTimer: 0.01 });
 

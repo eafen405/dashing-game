@@ -182,6 +182,9 @@ export function tick(
     if (!m || m.removed) continue;
     // 双生一同触线：只结算一次伤害，另一只随锁链自毁
     const mateId = m.kind === 'twin' ? m.partnerId : null;
+    // 角色只驻守一条轨道：另一轨的怪擦身而过，不扣血。
+    // 双生两轨各有一只，必定撞上角色；尚未出招（playerLane = null）时两轨都会撞。
+    const collides = mateId !== null || s.playerLane === null || s.playerLane === m.lane;
     if (mateId !== null) {
       const mate = findMonster(s.monsters, mateId);
       if (mate && !mate.removed) {
@@ -213,7 +216,7 @@ export function tick(
         });
       }
     }
-    const hurt = hurtPlayer(s, id);
+    const hurt = hurtPlayer(s, id, collides);
     s = hurt.state;
     effects.push(...hurt.effects);
     if (s.phase !== 'running') break;

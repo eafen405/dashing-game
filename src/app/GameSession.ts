@@ -26,7 +26,7 @@ import { isPrimaryPointer, laneFromClientY, pointerInputId } from '../input/poin
 import { keyActionFor, releaseInputFor } from '../input/keyboard';
 import { MAX_PARTICLES } from '../presentation/effects';
 import type { HudStore } from '../presentation/hudStore';
-import { PresentationState, type EffectSink } from '../presentation/state';
+import { PresentationState, PAIR_SMASH_DUR, type EffectSink } from '../presentation/state';
 
 /** 最高分的 localStorage 键（旧 `source.html:463`）。 */
 export const BEST_KEY = 'dualrail_best';
@@ -163,9 +163,11 @@ export class GameSession {
       monsters: s.monsters,
       attackT: s.attackT,
       attackLane: s.attackLane,
+      playerLane: s.playerLane,
       effects: this.presentation.effects,
       shake: 0,
       playerFlash: 0,
+      pairSmash: 0,
     };
 
     this.renderer.mount(options.host);
@@ -370,9 +372,14 @@ export class GameSession {
     f.monsters = s.monsters;
     f.attackT = s.attackT;
     f.attackLane = s.attackLane;
+    f.playerLane = s.playerLane;
     f.effects = this.presentation.effects;
     f.shake = this.presentation.shake.value;
     f.playerFlash = this.presentation.playerFlash;
+    f.pairSmash =
+      this.presentation.pairSmashT > 0
+        ? 1 - this.presentation.pairSmashT / PAIR_SMASH_DUR
+        : 0;
     this.renderer.render(f);
   }
 

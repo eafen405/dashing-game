@@ -8,7 +8,7 @@
  * 只有 `twinLinkCount` 变。
  */
 
-import type { Lane, Layout, Monster, TwinMonster } from '../../game/types';
+import type { HoldMonster, Lane, Layout, Monster, TwinMonster } from '../../game/types';
 import type { Effects } from '../types';
 
 /** 空效果集（没有效果时的占位）。 */
@@ -45,6 +45,12 @@ export class FrameContext {
   attackT = 0;
   /** 出招轨道。 */
   attackLane: Lane | null = null;
+  /** 角色驻守的轨道；`null` = 站在两轨之间。 */
+  playerLane: Lane | null = null;
+  /** 双生击破下砸动画进度（0 = 未播放，1 = 刚触发）。 */
+  pairSmash = 0;
+  /** 正在被长按的那只长按怪（没有则为 `null`）。 */
+  holdMonster: HoldMonster | null = null;
   /** 在场怪物（渲染层只读）。 */
   monsters: readonly Monster[] = [];
   /** 粒子 / 刀光 / 冲击环 / 飘字。 */
