@@ -125,6 +125,46 @@ const READ_PIXELS = () =>
   });
 
 /**
+ * 判断判定区中心有没有怪（怪物身体是**不透明的深色** `#101a2e`，
+ * 而判定区本身只有半透明的亮色环 / 圆点）。
+ */
+const HAS_MONSTER = ({ x, y }) =>
+  new Promise((resolve) => {
+    globalThis.requestAnimationFrame(() => {
+      const canvas = globalThis.document.querySelector('.canvas-host canvas');
+      if (!(canvas instanceof globalThis.HTMLCanvasElement)) {
+        resolve(false);
+        return;
+      }
+      const scratch = globalThis.document.createElement('canvas');
+      scratch.width = canvas.width;
+      scratch.height = canvas.height;
+      const sctx = scratch.getContext('2d');
+      if (!sctx) {
+        resolve(false);
+        return;
+      }
+      sctx.drawImage(canvas, 0, 0);
+      const dpr = canvas.width / (canvas.clientWidth || canvas.width);
+      const px = Math.round(x * dpr);
+      const py = Math.round(y * dpr);
+      const half = 4;
+      const x0 = Math.max(0, px - half);
+      const y0 = Math.max(0, py - half);
+      const w = Math.min(canvas.width - x0, half * 2 + 1);
+      const h = Math.min(canvas.height - y0, half * 2 + 1);
+      const { data } = sctx.getImageData(x0, y0, w, h);
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 100 && Math.max(data[i], data[i + 1], data[i + 2]) < 70) {
+          resolve(true);
+          return;
+        }
+      }
+      resolve(false);
+    });
+  });
+
+/**
  * **自动打怪**（整段在页面里跑，每帧一次）。
  *
  * 判定区中心有没有怪：怪物身体是**不透明的深色** `#101a2e`，
@@ -156,11 +196,17 @@ const AUTO_PLAY = ({ hitX, laneYs, zoneHalf, durationMs }) =>
     const rect = stage.getBoundingClientRect();
     const t0 = globalThis.performance.now();
     let hits = 0;
+    // 每轨一个冷却：同一只怪只点一次 —— 重复点击会变成「空挥」（miss），
+    // 而 miss 会把 combo 清零，攒不到 50 连击的 FEVER。
+    // 冷却必须**按轨**分开：双生怪要两轨同时点才能成对击破。
+    const lastClick = [-1e9, -1e9];
+    const CLICK_COOLDOWN_MS = 260;
 
     const step = () => {
       sctx.clearRect(0, 0, scratch.width, scratch.height);
       sctx.drawImage(canvas, 0, 0);
-      for (const laneY of laneYs) {
+      for (let laneIdx = 0; laneIdx < laneYs.length; laneIdx++) {
+        const laneY = laneYs[laneIdx];
         // 沿轨道扫一条**横带**，找「不透明且很暗」的像素（怪物身体 `#101a2e`）。
         // 判定区自己只有半透明的亮色环 / 圆点，背景是透明的 —— 都不会命中。
         const py = Math.round(laneY * dpr);
@@ -173,17 +219,25 @@ const AUTO_PLAY = ({ hitX, laneYs, zoneHalf, durationMs }) =>
         if (x1 <= x0 || bandH <= 0) continue;
         const { data } = sctx.getImageData(x0, bandY, x1 - x0, bandH);
         let inZone = false;
+        let minX = Infinity;
+        let maxX = -Infinity;
         for (let i = 0; i < data.length; i += 4) {
           if (data[i + 3] <= 100 || Math.max(data[i], data[i + 1], data[i + 2]) >= 70) continue;
           // 命中像素的 x（CSS 像素）必须落在**击杀区间**里 —— 否则点下去是空挥（miss）。
           const col = Math.floor(i / 4) % (x1 - x0);
           const cssX = (x0 + col) / dpr;
-          if (Math.abs(cssX - hitX) < zoneHalf - 6) {
-            inZone = true;
-            break;
-          }
+          if (cssX < minX) minX = cssX;
+          if (cssX > maxX) maxX = cssX;
+          if (Math.abs(cssX - hitX) < zoneHalf - 6) inZone = true;
         }
         if (!inZone) continue;
+        // **长按怪**是横贯轨道的长胶囊（长 ≈ 26% 屏宽）——
+        // 点它会开启长按，脚本随即松手 → 长按失败 → 连击清零。
+        // 所以检测到「很宽的一片暗色」就跳过这一轨。
+        if (maxX - minX > 120) continue;
+        const now = globalThis.performance.now();
+        if (now - lastClick[laneIdx] < CLICK_COOLDOWN_MS) continue;
+        lastClick[laneIdx] = now;
         const init = {
           clientX: rect.left + hitX,
           clientY: rect.top + laneY,
@@ -224,6 +278,8 @@ async function shoot(kind) {
 
   const box = await page.locator('.canvas-host canvas').boundingBox();
   const layout = computeLayout(box?.width ?? VIEWPORT.width, box?.height ?? 505);
+  const ox = box?.x ?? 0;
+  const oy = box?.y ?? 0;
 
   const phases = {};
   const shots = [];
@@ -246,9 +302,33 @@ async function shoot(kind) {
   shots.push(join(OUT, `${kind}-play.png`));
   await page.screenshot({ path: shots[shots.length - 1] });
 
-  // ── 阶段 3：fever（连击 50 → FEVER 全场氛围） ──
+  // ── 阶段 3：fx（命中瞬间 —— 刀光 / 冲击环 / 粒子 / 飘字） ──
+  // 命中后**立刻**截图：这些效果寿命只有 0.25~0.95s，晚一点就淡没了。
+  for (let i = 0; i < 8; i++) {
+    let clicked = false;
+    for (let laneIdx = 0; laneIdx < laneYs.length; laneIdx++) {
+      const here = await page.evaluate(HAS_MONSTER, {
+        x: layout.hitX,
+        y: laneYs[laneIdx],
+      });
+      if (here) {
+        await page.mouse.click(ox + layout.hitX, oy + laneYs[laneIdx]);
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) {
+      await page.waitForTimeout(60);
+      continue;
+    }
+    await page.screenshot({ path: join(OUT, `${kind}-fx.png`) });
+  }
+  phases.fx = await page.evaluate(READ_PIXELS);
+  shots.push(join(OUT, `${kind}-fx.png`));
+
+  // ── 阶段 4：fever（连击 50 → FEVER 全场氛围） ──
   let fever = false;
-  for (let round = 0; round < 40 && !fever; round++) {
+  for (let round = 0; round < 3 && !fever; round++) {
     await page.evaluate(AUTO_PLAY, {
       hitX: layout.hitX,
       laneYs,
