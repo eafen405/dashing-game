@@ -126,6 +126,12 @@ export interface FrameView {
   readonly feverT: number;
   /** 游戏时间（秒）—— 只在 running 阶段推进。 */
   readonly now: number;
+  /**
+   * 世界前进速度（px/s）—— 与怪物移速一致。
+   *
+   * 地面 / 轨道刻度的滚动用它，让画面读成「角色向前走」而不是「怪物冲过来」。
+   */
+  readonly scrollSpeed: number;
 
   /**
    * 视觉时钟（秒）—— 旧实现的 `vt`。

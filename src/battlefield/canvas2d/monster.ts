@@ -9,6 +9,7 @@
 import { GOLD, PAIR_COLOR, PAIR_WINDOW } from '../../game/constants';
 import type { NormalMonster, TwinMonster } from '../../game/types';
 import type { FrameContext } from './context';
+import { laneGroundY } from './ground';
 import { laneColorOf } from './lane-color';
 import { clamp } from './math';
 import { hexA } from './paths';
@@ -24,6 +25,9 @@ export class MonsterView {
     const y = m.y + bob;
     const w = m.w;
     const h = m.h;
+
+    // 地面阴影：怪物悬浮在轨道上方，影子落在地面线上
+    this.drawShadow(fc, m.x, m.w, m.lane, c);
 
     // 预警：接近判定区时闪烁
     const distToHit = m.x - hitX;
@@ -73,18 +77,6 @@ export class MonsterView {
     ctx.save();
     ctx.translate(x, y);
 
-    // 拖尾
-    const tg = ctx.createLinearGradient(w * 0.5, 0, w * 2.4, 0);
-    tg.addColorStop(0, hexA(c, 0.3));
-    tg.addColorStop(1, hexA(c, 0));
-    ctx.fillStyle = tg;
-    ctx.beginPath();
-    ctx.moveTo(0, -h * 0.25);
-    ctx.lineTo(w * 2.4, 0);
-    ctx.lineTo(0, h * 0.25);
-    ctx.closePath();
-    ctx.fill();
-
     // 身体（菱形晶体）
     ctx.fillStyle = '#101a2e';
     ctx.beginPath();
@@ -125,5 +117,25 @@ export class MonsterView {
     ctx.globalAlpha = 1;
 
     ctx.restore();
+  }
+
+  /** 悬浮怪的地面阴影：一圈淡光 + 一块暗影。 */
+  private drawShadow(
+    fc: FrameContext,
+    x: number,
+    w: number,
+    lane: NormalMonster['lane'],
+    color: string,
+  ): void {
+    const ctx = fc.ctx;
+    const gy = laneGroundY(fc.layout, lane);
+    ctx.fillStyle = hexA(color, 0.08);
+    ctx.beginPath();
+    ctx.ellipse(x, gy, w * 0.95, w * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.34)';
+    ctx.beginPath();
+    ctx.ellipse(x, gy, w * 0.58, w * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 }

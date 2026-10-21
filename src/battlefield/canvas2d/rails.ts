@@ -11,6 +11,7 @@
 
 import type { Lane, Layout } from '../../game/types';
 import type { FrameContext } from './context';
+import { laneGroundY } from './ground';
 import { laneColorOf } from './lane-color';
 import { clamp } from './math';
 import { hexA } from './paths';
@@ -57,7 +58,8 @@ export class RailsView {
   }
 
   private laneY(fc: FrameContext, lane: Lane): number {
-    return fc.layout.laneY[lane];
+    // 光带画在角色脚底，而不是身体中心：角色是真的站在轨道上
+    return laneGroundY(fc.layout, lane);
   }
 
   /**
@@ -75,7 +77,6 @@ export class RailsView {
   ): void {
     const w = this.w;
     const color = laneColorOf(lane, fc.frenzyActive);
-    const vt = fc.vt;
 
     // 轨道底光带
     let band = bandCache;
@@ -107,8 +108,8 @@ export class RailsView {
     ctx.lineTo(w, y);
     ctx.stroke();
 
-    // 流动刻度
-    const offset = (vt * 120) % GAP;
+    // 流动刻度：与世界同速，暂停时 `now` 停住，刻度也停住
+    const offset = (fc.now * fc.scrollSpeed) % GAP;
     ctx.strokeStyle = hexA(color, 0.22);
     ctx.lineWidth = 1;
     for (let x = w - offset; x > -GAP; x -= GAP) {

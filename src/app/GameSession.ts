@@ -22,6 +22,7 @@ import { reduce } from '../game/reducer';
 import { createRng, type Rng } from '../game/rng';
 import { createGameState } from '../game/state';
 import type { Difficulty, GameState, Lane, Layout } from '../game/types';
+import { speedNow } from '../game/rules/difficulty';
 import { isPrimaryPointer, laneFromClientY, pointerInputId } from '../input/pointer';
 import { keyActionFor, releaseInputFor } from '../input/keyboard';
 import { MAX_PARTICLES } from '../presentation/effects';
@@ -159,6 +160,7 @@ export class GameSession {
       frenzyActive: s.frenzyActive,
       feverT: s.feverT,
       now: s.now,
+      scrollSpeed: 0,
       visualTime: 0,
       monsters: s.monsters,
       attackT: s.attackT,
@@ -368,6 +370,7 @@ export class GameSession {
     f.frenzyActive = s.frenzyActive;
     f.feverT = s.feverT;
     f.now = s.now;
+    f.scrollSpeed = speedNow(s.now, s.diffLevel);
     f.visualTime = this.visualTime;
     f.monsters = s.monsters;
     f.attackT = s.attackT;

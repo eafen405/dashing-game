@@ -24,6 +24,7 @@ import { FrameContext } from './context';
 import { DefenseLineView } from './defense-line';
 import { FloaterView } from './floater';
 import { FrenzyView } from './frenzy';
+import { GroundView } from './ground';
 import { HitZoneView } from './hit-zone';
 import { HoldMonsterView } from './hold-monster';
 import { rand } from './math';
@@ -50,6 +51,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
   private readonly monsterIndex = new Map<number, Monster>();
 
   private readonly background = new BackgroundView();
+  private readonly ground = new GroundView();
   private readonly rails = new RailsView();
   private readonly defenseLine = new DefenseLineView();
   private readonly hitZone = new HitZoneView();
@@ -120,6 +122,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     // 绘制顺序逐字照抄 `source.html:1466-1477`
     this.background.draw(this.fc);
+    this.ground.draw(this.fc);
     this.rails.draw(this.fc);
     this.hitZone.draw(this.fc);
     this.defenseLine.draw(this.fc);
@@ -147,6 +150,9 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     fc.ctx = ctx;
     fc.layout = layout;
     fc.vt = frame.visualTime;
+    fc.phase = frame.phase;
+    fc.now = frame.now;
+    fc.scrollSpeed = frame.scrollSpeed;
     fc.frenzyActive = frame.frenzyActive;
     fc.hp = frame.hp;
     fc.playerFlash = frame.playerFlash;
@@ -244,6 +250,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
   private rebuildStaticLayers(layout: Layout): void {
     this.background.resize(layout);
+    this.ground.resize(layout);
     this.rails.resize(layout);
     this.defenseLine.resize();
   }

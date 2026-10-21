@@ -22,6 +22,7 @@ import {
   MAX_HP,
 } from '../../game/constants';
 import type { FrameContext } from './context';
+import { FEET_OFFSET_R } from './ground';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
 import { hexA, roundRectPath, starPath } from './paths';
 
@@ -29,6 +30,8 @@ import { hexA, roundRectPath, starPath } from './paths';
 const IDLE_CLUB = -0.62;
 /** 换轨平滑速度（每秒的指数逼近系数）。 */
 const LANE_FOLLOW = 11;
+/** 持续走路的步频（弧度/秒）。 */
+const WALK_RATE = 13;
 /** 长按连击的周期（秒）。 */
 const HOLD_PERIOD = 0.24;
 
@@ -37,7 +40,7 @@ const SKIN_DARK = '#e2a76f';
 const JERSEY = '#d94f4a';
 const JERSEY_DARK = '#8f2f34';
 const TRIM = '#f4ead6';
-const PANTS = '#1d2c3d';
+const PANTS = '#2a3f55';
 const SHOE = '#ece4d2';
 const CAP = '#14232f';
 const CAP_BRIM = '#c9433f';
@@ -59,7 +62,6 @@ export class PlayerView {
 
     const targetY = fc.playerLane ? fc.layout.laneY[fc.playerLane] : height / 2;
     const y = this.followLane(fc, targetY);
-    const walkAmp = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
 
     /* ---------- 当前动作 ---------- */
     const hm = fc.holdMonster;
@@ -69,6 +71,12 @@ export class PlayerView {
         : null;
     const attackActive = fc.attackT > 0 && fc.attackLane !== null;
     const pairP = clamp(fc.pairSmash, 0, 1);
+
+    // 在跑动局里角色一直在往前走；出招 / 长按 / 双生跳砸时暂停步态
+    const walking = fc.phase === 'running' && !attackActive && !hold && pairP === 0;
+    const laneWalk = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
+    const walkAmp = Math.max(laneWalk, walking ? 1 : 0);
+    const walkPhase = fc.now * WALK_RATE;
 
     /* ---------- 姿态参数 ---------- */
     let lift = 0; // 负值 = 跳起
@@ -174,7 +182,7 @@ export class PlayerView {
     // 落地压缩：身体略微压扁、重心下沉
     lift += squash * s * 0.1;
     const bob =
-      Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(fc.vt * 18)) * s * 0.035 * walkAmp;
+      Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(walkPhase)) * s * 0.035 * walkAmp;
 
     const actionLane = pairP > 0
       ? (fc.playerLane ?? fc.attackLane)
@@ -188,25 +196,42 @@ export class PlayerView {
       : LANE[actionLane ?? 'top'].color;
 
     /* ---------- 脚下平台光 ---------- */
-    const groundY = y + s * 1.32;
-    const g = ctx.createRadialGradient(playerX, groundY, 2, playerX, groundY, s * 2);
-    g.addColorStop(0, 'rgba(96,200,255,.22)');
+    const groundY = y + s * FEET_OFFSET_R;
+    const g = ctx.createRadialGradient(playerX, groundY, 2, playerX, groundY, s * 1.7);
+    g.addColorStop(0, 'rgba(96,200,255,.16)');
     g.addColorStop(1, 'rgba(96,200,255,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(playerX, groundY, s * 1.95, s * 0.42, 0, 0, Math.PI * 2);
+    ctx.ellipse(playerX, groundY, s * 1.65, s * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // 悬浮时在脚下留一小块阴影，强调人已经离地
     if (hover < -s * 0.2) {
       ctx.fillStyle = 'rgba(0,0,0,.28)';
       ctx.beginPath();
-      ctx.ellipse(playerX, groundY - s * 0.14, s * 0.6, s * 0.13, 0, 0, Math.PI * 2);
+      ctx.ellipse(playerX, y + s * FEET_OFFSET_R, s * 0.6, s * 0.13, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     /* ---------- 身体 ---------- */
     const bodyY = y + hover + lift + bob;
+
+    // 走路时在身后扬起一点尘土，让「在地面上走」更明确
+    if (walking) {
+      const footLine = bodyY + s * FEET_OFFSET_R;
+      const cycle = (walkPhase / (Math.PI * 2)) % 1;
+      for (let i = 0; i < 2; i++) {
+        const age = (cycle + i * 0.5) % 1;
+        const px = playerX - s * (0.3 + age * 1.0);
+        const py = footLine + s * 0.02 - Math.sin(age * Math.PI) * s * 0.03;
+        const r = s * (0.05 + age * 0.11);
+        ctx.fillStyle = 'rgba(150,195,205,' + (1 - age) * 0.14 + ')';
+        ctx.beginPath();
+        ctx.ellipse(px, py, r, r * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     const pivotX = s * 0.1;
     const pivotY = -s * 0.26;
     const gripDist = s * 0.42;
@@ -228,7 +253,7 @@ export class PlayerView {
     ctx.scale(1 / stretch, stretch);
 
     // 腿（在躯干后面）
-    this.drawLegs(fc, s, walkAmp, legTuck);
+    this.drawLegs(ctx, s, walkAmp, walkPhase, legTuck);
 
     // 挥棒残影（在身体后面）
     this.drawSwingGhosts(ctx, s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
@@ -290,11 +315,16 @@ export class PlayerView {
    * ------------------------------------------------------------------ */
 
   /** 双腿：走路时前后摆，跳起 / 悬浮时收腿。 */
-  private drawLegs(fc: FrameContext, s: number, walkAmp: number, tuck: number): void {
-    const ctx = fc.ctx;
+  private drawLegs(
+    ctx: CanvasRenderingContext2D,
+    s: number,
+    walkAmp: number,
+    step: number,
+    tuck: number,
+  ): void {
     const hipY = s * 0.24;
-    const footY = s * 0.94 - tuck * s * 0.16;
-    const swing = Math.sin(fc.vt * 18) * 0.26 * walkAmp;
+    const footY = s * FEET_OFFSET_R - tuck * s * 0.16;
+    const swing = Math.sin(step) * 0.26 * walkAmp;
     const lift = tuck * s * 0.18;
 
     ctx.save();
@@ -311,6 +341,19 @@ export class PlayerView {
       ctx.beginPath();
       ctx.moveTo(hipX, hipY);
       ctx.quadraticCurveTo(kneeX, kneeY, footX, footY - lift);
+      ctx.stroke();
+
+      // 地面偏暗，给腿加一道轮廓光，避免和地面糊在一起
+      ctx.strokeStyle = 'rgba(170,215,245,.2)';
+      ctx.lineWidth = s * 0.045;
+      ctx.beginPath();
+      ctx.moveTo(hipX - s * 0.055, hipY + s * 0.04);
+      ctx.quadraticCurveTo(
+        kneeX - s * 0.055,
+        kneeY,
+        footX - s * 0.055,
+        footY - lift - s * 0.03,
+      );
       ctx.stroke();
 
       // 鞋

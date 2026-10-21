@@ -8,7 +8,7 @@
  * 只有 `twinLinkCount` 变。
  */
 
-import type { HoldMonster, Lane, Layout, Monster, TwinMonster } from '../../game/types';
+import type { HoldMonster, Lane, Layout, Monster, Phase, TwinMonster } from '../../game/types';
 import type { Effects } from '../types';
 
 /** 空效果集（没有效果时的占位）。 */
@@ -35,6 +35,12 @@ export class FrameContext {
   layout!: Layout;
   /** 视觉时钟（旧 `vt`）—— 所有阶段都推进。 */
   vt = 0;
+  /** 局面阶段（角色只在 running 时持续走路）。 */
+  phase: Phase = 'idle';
+  /** 游戏时间（秒）—— 只在 running 阶段推进，地面滚动用它。 */
+  now = 0;
+  /** 世界前进速度（px/s）—— 与怪物移速一致。 */
+  scrollSpeed = 0;
   /** FEVER 是否生效。 */
   frenzyActive = false;
   /** 剩余生命值。 */

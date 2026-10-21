@@ -100,6 +100,7 @@ function frame(overrides: Partial<FrameView> = {}): FrameView {
     frenzyActive: false,
     feverT: 0,
     now: 12.5,
+    scrollSpeed: 165,
     visualTime: 30.25,
     monsters: [],
     attackT: 0,
