@@ -1,6 +1,6 @@
 # 04 — Canvas 2D 渲染器搬迁
 
-Status: claimed
+Status: resolved
 Blocked by: 02
 
 ## 目标
@@ -53,3 +53,27 @@ Blocked by: 02
 
 - 这一票是**故意的中间态**：多花约 1.5 天换来"每个阶段结束都有可玩且可对照的版本"，后面 06/07 出问题时能立刻二分定位是架构问题还是渲染问题。
 - Canvas 2D 实现在 08 票会被删除。
+
+## Answer
+
+04a（表现层 + 12 个 Canvas 2D view，合并 `5685c89`）之后，本票由 04b 补完会话层并接线，
+新工程现在**真正可玩**（不再依赖 `source.html`）：
+
+- `src/app/GameSession.ts`：持有规则层 `GameState`、种子 PRNG、`PresentationState`、渲染器与
+  rAF 循环；`Start / Pause / Resume / Restart / Home / Resize / 输入` 全部经 `reduce()` 转成
+  规则层事件。React 不进入 60fps 路径，`FrameView` 每帧复用同一对象。
+- 时间语义对齐旧版：`visualTime`（粒子/刀光/冲击环/飘字）始终推进；规则时间只在
+  `running`（以及 idle/over 的残留攻击动画）推进；暂停时表现层继续衰减、攻击动画冻结。
+- 渲染器接线：构造时 `mount`，`ResizeObserver` + `resize()` 同步 `Layout`，DPR 上限 2；
+  `render(frame)` 直接传规则层数组，渲染器跳过已移除怪物；视口晕影走 CSS 变量。
+- 输入：`src/input/pointer.ts`（半屏 → 轨道、pointerId 映射、鼠标仅左键）、
+  `keyboard.ts`（↑/W、↓/S、P、Enter/Space）、`orientation.ts`（竖屏自动暂停 / 横屏恢复）。
+- HUD 快照：`src/presentation/hudStore.ts`，脏检查后仅通知真正变化的字段；
+  FEVER 秒数 `Math.ceil` 量化，BEST 取 `max(best, score)`。
+- 验证：`npm run typecheck` / `lint` / `test`（180 用例）/ `build` / `verify-single-file`
+  全绿；900×460 dsf2 下与旧 `source.html` 并排截图核对 HUD、双轨、角色、判定区、开始/结算层。
+  Playwright 实测：开始 → 选 2★ → 游玩（8s 得 2000 分、6 暴击 / 1 普攻）→ 暂停/继续 →
+  回主页 → 竖屏暂停/横屏恢复 → 结算 → 重开 → 刷新，均无 pageerror / console error。
+- 最高分：得分 300 后自然结算，`localStorage["dualrail_best"]` 写入 `300`，重开与刷新后
+  HUD BEST 仍为 300。
+- 本票不包含 06+ 的 Pixi 渲染器与 10 的删除 `source.html`；`source.html` 继续作为对照物。

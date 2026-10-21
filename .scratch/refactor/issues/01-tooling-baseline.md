@@ -47,5 +47,5 @@ Blocked by: (none)
 
 遗留（归入后续票）：
 
-- `verify` 脚本的浏览器检查仍依赖 Phase 0 的 `window.__SPIKE__` 契约，真实应用替换 spike 后需同步改（票 10）。
+- `verify` 脚本的浏览器检查已从 Phase 0 的 `window.__SPIKE__` 切换为真实应用的 `window.__GAME__.ready` 契约（随 04b 完成；票 10 只需沿用）。
 - `format:check` 未加入 CI 步骤序列（票 01 只枚举了五步）。

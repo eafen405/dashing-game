@@ -9,5 +9,6 @@
  */
 
 export { EffectsPool, MAX_PARTICLES } from './effects';
+export { HudStore, hudStore, type HudSnapshot } from './hudStore';
 export { ShakeState } from './shake';
 export { PresentationState, type EffectSink } from './state';

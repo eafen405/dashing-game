@@ -5,7 +5,7 @@
  * 两个独立步骤：
  *   1. 静态检查：不需要浏览器，产物必须自包含（无外部 src/href、无裸 import、无外链资源）
  *   2. 浏览器检查：Playwright + Chromium，以 file:// 打开产物，验证
- *      WebGL 初始化 / localStorage 读写 / 画面实际渲染 / 零外部网络请求
+ *      真实应用挂载 / localStorage 读写 / 画面实际渲染 / 零外部网络请求
  *
  * 用法：
  *   node scripts/verify-single-file.mjs                # 静态 + 浏览器（默认）
@@ -111,7 +111,9 @@ async function browserCheck() {
   const candidates = [
     undefined,
     join(process.env.HOME ?? '', '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome'),
+    '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
     '/snap/bin/chromium',
   ];
 
@@ -145,33 +147,72 @@ async function browserCheck() {
     page.on('request', (r) => requests.push(r.url()));
 
     await page.goto(pathToFileURL(DIST).href, { waitUntil: 'load' });
-    await page.waitForFunction(() => globalThis.__SPIKE__ !== undefined, null, { timeout: 20_000 });
+    await page.waitForFunction(() => globalThis.__GAME__?.ready === true, null, { timeout: 20_000 });
 
-    const result = await page.evaluate(() => globalThis.__SPIKE__);
+    const result = await page.evaluate(() => {
+      const diagnostic = globalThis.__GAME__;
+      const canvas = document.querySelector('.battlefield-host canvas');
+      let drawn = false;
+      let canvasWidth = 0;
+      let canvasHeight = 0;
+
+      if (canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0) {
+        canvasWidth = canvas.width;
+        canvasHeight = canvas.height;
+        const scratch = document.createElement('canvas');
+        scratch.width = canvasWidth;
+        scratch.height = canvasHeight;
+        const ctx = scratch.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(canvas, 0, 0);
+          const data = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+          for (let i = 3; i < data.length; i += 4) {
+            if (data[i] !== 0) {
+              drawn = true;
+              break;
+            }
+          }
+        }
+      }
+
+      let storage = false;
+      try {
+        const key = '__game_probe__';
+        localStorage.setItem(key, 'ok');
+        storage = localStorage.getItem(key) === 'ok';
+        localStorage.removeItem(key);
+      } catch {
+        // localStorage 被禁用时保持 false
+      }
+
+      return {
+        ready: diagnostic?.ready === true,
+        canvasWidth,
+        canvasHeight,
+        drawn,
+        storage,
+        startVisible: document.querySelector('.overlay') !== null,
+      };
+    });
 
     // file:// 打开时不应有任何非 file:// 的请求
     const remote = requests.filter((u) => !u.startsWith('file://') && !u.startsWith('data:'));
     if (remote.length > 0) fail.push(`产物发起了外部请求：${remote.join(', ')}`);
 
-    if (!result.webgl) fail.push(`WebGL 未启用，渲染器类型：${result.rendererType}`);
-    if (!result.localStorage) fail.push('localStorage 不可读写');
+    if (!result.ready) fail.push('真实应用没有挂载（window.__GAME__.ready 不为 true）');
+    if (!result.storage) fail.push('localStorage 不可读写');
     if (!result.drawn) fail.push('画布读取不到已绘制内容');
+    if (!result.startVisible) fail.push('开始界面没有渲染');
     if (pageErrors.length > 0) fail.push(`页面异常：${pageErrors.join(' | ')}`);
     if (consoleErrors.length > 0) warn.push(`控制台错误：${consoleErrors.join(' | ')}`);
 
-    console.log(
-      `渲染器 ${result.rendererType} · 画布 ${result.canvasWidth}×${result.canvasHeight}`,
-    );
-    console.log(
-      `localStorage ${result.localStorage ? '✓' : '✗'} · 绘制 ${result.drawn ? '✓' : '✗'}`,
-    );
+    console.log(`渲染器 Canvas 2D · 画布 ${result.canvasWidth}×${result.canvasHeight}`);
+    console.log(`localStorage ${result.storage ? '✓' : '✗'} · 绘制 ${result.drawn ? '✓' : '✗'}`);
     console.log(`网络请求 ${requests.length} 个（外部 ${remote.length} 个）`);
 
-    const shot = resolve(process.cwd(), 'dist', 'spike-screenshot.png');
+    const shot = resolve(process.cwd(), 'dist', 'game-screenshot.png');
     await page.screenshot({ path: shot });
     console.log(`截图 → ${shot}`);
-
-    for (const e of result.errors) fail.push(`运行时错误：${e}`);
   } catch (err) {
     fail.push(`浏览器检查过程出错：${String(err)}`);
   } finally {

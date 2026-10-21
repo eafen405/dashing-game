@@ -204,6 +204,33 @@ export class EffectsPool implements Effects {
     }
   }
 
+  /**
+   * 单颗火花 —— 旧 `emitFrenzy()`（`source.html:1238-1253`）。
+   *
+   * FEVER 期间角色周身持续冒金色火花。旧实现直接 `particles.push`，
+   * 这里同样走对象池；位置 / 速度 / 寿命由会话层按旧公式算好传进来。
+   */
+  addSpark(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    r: number,
+    life: number,
+    color: string,
+  ): void {
+    if (this.particlePool.items.length >= MAX_PARTICLES) return;
+    const p = this.particlePool.take();
+    p.x = x;
+    p.y = y;
+    p.vx = vx;
+    p.vy = vy;
+    p.r = r;
+    p.life = life;
+    p.t = 0;
+    p.color = color;
+  }
+
   /** 加一道刀光 —— 旧 `slashes.push({...})`（`source.html:2343` 之前的产生点）。 */
   addSlash(x: number, x0: number, y: number, life: number, lane: Lane): void {
     const s = this.slashPool.take();

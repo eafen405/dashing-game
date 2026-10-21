@@ -1,50 +1,42 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0e18;
+  --bg: #070a12;
+  --ink: #eef3ff;
+  --muted: #8d9ab8;
+  --p1: #4fd1ff;
+  --p2: #ff8a4f;
+  --danger: #ff4d6d;
+  --ok: #43e08c;
+  --gold: #ffd24a;
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
 body,
 #root {
+  width: 100%;
   height: 100%;
   margin: 0;
+  padding: 0;
 }
 
 body {
   background: var(--bg);
-  color: #e6ecff;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
-}
-
-.spike {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.spike-stage {
-  width: 100%;
-  height: 220px;
-  border: 1px solid #2a3550;
-  border-radius: 8px;
+  color: var(--ink);
   overflow: hidden;
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, -apple-system,
+    sans-serif;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-.spike-report {
-  margin: 0;
-  padding: 12px;
-  border: 1px solid #2a3550;
-  border-radius: 8px;
-  background: #111624;
-  font-size: 12px;
-  white-space: pre-wrap;
+button {
+  font-family: inherit;
 }
