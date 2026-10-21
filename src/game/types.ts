@@ -186,4 +186,18 @@ export interface GameState {
 
   /** 下一个怪物 id 计数器。 */
   nextMonsterId: number;
+
+  /**
+   * **仅供 golden trace 对照使用的兼容开关** —— 让 `clearLane()` 回到旧实现的
+   * 错误口径（把普通怪 / 双生怪也算作「占用轨道」）。
+   *
+   * **默认 `false`，且生产路径不可达**：
+   * - 唯一的写入点是 {@link createGameState} 的同名选项；
+   * - 规则层的 `Start` 事件不传这个选项 → 走 `reduce()` 开局的游戏恒为 `false`；
+   * - 因此只有票 03 的 trace 回放器（直接调 `createGameState`）能打开它。
+   *
+   * 存在意义：模式 B′ 要让**两边都保留旧的 `clearLane` bug**，逐帧完全一致，
+   * 以此证明「D1 是唯一的语义差异」。
+   */
+  legacyClearLane: boolean;
 }

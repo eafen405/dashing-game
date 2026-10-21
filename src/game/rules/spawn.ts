@@ -77,10 +77,17 @@ export function laneBlocked(monsters: readonly Monster[], lane: Lane): boolean {
  *
  * 随机数消费：两轨都空时消耗**一次** PRNG（`Math.random() < 0.5` 选轨）；
  * 只有一轨被占时直接返回那一条空轨，**不**消耗 PRNG。
+ *
+ * @param legacy `true` 时回到旧实现的错误口径（**任何**怪都算占用轨道）。
+ *   票 03 模式 B′ 专用的对照开关，生产路径不可达（见 `types.ts`）。
  */
-export function clearLane(monsters: readonly Monster[], rng: Rng): Lane | null {
-  const topBusy = monsters.some((m) => m.kind === 'hold' && !m.removed && m.lane === 'top');
-  const botBusy = monsters.some((m) => m.kind === 'hold' && !m.removed && m.lane === 'bottom');
+export function clearLane(monsters: readonly Monster[], rng: Rng, legacy = false): Lane | null {
+  const topBusy = monsters.some(
+    (m) => m.lane === 'top' && !m.removed && (legacy || m.kind === 'hold'),
+  );
+  const botBusy = monsters.some(
+    (m) => m.lane === 'bottom' && !m.removed && (legacy || m.kind === 'hold'),
+  );
   if (!topBusy && !botBusy) return rng.next() < 0.5 ? 'top' : 'bottom';
   if (!topBusy) return 'top';
   if (!botBusy) return 'bottom';
@@ -224,7 +231,7 @@ export function spawnMonster(state: GameState, rng: Rng): { state: GameState; ef
     // 关键：`clearLane()` 的求值（及其内部的 PRNG 消耗）发生在 0.28 判定**之前**。
     // 旧实现写的是 `if (lane && Math.random() < 0.28)`，短路语义保持不变：
     // `lane` 为 null 时不消耗这一次 PRNG。
-    const lane = clearLane(state.monsters, rng);
+    const lane = clearLane(state.monsters, rng, state.legacyClearLane);
     if (lane !== null && rng.next() < 0.28) {
       const spawned = spawnLong(state, lane, rng);
       // 旧实现的顺序：`spawnLong(lane)` 之后才掷 `rand(14, 18)`

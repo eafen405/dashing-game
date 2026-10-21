@@ -106,7 +106,10 @@ export function tick(
           s = penalized.state;
           effects.push(...penalized.effects);
           const missed = findMonster(s.monsters, m.id);
-          if (missed) moved.push(missed);
+          // 旧实现是「**先移动、再判定漏怪**」（`source.html:1309-1312`）→
+          // 漏怪那一帧怪已经移动过了。这里必须把移动后的 `x` 一起带过去，
+          // 否则逃逸滑出会比旧版晚一帧（golden trace 门禁在 B′ 模式下抓到过这个差异）。
+          if (missed) moved.push({ ...missed, x });
           continue;
         }
         moved.push({ ...m, x });
