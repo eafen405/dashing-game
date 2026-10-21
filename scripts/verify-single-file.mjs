@@ -204,7 +204,7 @@ async function browserCheck() {
     );
     console.log(`网络请求 ${requests.length} 个（外部 ${remote.length} 个）`);
 
-    const shot = resolve(process.cwd(), 'dist', 'spike-screenshot.png');
+    const shot = resolve(process.cwd(), 'dist', 'verify-screenshot.png');
     await page.screenshot({ path: shot });
     console.log(`截图 → ${shot}`);
 

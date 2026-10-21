@@ -10,6 +10,12 @@
  *   `#hurt` → `.hurt-flash`　`#hpFill` → `.hp-fill`　`#hpText` → `.hp-text`
  *   `#btnPause` / `#btnFull` → `.icon-button`　`#btnRestart` → `.primary-button`
  *   `#btnDiff` → `.ghost-button`　`#pause .card` → `.pause-card`
+ *   `#scoreText` → `.stat-value`　`#comboText` → `.combo-value`
+ *   `#critText` → `.crit-text`　`#comboLabel` → `.combo-label`
+ *
+ * **ID 换类要盯权重**：`#` 是 (1,0,0)，`.` 只有 (0,1,0)——
+ * 凡是被 `.stat b`（0,1,1）之类的规则压着的属性，类选择器要写成
+ * `.stat .crit-text`（0,2,0）才等效。已按此逐条核对过。
  *
  * 新增的两处（为了 React 版能跑）：
  *   - `.canvas-host` —— 渲染器把 canvas 挂进去的容器（占满舞台，位置在 `#tint` 与 `#vignette` 之间，
@@ -267,6 +273,19 @@ body {
   text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
 }
 
+/* 连击数 —— 旧代码里只有 `#comboText` 会脉动，分数只变色不变形 */
+.combo-value {
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.combo-value.frenzy {
+  color: #ffd24a;
+  text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
+  animation: frenzyPulse 0.8s ease-in-out infinite;
+}
+
 .combo-label {
   display: inline-block;
   min-width: 66px;
@@ -282,11 +301,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.stat-value.frenzy {
-  animation: frenzyPulse 0.8s ease-in-out infinite;
-}
-
-.crit-text {
+/* 暴击 / 普攻计数 —— 旧代码是 `#critText`（ID，15px）；
+   这里用 `.stat .crit-text` 压过 `.stat b` 的 17px（`#` 换成了类，权重会掉一级）。 */
+.stat .crit-text {
   font-size: 15px;
   color: #ffe6a3;
   letter-spacing: 0.5px;
@@ -539,6 +556,11 @@ body {
   margin-top: 14px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+/* 旧代码是 `.go-actions #btnRestart{margin-top:0}`（压掉 `#btnRestart` 的 14px） */
+.go-actions .primary-button {
+  margin-top: 0;
 }
 
 .ghost-button {

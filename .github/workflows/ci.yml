@@ -8,9 +8,9 @@ on:
 
 jobs:
   verify:
-    name: typecheck → lint → test → build → verify-single-file
+    name: typecheck → lint → test → build → verify-single-file → e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: 检出代码
@@ -43,9 +43,19 @@ jobs:
       - name: 校验单文件产物（静态检查 + 浏览器检查）
         run: node scripts/verify-single-file.mjs
 
+      - name: 端到端检查（Playwright 驱动 file:// 产物）
+        run: npm run test:e2e
+
       - name: Golden trace 保真门禁（旧版 harness × 新规则层 逐帧比对）
         run: npm run trace
 
+# 端到端检查（`npm run test:e2e`）：
+#   Playwright 打开 `dist/index.html`（file://），走完整条用户流程 ——
+#   开始 → 选难度 → 游戏 → 暂停/恢复 → 结算 → 重开 → 回主页 → 最高分持久化，
+#   并检查 HUD 不做 60fps 重渲染、竖屏自动暂停保留进度、桌面键鼠可用、
+#   以及与旧版 `source.html` 的界面并排一致。
+#   **必须在 build 之后**（它跑的是产物），截图默认落在 `dist/e2e-shots/`。
+#
 # 说明（ADR-0004）：CI 不做任何性能断言。性能由结构性设计保证，
 # 不建立基准测试套件，也不做反复的实机性能测量。
 #

@@ -15,9 +15,13 @@ import {
   legacyMonsterFlags,
   makeTraceFrame,
   nextEvents,
+  shouldRecordPhase,
+  traceFrameFromState,
   type TraceFrame,
   type TraceScriptState,
 } from '../trace';
+import { computeLayout } from '../layout';
+import { createGameState } from '../state';
 
 /** 造一帧快照（默认值够用，测试只关心相关字段）。 */
 function frame(overrides: Partial<TraceFrame> = {}): TraceFrame {
@@ -313,5 +317,45 @@ describe('双生组', () => {
     const s = script({ pairPlan: 'breach' });
     const r = nextEvents(frame({ monsters: [twin('top', 20), twin('bottom', 20)] }), s);
     expect(r.events).toEqual([]);
+  });
+});
+
+describe('零输入模式（idle）', () => {
+  it('默认是 active 模式', () => {
+    expect(createScriptState().mode).toBe('active');
+  });
+
+  it('idle 模式一个键都不按（哪怕怪就在判定区里）', () => {
+    const f = frame({ monsters: [normal('top', 10), hold('bottom', 0)] });
+    expect(nextEvents(f, script({ mode: 'idle' })).events).toEqual([]);
+  });
+
+  it('idle 模式下剧本状态原样返回（不推进阶段、不轮转游标）', () => {
+    const s = script({ mode: 'idle', stage: 'scenarios', longCursor: 1, pairCursor: 1 });
+    const r = nextEvents(frame({ monsters: [normal('top', 10)] }), s);
+    expect(r.script).toEqual(s);
+  });
+});
+
+describe('终态帧契约', () => {
+  it('over 阶段的帧也要被记录（否则 game over 路径没有保真保护）', () => {
+    expect(shouldRecordPhase('running')).toBe(true);
+    expect(shouldRecordPhase('over')).toBe(true);
+    expect(shouldRecordPhase('paused')).toBe(false);
+    expect(shouldRecordPhase('idle')).toBe(false);
+  });
+
+  it('终态帧的字段：phase=over、hp=0 逐字进快照', () => {
+    const layout = computeLayout(900, 600, 1);
+    const state = {
+      ...createGameState({ diffLevel: 1, seed: 1, layout }),
+      phase: 'over' as const,
+      hp: 0,
+    };
+    const f = traceFrameFromState(state, 42, 1 / 60, createScriptState(), 7);
+    expect(f.phase).toBe('over');
+    expect(f.hp).toBe(0);
+    expect(f.frame).toBe(42);
+    expect(f.rulesDraws).toBe(7);
   });
 });

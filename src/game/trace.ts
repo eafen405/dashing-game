@@ -20,7 +20,8 @@
  * 普通怪普攻 / 普通怪暴击 / 双生补齐 `killPair` / 双生窗口过期
  * `resolvePairSolo` + `pairBlast` 扣血 / 双生双轨同时触线 / 长按怪完整贯穿
  * `completeLong` / 长按不足 3 秒 `failLong` / 长按怪漏过 `missLong` /
- * 普通怪触线漏怪 `hurtPlayer` / FEVER 触发。
+ * 普通怪触线漏怪 `hurtPlayer` / FEVER 触发 / **game over 结算**
+ * （`mode: 'idle'` 的零输入剧本 → 漏怪把血量打光 → `gameOverNow()`）。
  */
 
 import type { GameState, Lane, Monster } from './types';
@@ -112,12 +113,27 @@ export type PairPlan = 'fill' | 'expire' | 'breach';
 export type TraceStage = 'fever' | 'wait-fever' | 'scenarios';
 
 /**
+ * 剧本模式。
+ *
+ * - `active` —— 正常出招（默认）。
+ * - `idle` —— **零输入**：一个键都不按。
+ *
+ * `idle` 存在的唯一理由是**走到 game over**：所有怪物必然触线漏怪，
+ * 血量从 250 掉到 0（13 次漏怪 × 20 点）→ `gameOverNow()`。
+ * 旧 harness 与新回放器共用同一份事件剧本，所以 `idle` 让**两边同时**变成
+ * 零输入 —— 输入序列完全相同，逐帧比对才有意义。
+ */
+export type TraceScriptMode = 'active' | 'idle';
+
+/**
  * 事件剧本的内部状态。
  *
  * **它必须进快照**（`TraceFrame.script`）：一旦两边的事件流开始分叉，
  * diff 会第一眼指向这个字段，而不是误导到怪物坐标上。
  */
 export interface TraceScriptState {
+  /** 剧本模式（`idle` = 零输入）。 */
+  mode: TraceScriptMode;
   /** 当前阶段。 */
   stage: TraceStage;
   /** 当前长按怪的处置方式（`null` = 场上还没有长按怪）。 */
@@ -149,8 +165,9 @@ export interface TraceScriptState {
 }
 
 /** 剧本的初始状态。 */
-export function createScriptState(): TraceScriptState {
+export function createScriptState(mode: TraceScriptMode = 'active'): TraceScriptState {
   return {
+    mode,
     stage: 'scenarios',
     longPlan: null,
     longCursor: 0,
@@ -274,6 +291,20 @@ export function makeTraceFrame(input: TraceFrameInput): TraceFrame {
 }
 
 /**
+ * 哪些阶段的帧**要被记录**进轨迹。
+ *
+ * **`over`（终态帧）必须记录**：它是「血量归零 → 结算 → 进入 over 态」这段
+ * **唯一**的快照证据 —— 分数结算、连击清零、FEVER 中断、`phase` 转换全都在
+ * 这一帧上。漏掉它，`hp <= 0 → gameOverNow()` 这条分支就完全没有保真保护：
+ * 新旧实现在这一段有差异，门禁会「一致地错」而照绿。
+ *
+ * 旧 harness 与新回放器**共用**这个判定 —— 两边必须同时停在同一帧上。
+ */
+export function shouldRecordPhase(phase: string): boolean {
+  return phase === 'running' || phase === 'over';
+}
+
+/**
  * 从规则层状态构造快照。
  *
  * **「在场」谓词**：新规则层把被移除的怪保留到下一次 tick 开头才回收
@@ -388,6 +419,17 @@ export function nextEvents(
 ): TraceEventsResult {
   const s: TraceScriptState = { ...script };
   const events: TraceEvent[] = [];
+
+  // ── 零输入模式 ──────────────────────────────────────────────
+  //
+  // `idle` = **一个键都不按**：所有怪物必然触线漏怪 → 血量归零 → game over。
+  // 剧本状态原样返回（不推进阶段、不轮转游标）—— 零输入场景里没有「场景」，
+  // 推进阶段只会让快照里的 `script` 变成噪音。
+  //
+  // 注意这个分支在 `phase !== 'running'` 判断**之前**：终态帧之后的剧本查询
+  // 也必须返回空事件表。
+  if (s.mode === 'idle') return { events, script: s };
+
   if (!snapshot || snapshot.phase !== 'running') return { events, script: s };
 
   // ── 阶段推进 ────────────────────────────────────────────────

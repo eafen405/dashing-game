@@ -21,6 +21,10 @@
  * | 长按漏过 `missLong` | 同上（怪状态 `hold-escaped`） |
  * | 普通怪触线漏怪 `hurtPlayer` | `hp` -20 且 `combo` 归零 |
  * | FEVER 触发 | `frenzyActive` 由 false 变 true |
+ * | **game over 结算** | **终态帧 `hp === 0` 且 `phase === 'over'`** |
+ *
+ * `game over` 这一条只可能由**零输入场景**（`mode: 'idle'`）触发 ——
+ * 正常剧本每一局都把怪打得七零八落，血量永远不归零。
  */
 
 import { readFileSync } from 'node:fs';
@@ -46,9 +50,16 @@ export function analyzeCoverage(frames) {
     missLong: 0,
     hurtPlayer: 0,
     fever: 0,
+    gameOver: 0,
   };
   let prev = null;
   for (const f of frames) {
+    // game over 结算：**终态帧**（hp = 0 且 phase = 'over'）。
+    //
+    // 这是「血量归零 → 结算 → 进入 over 态」这条路径唯一的快照证据 ——
+    // 分数结算、连击清零、FEVER 中断、phase 转换全都在这一帧上。
+    // 没有它，门禁对这段完全没有保真保护。
+    if (f.phase === 'over' && f.hp === 0) hits.gameOver++;
     if (!prev) {
       prev = f;
       continue;
@@ -101,6 +112,7 @@ const COVERAGE_LABELS = {
   missLong: '长按漏过 missLong',
   hurtPlayer: '普通怪触线漏怪 hurtPlayer',
   fever: 'FEVER 触发',
+  gameOver: 'game over 结算（血量归零 → over）',
 };
 
 if (process.argv[1] && process.argv[1].endsWith('trace-coverage.mjs')) {
