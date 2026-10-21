@@ -13,3 +13,5 @@
 - *`@pixi/react`* —— 每帧走 react-reconciler 协调，与"表现层不触发 React 渲染"的架构冲突，且多拉一个 reconciler 依赖。
 
 **后果**：战场渲染必须抽象成可替换的接口，以便迁移期同时保留 Canvas 2D 与 Pixi 两套实现做 A/B 对照。
+
+**现状**（2026-10）：PixiJS v8 渲染器已实现（`src/battlefield/pixi/`），与 Canvas 2D 版（`src/battlefield/canvas2d/`）同构，两套并存以便 A/B 对照。**默认仍是 Canvas 2D**，Pixi 版需用 `?renderer=pixi` 显式切换 —— 默认切换与 Canvas 2D 版的清退是后续票 08 的事。本决策的另两条约束已落地：未引入 `@pixi/react`（战场场景图由代码直接驱动），React 只负责 DOM 界面（`src/app/`）。
