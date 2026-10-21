@@ -32,7 +32,8 @@ import { StartScreen } from './screens/StartScreen';
 export const DEFAULT_SEED = 20240601;
 
 /** 开发期调试挂件（`?debug`）。 */
-const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
+const DEBUG =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
 /** 设备像素比 —— `Math.min(window.devicePixelRatio || 1, 2)`（`source.html:540`）。 */
 function devicePixelRatio(): number {
@@ -290,7 +291,9 @@ export function GameApp({
 
           <div
             key={`lane-top-${laneFlash && laneFlash.lane === 'top' ? laneFlash.id : 0}`}
-            className={laneFlash && laneFlash.lane === 'top' ? 'lane lane-top hit' : 'lane lane-top'}
+            className={
+              laneFlash && laneFlash.lane === 'top' ? 'lane lane-top hit' : 'lane lane-top'
+            }
             aria-hidden="true"
           >
             <span className="hint">上半屏 · 上轨</span>
@@ -313,9 +316,7 @@ export function GameApp({
             </div>
           ) : null}
 
-          {showStart ? (
-            <StartScreen diffLevel={diff} onDiffChange={handleDiffChange} />
-          ) : null}
+          {showStart ? <StartScreen diffLevel={diff} onDiffChange={handleDiffChange} /> : null}
           {showPause ? (
             <PauseScreen
               onResume={handleResume}
@@ -360,17 +361,25 @@ function toggleFullscreen(): void {
   const el = document.documentElement;
   try {
     if (!document.fullscreenElement) {
-      const request = el.requestFullscreen ?? (el as unknown as {
-        webkitRequestFullscreen?: () => Promise<void>;
-      }).webkitRequestFullscreen;
+      const request =
+        el.requestFullscreen ??
+        (
+          el as unknown as {
+            webkitRequestFullscreen?: () => Promise<void>;
+          }
+        ).webkitRequestFullscreen;
       if (request) {
         void request.call(el, { navigationUI: 'hide' } as FullscreenOptions);
         lockLandscape();
       }
     } else {
-      const exit = document.exitFullscreen ?? (document as unknown as {
-        webkitExitFullscreen?: () => Promise<void>;
-      }).webkitExitFullscreen;
+      const exit =
+        document.exitFullscreen ??
+        (
+          document as unknown as {
+            webkitExitFullscreen?: () => Promise<void>;
+          }
+        ).webkitExitFullscreen;
       if (exit) void exit.call(document);
     }
   } catch {

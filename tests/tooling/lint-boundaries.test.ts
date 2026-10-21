@@ -78,6 +78,52 @@ describe('规则层 lint 边界', () => {
     expect(ruleIds(messages)).toContain('@typescript-eslint/no-explicit-any');
   });
 
+  // ── 以下两条是独立验收时发现的绕过口子（2026-10 验收轮次）────────────────
+  // 原来的 `no-restricted-globals` 只匹配**裸标识符**，
+  // `globalThis.document` 这种间接访问完全逃逸；
+  // 原来的 `patterns` 只列了包名，`../../app/best` 这种跨层相对 import 也逃逸。
+  // 规则层是整个重构「可维护性」这条主线的地基，护栏漏一个口子就等于没有。
+
+  it('拦截规则层通过 globalThis 间接访问宿主全局', async () => {
+    const messages = await lintAt(
+      'src/game/__probe__.ts',
+      [
+        "export function f(): number {",
+        "  globalThis.document.title = 'x';",
+        '  return globalThis.localStorage.length;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(ruleIds(messages)).toContain('no-restricted-properties');
+  });
+
+  it('拦截规则层跨层相对导入（app / battlefield / presentation / input）', async () => {
+    for (const source of [
+      '../../app/best',
+      '../../battlefield/canvas2d',
+      '../../presentation/effects',
+      '../../input/pointer',
+    ]) {
+      const messages = await lintAt(
+        'src/game/__probe__.ts',
+        `import { a } from '${source}';\nexport const b = a;\n`,
+      );
+
+      expect(ruleIds(messages), `未拦住跨层导入：${source}`).toContain('no-restricted-imports');
+    }
+  });
+
+  it('规则层内部互相导入不受跨层规则影响', async () => {
+    const messages = await lintAt(
+      'src/game/__probe__.ts',
+      "import { a } from '../types';\nexport const b = a;\n",
+    );
+
+    expect(ruleIds(messages)).not.toContain('no-restricted-imports');
+  });
+
   it('规则层之外不误伤同样的代码', async () => {
     const code = [
       "import React from 'react';",

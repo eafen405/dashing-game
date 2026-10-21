@@ -70,10 +70,12 @@ export class FakeElement extends FakeEventTarget {
 
   readonly rect: { top: number; height: number; left: number; width: number };
 
-  constructor(rect: { top: number; height: number; left?: number; width?: number } = {
-    top: 0,
-    height: 400,
-  }) {
+  constructor(
+    rect: { top: number; height: number; left?: number; width?: number } = {
+      top: 0,
+      height: 400,
+    },
+  ) {
     super();
     this.rect = {
       top: rect.top,
@@ -131,12 +133,14 @@ export class FakeWindow extends FakeEventTarget {
 
   readonly documentTarget = new FakeEventTarget();
 
-  constructor(options: {
-    innerWidth?: number;
-    innerHeight?: number;
-    matches?: boolean;
-    orientationType?: string;
-  } = {}) {
+  constructor(
+    options: {
+      innerWidth?: number;
+      innerHeight?: number;
+      matches?: boolean;
+      orientationType?: string;
+    } = {},
+  ) {
     super();
     this.innerWidth = options.innerWidth ?? 800;
     this.innerHeight = options.innerHeight ?? 400;
