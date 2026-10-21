@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # 集成分支 `feat/refactor-v2` 是重构期间的常驻分支，push 就要跑门禁；
+    # 否则只有开 PR 才会验证，长分支很容易带着红测试往前走。
+    branches: [main, 'feat/**']
   pull_request:
   workflow_dispatch:
 
