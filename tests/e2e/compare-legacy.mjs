@@ -19,13 +19,13 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { assert, launchBrowser, SHOTS } from './lib/harness.mjs';
 
-/** 旧版页面（只读参照）。 */
-const LEGACY = '/home/eafen405/projects/dashing-game/source.html';
+/** 旧版页面（只读参照）—— 与仓库根同目录。 */
+const LEGACY = resolve(process.cwd(), 'source.html');
 /** 新版产物。 */
 const DIST = join(process.cwd(), 'dist', 'index.html');
 
@@ -139,12 +139,14 @@ try {
     60,
   );
 
-  // HUD 排列顺序：两边的标签序列必须逐字相同
+  // HUD 排列顺序：两边的标签序列必须逐字相同。
+  // 只取 `.stat` 的**直接子** `<span>`（标签本身）；分数面板内部还有一个
+  // 承载滚动数字的 `<motion.span>`，不能混进来。
   const legacyLabels = await legacy.evaluate(() =>
-    [...globalThis.document.querySelectorAll('#hud .stat span')].map((n) => n.textContent.trim()),
+    [...globalThis.document.querySelectorAll('#hud .stat > span')].map((n) => n.textContent.trim()),
   );
   const modernLabels = await modern.evaluate(() =>
-    [...globalThis.document.querySelectorAll('#hud .stat span')].map((n) => n.textContent.trim()),
+    [...globalThis.document.querySelectorAll('#hud .stat > span')].map((n) => n.textContent.trim()),
   );
   assert(
     legacyLabels.join('|') === modernLabels.join('|'),

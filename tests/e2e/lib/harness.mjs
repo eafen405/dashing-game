@@ -124,7 +124,7 @@ export async function openApp(browser, options = {}) {
   return { page, pageErrors };
 }
 
-/** 读取 HUD 数值（全部来自 DOM 文本）。 */
+/** 读取 HUD 数值（来自 DOM；分数优先读 `data-value`，见下）。 */
 export function readHud(page) {
   return page.evaluate(() => {
     const text = (sel) => globalThis.document.querySelector(sel)?.textContent?.trim() ?? null;
@@ -134,12 +134,17 @@ export function readHud(page) {
       const value = Number(raw);
       return Number.isFinite(value) ? value : null;
     };
+    // 分数有 0.45 秒的滚动动画（票 07）：文本是**显示值**，会落在中间帧。
+    // `#scoreText[data-value]` 是规则层的目标分数，只随真实得分变化。
+    const scoreEl = globalThis.document.querySelector('#scoreText');
+    const scoreRaw = scoreEl?.getAttribute('data-value') ?? text('#scoreText');
+    const score = scoreRaw === null ? null : Number(scoreRaw);
     const hpRaw = text('#hpText') ?? '';
     return {
       hpText: hpRaw,
       hp: hpRaw ? Number(hpRaw.split('/')[0].trim()) : null,
       maxHp: hpRaw ? Number(hpRaw.split('/')[1].trim()) : null,
-      score: num('#scoreText'),
+      score: Number.isFinite(score) ? score : null,
       combo: num('#comboText'),
       comboLabel: text('#comboLabel'),
       crit: text('#critText'),

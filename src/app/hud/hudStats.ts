@@ -9,10 +9,15 @@
  * | `publishes` | `hudStore.publish()` 的调用次数 ≈ 帧数 | `hudStore.ts` |
  * | `notifications` | 订阅者被通知的次数（= React 被要求重渲染的次数） | `hudStore.ts` |
  * | `renders` | `Hud` 组件提交（commit）的次数 | `Hud.tsx` |
- * | `domMutations` | HUD 子树的 DOM 变更次数 | `MutationObserver`（本文件） |
+ * | `domMutations` | HUD 子树里由 **React 提交**产生的 DOM 变更次数 | `MutationObserver`（本文件） |
+ * | `animatedMutations` | 由 **Motion 动画直接写 DOM** 的次数（分数滚动 / FEVER 脉冲） | `MutationObserver`（本文件） |
  *
  * **判据**：`domMutations` 必须**远小于** `publishes`（帧数）。
  * 两者接近 ⇒ HUD 在 60fps 重渲染 ⇒ 违反硬约束，必须修。
+ *
+ * 为什么把动画写单列：分数滚动（票 07）由 Motion 直接写 DOM 文本节点，
+ * **不经过 React** —— 它会产生 `characterData` 变更，但那是「一次事件驱动的
+ * 动画在跑」，不是「HUD 每帧重渲染」。两类写分开计，判据只看 React 那部分。
  *
  * **这个模块不参与任何游戏逻辑**：它只做计数，不改变任何行为。
  * 统计对象挂在 `globalThis.__HUD_STATS__` 上，端到端脚本从页面里读它
@@ -29,8 +34,10 @@ export interface HudStats {
   renders: number;
   /** 外层 `Hud` 外壳的提交次数 —— 父组件事件带着它重跑，但**不产出 DOM 变化**。 */
   shellRenders: number;
-  /** HUD 子树的 DOM 变更次数（MutationObserver 记录条数）。 */
+  /** HUD 子树里由 React 提交产生的 DOM 变更次数（不含动画写入）。 */
   domMutations: number;
+  /** 其中由 Motion 动画直接写入 DOM 的次数（不经 React，不算重渲染）。 */
+  animatedMutations: number;
   /** DOM 变更的明细（最多保留 `MUTATION_LOG_LIMIT` 条）。 */
   mutationLog: string[];
 }
@@ -45,6 +52,7 @@ export const hudStats: HudStats = {
   renders: 0,
   shellRenders: 0,
   domMutations: 0,
+  animatedMutations: 0,
   mutationLog: [],
 };
 
@@ -55,6 +63,7 @@ export function resetHudStats(): void {
   hudStats.renders = 0;
   hudStats.shellRenders = 0;
   hudStats.domMutations = 0;
+  hudStats.animatedMutations = 0;
   hudStats.mutationLog.length = 0;
 }
 
@@ -72,19 +81,45 @@ export function exposeHudStats(): void {
 let observer: MutationObserver | null = null;
 
 /**
+ * 判断一条变更是不是 Motion 动画直接写 DOM 造成的。
+ *
+ * 标记约定（见 `ScorePanel.tsx` / `ComboBadge.tsx`）：
+ * - `data-motion="score-roll"` —— 分数滚动的 `<motion.span>`：文本 / 子节点变更；
+ * - `data-motion="combo-pulse"` —— FEVER 脉冲的 `<motion.b>`：只改 `style` 属性。
+ *
+ * 这两类写入**不经过 React**，不能算进「HUD 重渲染」。
+ */
+function isAnimationWrite(record: MutationRecord): boolean {
+  const target = record.target;
+  const el = target instanceof Element ? target : target.parentElement;
+  if (!el) return false;
+  if (el.closest('[data-motion="score-roll"]')) return true;
+  return (
+    record.type === 'attributes' &&
+    record.attributeName === 'style' &&
+    el.closest('[data-motion="combo-pulse"]') !== null
+  );
+}
+
+/**
  * 在 HUD 根节点上挂 `MutationObserver`，统计 DOM 变更次数。
  *
  * 观察 `childList` / `attributes` / `characterData` 三类 —— 它们合起来
- * 覆盖了「React 改了 HUD 的任何可见内容」的全部情况。
+ * 覆盖了「HUD 的任何可见内容变化」的全部情况。Motion 动画直接写 DOM 的部分
+ * 记到 `animatedMutations`，其余记到 `domMutations`（判据只看后者）。
  *
  * @param root HUD 根节点（`.hud`）。
  */
 export function installHudDomObserver(root: HTMLElement): void {
   observer?.disconnect();
   observer = new MutationObserver((records) => {
-    hudStats.domMutations += records.length;
     for (const record of records) {
-      if (hudStats.mutationLog.length >= MUTATION_LOG_LIMIT) break;
+      if (isAnimationWrite(record)) {
+        hudStats.animatedMutations += 1;
+        continue;
+      }
+      hudStats.domMutations += 1;
+      if (hudStats.mutationLog.length >= MUTATION_LOG_LIMIT) continue;
       hudStats.mutationLog.push(describeMutation(record));
     }
   });

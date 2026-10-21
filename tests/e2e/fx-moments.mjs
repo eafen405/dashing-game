@@ -41,8 +41,8 @@ import { pathToFileURL } from 'node:url';
 
 import { assert, launchBrowser, openApp } from './lib/harness.mjs';
 
-/** 旧版页面（只读参照）。 */
-const LEGACY = '/home/eafen405/projects/dashing-game/source.html';
+/** 旧版页面（只读参照）—— 与仓库根同目录。 */
+const LEGACY = resolve(process.cwd(), 'source.html');
 /** 新版产物。 */
 
 /** 输出目录。 */
@@ -75,15 +75,7 @@ const VIEWPORT = { width: 1280, height: 720 };
  *
  * 状态存在 `globalThis.__autoPlay` 上，分段调用时冷却与按住状态不会重置。
  */
-const AUTO_PLAY = ({
-  hitX,
-  laneYs,
-  zoneHalf,
-  durationMs,
-  canvasSel,
-  stageSel,
-  cooldownMs,
-}) =>
+const AUTO_PLAY = ({ hitX, laneYs, zoneHalf, durationMs, canvasSel, stageSel, cooldownMs }) =>
   new Promise((resolve) => {
     const stage = globalThis.document.querySelector(stageSel);
     const canvas = globalThis.document.querySelector(canvasSel);
@@ -99,13 +91,15 @@ const AUTO_PLAY = ({
       resolve(0);
       return;
     }
-    const state = globalThis.__autoPlay ?? (globalThis.__autoPlay = {
-      lastClick: [-1e9, -1e9],
-      lastHead: [-1e9, -1e9],
-      holdPtr: 100,
-      holdIds: [],
-      holdLane: -1,
-    });
+    const state =
+      globalThis.__autoPlay ??
+      (globalThis.__autoPlay = {
+        lastClick: [-1e9, -1e9],
+        lastHead: [-1e9, -1e9],
+        holdPtr: 100,
+        holdIds: [],
+        holdLane: -1,
+      });
     const dpr = canvas.width / (canvas.clientWidth || canvas.width);
     const rect = stage.getBoundingClientRect();
     const t0 = globalThis.performance.now();
@@ -176,11 +170,7 @@ const AUTO_PLAY = ({
           const headEst = (x0 + bestStart) / dpr - 12;
           const moved = headEst < state.lastHead[laneIdx] - 0.5;
           state.lastHead[laneIdx] = headEst;
-          if (
-            moved &&
-            headEst - hitX <= zoneHalf - 12 &&
-            headEst - hitX >= -zoneHalf + 20
-          ) {
+          if (moved && headEst - hitX <= zoneHalf - 12 && headEst - hitX >= -zoneHalf + 20) {
             // 按住不放（长按满 3 秒才算打掉）。
             // **绝不主动松开** —— 松开就是「长按不足 3 秒」，连击清零。
             state.holdPtr += 1;

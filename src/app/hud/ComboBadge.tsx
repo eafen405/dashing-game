@@ -52,6 +52,7 @@ export function ComboBadge({
       <div className="stat">
         <motion.b
           id="comboText"
+          data-motion="combo-pulse"
           className={frenzyActive ? 'combo-value frenzy' : 'combo-value'}
           animate={frenzyActive ? { scale: [1, PULSE_SCALE, 1] } : { scale: 1 }}
           transition={

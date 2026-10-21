@@ -159,10 +159,16 @@ try {
 
   // ── 步骤 4：暂停 → 恢复 ──────────────────────────────────
   console.log('── 步骤 4：暂停 → 恢复 ──');
-  const beforePause = await readHud(page);
+  // 先停掉自动出刀：恢复后若还在出刀，分数 / 连击会在断言前继续变化。
+  stop.done = true;
+  await playerPromise;
+  await page.waitForTimeout(250);
+
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(200);
   assert((await readPhase(page)) === 'paused', '按 P 键进入暂停');
+  // 冻结值在**暂停之后**读：暂停前的最后一次命中可能还在滚动 / 结算。
+  const beforePause = await readHud(page);
   assert(
     (await page.locator('#pause .pause-card h2').textContent()) === '已暂停',
     '暂停界面标题是「已暂停」',
@@ -190,7 +196,8 @@ try {
   assert((await readPhase(page)) === 'running', '点「继续」恢复运行（鼠标路径）');
   const afterResume = await readHud(page);
   assert(afterResume.score === beforePause.score, `恢复后分数不变（${afterResume.score}）`);
-  assert(afterResume.combo === beforePause.combo, `恢复后连击不变（${afterResume.combo}）`);
+  // 连击不再跨恢复断言：恢复后规则层会继续推进，漏怪合法地把连击清零。
+  // 「暂停期间连击不变」已经在上面的冻结窗口里验证过。
   await shot(page, '09-resumed.png');
 
   // 暂停按钮（鼠标路径）也要能用

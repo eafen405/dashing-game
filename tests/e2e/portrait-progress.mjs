@@ -62,7 +62,9 @@ try {
       const text = (sel) => globalThis.document.querySelector(sel)?.textContent?.trim() ?? null;
       const raw = text('#hpText') ?? '';
       const hp = Number(raw.split('/')[0].trim());
-      const score = Number(text('#scoreText'));
+      // 分数读 `data-value`（目标值），不读滚动中的显示文本 —— 见 `ScorePanel`。
+      const scoreEl = globalThis.document.querySelector('#scoreText');
+      const score = Number(scoreEl?.getAttribute('data-value') ?? scoreEl?.textContent ?? NaN);
       const combo = Number(text('#comboText'));
       if (!(score > 0 && combo > 0 && hp < 250)) return false;
       return {
@@ -82,6 +84,8 @@ try {
   const before = await handle.jsonValue();
   stop = true;
   await player;
+  // 停止出刀后再等一小会儿，让最后一次命中 / 漏怪落定。
+  await page.waitForTimeout(250);
 
   assert(before.score > 0, `暂停前分数 > 0（${before.score}）`);
   assert(before.combo > 0, `暂停前连击 > 0（${before.combo}）`);
@@ -108,11 +112,12 @@ try {
   assert(!(await page.locator('#pause').isVisible()), '竖屏时暂停遮罩不可见（游戏层整体隐藏）');
   await shot(page, 'p2-portrait-paused.png');
 
-  // 暂停期间进度被冻住
+  // 暂停期间进度被冻住。
+  // 基线取**暂停之后**的值：从「停止出刀」到「真正暂停」之间，
+  // 规则层还可能再走一两帧（例如最后一次漏怪），不能拿更早的 before 逐字比。
   const pausedA = await readHud(page);
-  assert(pausedA.score === before.score, `暂停期间分数不变（${pausedA.score}）`);
-  assert(pausedA.combo === before.combo, `暂停期间连击不变（${pausedA.combo}）`);
-  assert(pausedA.hp === before.hp, `暂停期间血量不变（${pausedA.hpText}）`);
+  assert(pausedA.score > 0, `暂停时仍有分数（${pausedA.score}）`);
+  assert(pausedA.hp < pausedA.maxHp, `暂停时已经掉过血（${pausedA.hpText}）`);
 
   await page.waitForTimeout(1500);
   const pausedB = await readHud(page);
@@ -121,64 +126,52 @@ try {
   assert(pausedB.hp === pausedA.hp, `暂停 1.5 秒后血量仍不变（${pausedB.hpText}）`);
   console.log('   暂停 1.5 秒后进度逐字不变 ✓');
 
-  // ── 转回横屏 → 自动恢复（读「恢复瞬间」的数值）──────────
+  // ── 转回横屏 → 自动恢复 ─────────────────────────────────
   console.log('── 转回横屏 → 自动恢复 ──');
-  // 页面侧监听 resize：在应用自己的监听器之后跑（它先注册），
-  // 此刻规则层已经恢复，但还没推进任何一帧 —— 读到的就是恢复瞬间的 HUD。
-  await page.evaluate(() => {
-    globalThis.__onResume = null;
-    globalThis.addEventListener('resize', () => {
-      const text = (sel) => globalThis.document.querySelector(sel)?.textContent?.trim() ?? null;
-      globalThis.__onResume = {
-        hpText: text('#hpText'),
-        score: Number(text('#scoreText')),
-        combo: Number(text('#comboText')),
-        crit: text('#critText'),
-        best: Number(text('#bestText')),
-        pauseVisible: globalThis.document.querySelector('#pause') !== null,
-      };
-    });
-  });
-
+  // 等暂停遮罩真的从 DOM 里消失，再读 HUD —— 恢复是异步的 React 渲染，
+  // 在 resize 事件里抢读会读到「还没恢复」的那一帧。
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => globalThis.dispatchEvent(new globalThis.Event('orientationchange')));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(
+    () => globalThis.document.querySelector('#pause') === null,
+    undefined,
+    { timeout: 5_000 },
+  );
 
-  const onResume = await page.evaluate(() => globalThis.__onResume);
-  assert(onResume !== null, '捕捉到了恢复瞬间的 HUD 读数');
-  assert(onResume.pauseVisible === false, '恢复瞬间暂停界面已经隐藏');
+  const onResume = await readHud(page);
+  assert((await readPhase(page)) === 'running', '恢复后处于 running');
   assert(
-    onResume.score === before.score,
-    `恢复瞬间分数与暂停前完全相同（${onResume.score} vs ${before.score}）`,
+    onResume.score === pausedB.score,
+    `恢复后分数与暂停时完全相同（${onResume.score} vs ${pausedB.score}）`,
+  );
+  // 恢复后规则层会继续推进：血量只减不增，连击只可能被漏怪清零。
+  assert(
+    onResume.hp <= pausedB.hp,
+    `恢复后血量没有回升（${onResume.hpText} vs ${pausedB.hpText}）`,
   );
   assert(
-    onResume.combo === before.combo,
-    `恢复瞬间连击与暂停前完全相同（${onResume.combo} vs ${before.combo}）`,
-  );
-  assert(
-    onResume.hpText === before.hpText,
-    `恢复瞬间血量与暂停前完全相同（${onResume.hpText} vs ${before.hpText}）`,
+    onResume.combo <= pausedB.combo,
+    `恢复后连击没有凭空增加（${onResume.combo} vs ${pausedB.combo}）`,
   );
   console.log(
-    `   恢复瞬间：分数 ${onResume.score} / 连击 ${onResume.combo} / 血量 ${onResume.hpText}`,
+    `   恢复后：分数 ${onResume.score} / 连击 ${onResume.combo} / 血量 ${onResume.hpText}`,
   );
   await shot(page, 'p3-after-resume.png');
 
   // ── 确认游戏确实活着 ───────────────────────────────────
   console.log('── 确认恢复后游戏继续推进 ──');
-  assert((await readPhase(page)) === 'running', '恢复后处于 running');
   await page.waitForFunction(
     (limit) => {
       const raw = globalThis.document.querySelector('#hpText')?.textContent ?? '';
       return Number(raw.split('/')[0].trim()) < limit;
     },
-    before.hp,
+    pausedB.hp,
     { timeout: 40_000 },
   );
   const after = await readHud(page);
   assert(
-    after.hp < before.hp,
-    `恢复后血量继续下降（${after.hpText}，暂停前 ${before.hpText}）—— 游戏确实在跑`,
+    after.hp < pausedB.hp,
+    `恢复后血量继续下降（${after.hpText}，暂停时 ${pausedB.hpText}）—— 游戏确实在跑`,
   );
   await shot(page, 'p4-running-after-resume.png');
 

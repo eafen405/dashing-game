@@ -48,8 +48,17 @@ export function ScorePanel({ score, frenzyActive }: ScorePanelProps): ReactEleme
 
   return (
     <div className="stat">
-      <b id="scoreText" className={frenzyActive ? 'stat-value frenzy' : 'stat-value'}>
-        <motion.span>{scoreText}</motion.span>
+      {/*
+        `data-value` 是**目标分数**（React 只在分数变化时写它），
+        `<motion.span>` 里是滚动中的显示值。
+        端到端断言读 `data-value`，否则会撞上 0.45 秒滚动动画的中间帧。
+      */}
+      <b
+        id="scoreText"
+        className={frenzyActive ? 'stat-value frenzy' : 'stat-value'}
+        data-value={score}
+      >
+        <motion.span data-motion="score-roll">{scoreText}</motion.span>
       </b>
       <span>SCORE</span>
     </div>
