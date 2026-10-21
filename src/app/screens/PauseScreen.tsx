@@ -18,23 +18,19 @@ export interface PauseScreenProps {
 }
 
 /** 暂停界面。 */
-export function PauseScreen({
-  onResume,
-  onRestart,
-  onQuitToHome,
-}: PauseScreenProps): ReactElement {
+export function PauseScreen({ onResume, onRestart, onQuitToHome }: PauseScreenProps): ReactElement {
   return (
-    <div className="overlay" data-no-strike="">
+    <div id="pause" className="overlay" data-no-strike="">
       <div className="pause-card">
         <h2>已暂停</h2>
         <div className="pause-row">
-          <button type="button" className="primary" onClick={onResume}>
+          <button id="btnResume" type="button" className="primary" onClick={onResume}>
             继续
           </button>
-          <button type="button" onClick={onRestart}>
+          <button id="btnQuit" type="button" onClick={onRestart}>
             重开
           </button>
-          <button type="button" onClick={onQuitToHome}>
+          <button id="btnHome" type="button" onClick={onQuitToHome}>
             回主页面
           </button>
         </div>

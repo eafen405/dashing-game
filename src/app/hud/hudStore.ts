@@ -20,6 +20,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { MAX_HP } from '../../game/constants';
+import { hudStats } from './hudStats';
 
 /** HUD 关心的数值（规则层派生 + 跨局最高分）。 */
 export interface HudValues {
@@ -120,6 +121,8 @@ export function createHudStore(initial: Partial<HudValues> = {}): HudStore {
   };
 
   const publish = (next: HudValues): void => {
+    // 统计：每次 publish ≈ 一帧（帧数就是「HUD 本该重渲染的次数」）。
+    hudStats.publishes += 1;
     // FEVER 剩余秒数取整 —— 标签只在整秒变化（见文件头说明）。
     const normalized: HudValues = { ...next, feverT: Math.ceil(next.feverT) };
     if (sameValues(values, normalized)) return;
@@ -129,6 +132,8 @@ export function createHudStore(initial: Partial<HudValues> = {}): HudStore {
       ...values,
       comboLabel: comboLabelOf(values.frenzyActive, values.feverT),
     };
+    // 统计：值真的变了才通知 —— 这个计数是「HUD 真正需要重渲染的次数」。
+    hudStats.notifications += 1;
     for (const listener of [...listeners]) listener();
   };
 

@@ -24,7 +24,7 @@ export interface StartScreenProps {
 /** 开始界面。 */
 export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): ReactElement {
   return (
-    <div className="overlay">
+    <div id="startScreen" className="overlay">
       <h2>双轨打怪</h2>
       <div className="legend">
         <div style={{ color: 'var(--p1)' }}>
@@ -42,11 +42,12 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         漏掉一次，角色失去 20 点血量（初始 250）。
         <br />
         <span style={{ color: '#ffd24a' }}>
-          每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10
-          秒，期间得分 ×1.5。
+          每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10 秒，期间得分 ×1.5。
         </span>
         <br />
-        <span style={{ color: '#ff5ecb' }}>双生：锁链相连，同击 700（双暴 1000）；单破另一只自爆 -20。</span>
+        <span style={{ color: '#ff5ecb' }}>
+          双生：锁链相连，同击 700（双暴 1000）；单破另一只自爆 -20。
+        </span>
         <br />
         <span style={{ color: '#a6ff5e' }}>
           长按：等头部进判定框时点击起手，按住 3 秒贯穿，头 / 1s / 尾各 +200。
@@ -55,10 +56,11 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         </span>
       </div>
 
-      <div className="diff-pick" data-no-strike="">
+      <div id="diffPick" className="diff-pick" data-no-strike="">
         <button
           type="button"
           className={diffLevel === 1 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="1"
           onClick={() => onDiffChange(1)}
         >
           <span className="stars">★</span>
@@ -67,6 +69,7 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         <button
           type="button"
           className={diffLevel === 2 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="2"
           onClick={() => onDiffChange(2)}
         >
           <span className="stars">★★</span>

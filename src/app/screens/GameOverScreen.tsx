@@ -39,28 +39,36 @@ export function GameOverScreen({
   onChooseDifficulty,
 }: GameOverScreenProps): ReactElement {
   return (
-    <div className="overlay" data-no-strike="">
+    <div id="gameOver" className="overlay" data-no-strike="">
       <div className="gameover-big">GAME OVER</div>
       <div className="score-row">
         <div>
           <div className="k">SCORE</div>
-          <div className="v">{score}</div>
+          <div id="goScore" className="v">
+            {score}
+          </div>
         </div>
         <div>
           <div className="k">MAX COMBO</div>
-          <div className="v">{maxCombo}</div>
+          <div id="goCombo" className="v">
+            {maxCombo}
+          </div>
         </div>
         <div>
           <div className="k">KILLS</div>
-          <div className="v">{kills}</div>
+          <div id="goKills" className="v">
+            {kills}
+          </div>
         </div>
       </div>
-      <div className="sub">历史最高分 {best}</div>
+      <div id="goBest" className="sub">
+        历史最高分 {best}
+      </div>
       <div className="go-actions">
-        <button type="button" className="primary-button" onClick={onRestart}>
+        <button id="btnRestart" type="button" className="primary-button" onClick={onRestart}>
           再来一局
         </button>
-        <button type="button" className="ghost-button" onClick={onChooseDifficulty}>
+        <button id="btnDiff" type="button" className="ghost-button" onClick={onChooseDifficulty}>
           选择难度
         </button>
       </div>
