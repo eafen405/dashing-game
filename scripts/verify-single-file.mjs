@@ -145,23 +145,60 @@ async function browserCheck() {
     page.on('request', (r) => requests.push(r.url()));
 
     await page.goto(pathToFileURL(DIST).href, { waitUntil: 'load' });
-    await page.waitForFunction(() => globalThis.__SPIKE__ !== undefined, null, { timeout: 20_000 });
 
-    const result = await page.evaluate(() => globalThis.__SPIKE__);
+    // 等战场 canvas 挂上来，再让它跑几帧。
+    // （旧版这里等的是 Phase 0 spike 的 `window.__SPIKE__` 契约；
+    //  spike 已随票 04 拆除，改为直接检查「画布真的画出了东西」。）
+    await page.waitForSelector('.canvas-host canvas', { timeout: 20_000 });
+    await page.waitForTimeout(800);
+
+    const result = await page.evaluate(() => {
+      const canvas = globalThis.document.querySelector('.canvas-host canvas');
+      let drawn = false;
+      let canvasWidth = 0;
+      let canvasHeight = 0;
+      if (canvas instanceof globalThis.HTMLCanvasElement) {
+        canvasWidth = canvas.width;
+        canvasHeight = canvas.height;
+        const scratch = globalThis.document.createElement('canvas');
+        scratch.width = canvas.width;
+        scratch.height = canvas.height;
+        const sctx = scratch.getContext('2d');
+        if (sctx) {
+          sctx.drawImage(canvas, 0, 0);
+          const { data } = sctx.getImageData(0, 0, scratch.width, scratch.height);
+          for (let i = 3; i < data.length; i += 4) {
+            if ((data[i] ?? 0) > 0) {
+              drawn = true;
+              break;
+            }
+          }
+        }
+      }
+
+      let localStorageOk = false;
+      try {
+        const key = '__verify_probe__';
+        globalThis.localStorage.setItem(key, 'ok');
+        localStorageOk = globalThis.localStorage.getItem(key) === 'ok';
+        globalThis.localStorage.removeItem(key);
+      } catch {
+        // localStorage 不可用（Safari file://）—— 保持 false
+      }
+
+      return { drawn, canvasWidth, canvasHeight, localStorage: localStorageOk, errors: [] };
+    });
 
     // file:// 打开时不应有任何非 file:// 的请求
     const remote = requests.filter((u) => !u.startsWith('file://') && !u.startsWith('data:'));
     if (remote.length > 0) fail.push(`产物发起了外部请求：${remote.join(', ')}`);
 
-    if (!result.webgl) fail.push(`WebGL 未启用，渲染器类型：${result.rendererType}`);
     if (!result.localStorage) fail.push('localStorage 不可读写');
     if (!result.drawn) fail.push('画布读取不到已绘制内容');
     if (pageErrors.length > 0) fail.push(`页面异常：${pageErrors.join(' | ')}`);
     if (consoleErrors.length > 0) warn.push(`控制台错误：${consoleErrors.join(' | ')}`);
 
-    console.log(
-      `渲染器 ${result.rendererType} · 画布 ${result.canvasWidth}×${result.canvasHeight}`,
-    );
+    console.log(`画布 ${result.canvasWidth}×${result.canvasHeight}`);
     console.log(
       `localStorage ${result.localStorage ? '✓' : '✗'} · 绘制 ${result.drawn ? '✓' : '✗'}`,
     );

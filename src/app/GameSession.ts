@@ -28,7 +28,7 @@ import { createGameState } from '../game/state';
 import type { Difficulty, GameState, Lane, Layout, Monster, Phase } from '../game/types';
 import type { InputSink } from '../input/types';
 import { canTransition } from './screenMachine';
-import { createSimplePresentation, type PresentationPort } from './presentation';
+import { createEffectSink, createPresentation, type PresentationPort } from './presentation';
 
 /** 会话层的构造参数。 */
 export interface GameSessionOptions {
@@ -42,7 +42,10 @@ export interface GameSessionOptions {
   seed: number;
   /** 初始布局。 */
   layout: Layout;
-  /** 表现层（默认用最小实现 `createSimplePresentation()`）。 */
+  /** 表现层（默认用 04a 的 `PresentationState` 适配）。
+   *
+   * 传自定义实现时注意：DOM 副作用（toast / 闪屏 / 震动 / 结算）由表现层的
+   * `EffectSink` 转交，自定义实现要自己接上，否则这些效果会被丢弃。 */
   presentation?: PresentationPort;
   /** 每帧回调（调试 / 观察用；不要在这里做重活）。 */
   onFrame?: (frame: FrameView) => void;
@@ -89,7 +92,13 @@ export class GameSession implements InputSink {
     this.host = options.host;
     this.diffLevel = options.diffLevel;
     this.seed = options.seed;
-    this.presentation = options.presentation ?? createSimplePresentation();
+    this.presentation =
+      options.presentation ??
+      createPresentation(
+        createEffectSink((effect) => {
+          options.onEffect?.(effect);
+        }),
+      );
     this.rng = createRng(options.seed);
     this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
   }
@@ -242,13 +251,8 @@ export class GameSession implements InputSink {
     const previousPhase = this.state.phase;
     const { state, effects } = reduce(this.state, event, this.rng);
     this.state = state;
-    if (effects.length > 0) {
-      this.presentation.apply(effects);
-      const onEffect = this.options.onEffect;
-      if (onEffect) {
-        for (const effect of effects) onEffect(effect);
-      }
-    }
+    // 表现层消费效果事件；DOM 副作用由表现层的 `EffectSink` 转交给 `onEffect`。
+    if (effects.length > 0) this.presentation.apply(effects);
     if (state.phase !== previousPhase) this.notifyPhase();
   }
 
@@ -289,10 +293,7 @@ export class GameSession implements InputSink {
 
     this.applyEvent({ type: 'Tick', dt });
 
-    this.presentation.advance(dt, {
-      layout: this.state.layout,
-      frenzyActive: this.state.frenzyActive,
-    });
+    this.presentation.advance(dt);
 
     this.render();
   };

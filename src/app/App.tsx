@@ -79,6 +79,7 @@ export function GameApp({
   seed = DEFAULT_SEED,
   onPhaseChange,
 }: GameAppProps): ReactElement {
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const [screen, setScreen] = useState<Phase>('idle');
@@ -105,11 +106,16 @@ export function GameApp({
   });
 
   useEffect(() => {
+    // 「舞台」= 旧实现的 `#stage`：尺寸基准 + 指针输入的命中区。
+    // 「画布宿主」= 渲染器把 canvas 挂进去的容器（与舞台同尺寸）。
+    // 分成两个是因为 canvas 由渲染器创建（React 不认识它），
+    // 放在独立的容器里可以避免 React 协调时把它挤掉。
+    const stage = stageRef.current;
     const host = hostRef.current;
-    if (!host) return;
+    if (!stage || !host) return;
 
     const measure = (): Layout => {
-      const rect = host.getBoundingClientRect();
+      const rect = stage.getBoundingClientRect();
       return computeLayout(
         rect.width > 1 ? rect.width : 800,
         rect.height > 1 ? rect.height : 400,
@@ -209,7 +215,7 @@ export function GameApp({
 
     // ── 输入接线 ──────────────────────────────────────────
     const detachPointer = attachPointerInput({
-      stage: host,
+      stage,
       sink: session,
       isStartScreen: () => screenRef.current === 'idle',
       onStartFromTap: () => session.start(),
@@ -240,7 +246,7 @@ export function GameApp({
     const observer = new ResizeObserver(() => {
       session.resize(measure());
     });
-    observer.observe(host);
+    observer.observe(stage);
 
     return () => {
       detachPointer();
@@ -277,7 +283,7 @@ export function GameApp({
       <div className="game">
         <Hud onPause={handlePause} onToggleFullscreen={handleToggleFullscreen} />
 
-        <div className="stage">
+        <div className="stage" ref={stageRef}>
           <div className="tint" />
           <div className="canvas-host" ref={hostRef} />
           <div className="vignette" />

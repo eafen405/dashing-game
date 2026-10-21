@@ -14,7 +14,7 @@ import type { BattlefieldRenderer, FrameView } from '../../battlefield/types';
 import { computeLayout } from '../../game/layout';
 import type { Phase } from '../../game/types';
 import { GameSession } from '../GameSession';
-import { createSimplePresentation } from '../presentation';
+import { createPresentation } from '../presentation';
 
 /** 只记录不画的渲染器。 */
 class StubRenderer implements BattlefieldRenderer {
@@ -83,12 +83,12 @@ function makeSession(): {
   session: GameSession;
   renderer: StubRenderer;
   clock: ReturnType<typeof makeClock>;
-  presentation: ReturnType<typeof createSimplePresentation>;
+  presentation: ReturnType<typeof createPresentation>;
   phases: Phase[];
 } {
   const renderer = new StubRenderer();
   const clock = makeClock();
-  const presentation = createSimplePresentation();
+  const presentation = createPresentation();
   const phases: Phase[] = [];
   const session = new GameSession({
     renderer,
