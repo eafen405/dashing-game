@@ -1,5 +1,8 @@
 # 双轨打怪 重构规格
 
+> **交接状态（2026-10-21）**：票 01–07 已完成并合入 `feat/refactor-v2`；08/09 未开始；10 完成文档前半。
+> 进度、验证基线、剩余工作与已知陷阱见 [handoff.md](handoff.md)。
+
 ## 背景
 
 `source.html`（2683 行）是整个游戏：CSS 268 行 + 一个包含约 120 个函数、45 个可变全局变量的 IIFE。
@@ -114,7 +117,7 @@ src/
 | **D4** | `hasActivePair()` 的判定口径 | **修** | 旧实现用 `!m.done` 判双生占用（双生怪的 `done` 恒为 `undefined`）。改用 `removed` 统一口径。 | 规则层单测 + 黄金轨迹模式 A |
 | **D5** | 顶部 HUD 统计项顺序 | **修** | 旧版顺序 `SCORE → COMBO → 暴击/普攻 → BEST`（`source.html:300-303`）。React 版曾把 `BEST` 提到 `COMBO` 前面，与旧版视觉不一致。**已记账并修正回旧顺序。** | DOM 文本顺序程序化比对 |
 | **D6** | 固定随机种子 | **记账** | 新实现用固定种子（`DEFAULT_SEED`），每局完全一样，便于复现与 A/B 对照；旧版用 `Math.random()`，每局不同。 | — |
-| **D7** | FEVER 期间角色周身的金色火花 | **记账** | 旧 `emitFrenzy`（`source.html:1238-1254`）的周身火花未实现。FEVER 本身仍有金色洗色、轨道变色、HUD「FEVER Ns」徽章。 | — |
+| **D7** | FEVER 期间角色周身的金色火花 | **已实现** | 旧 `emitFrenzy`（`source.html:1238-1254`）的周身火花由票 07 在表现层补齐（`PresentationState.stepFeverSparks()`），发射口径逐字照抄。规则层纯化阶段曾记为缺口。 | 代码口径对照 + 表现层单测 |
 | **D8** | 旧 `setTimeout(resize, 70/260)` 兜底被取代 | **记账** | 改用 `ResizeObserver`。旧代码的两个 `setTimeout` 从不清理。 | — |
 | **D9** | `quitToHome` 退出到主菜单 | **记账** | 旧实现是规则层的一个事件；新实现里由 UI 层（`GameSession.quitToHome()`）管理，规则层不感知。 | — |
 | **D10** | `README.md:18` 上轨笔误 | 修 | 两句都写成"打下轨"，第一句应为"上轨" | — |
