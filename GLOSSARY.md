@@ -18,7 +18,7 @@ _Avoid_: 敌人, 怪, enemy, 靶子
 
 **判定区 (Hit Zone)**:
 每条轨道上、怪物必须被击破的区段。怪物越过判定区即构成漏怪。
-_Avoid_: 判定框, 打击点, 攻击范围, hit box
+_Avoid_: 判定框, 判定圈, 打击点, 光门, 攻击范围, hit box
 
 **暴击区 (Crit Zone)**:
 判定区中央的子区间。怪物被击破时落在暴击区内即为暴击，计分高于普攻。
@@ -32,7 +32,7 @@ _Avoid_: 难度, 等级, 关卡, level, 难度等级
 
 **出刀 (Strike)**:
 角色对某条轨道发起的一次攻击动作，由点击对应半屏触发。出刀有前摇、挥击、后摇的完整动作过程。
-_Avoid_: 攻击, 挥击, 砍, dash, 刀
+_Avoid_: 攻击, 出招, 挥击, 砍, dash, 刀
 
 **普攻 (Normal Hit)**:
 出刀击破怪物且落点不在暴击区内的结果。
@@ -66,4 +66,28 @@ _Avoid_: 连击数, combo, streak
 
 **FEVER**:
 连击达到阈值后触发的一段限时增益状态，期间所有得分获得倍率加成。
-_Avoid_: 狂热,  frenzy, 爆发, fever mode
+_Avoid_: 狂热, frenzy, 爆发, fever mode
+
+**最高分 (Best)**:
+跨局保留的个人最好成绩，存放在 `localStorage["dualrail_best"]`，只在本局分数更高时才覆盖。
+_Avoid_: 最好成绩, 最佳纪录, best score, high score
+
+## 已知用词偏差
+
+上面的条目给出**规范词**；本节只**记录现状** —— 下列词汇在当前代码与界面文案里仍在使用，
+与规范词不一致。全部为旧版 `source.html` 原文照搬，**不是本次重构引入的**，
+但它们会让人误以为存在第三套叫法，所以记在这里。
+
+| 实际用词 | 应为 | 出现位置 | 是否玩家可见 |
+| --- | --- | --- | --- |
+| 打击点 | 判定区 | 战场标签（`battlefield/canvas2d/hit-zone.ts`、`battlefield/pixi/hit-zone.ts`）、开始界面图例（`app/screens/StartScreen.tsx`） | **是** |
+| 判定框 | 判定区 | 开始界面的长按说明（`app/screens/StartScreen.tsx`）、刷怪提示（`game/rules/spawn.ts`） | **是** |
+| 光门 | 判定区 | 开始界面的玩法说明（`app/screens/StartScreen.tsx`） | **是** |
+| 长按敌人 | 长按怪 | 刷怪提示（`game/rules/spawn.ts`） | **是** |
+| 判定圈 | 判定区 | 规则层与渲染层的注释 | 否（内部注释） |
+| 出招 | 出刀 | 规则层类型与注释（`ATTACK_DUR`、`attackT`） | 否（内部标识符与注释） |
+| frenzy | FEVER | 内部标识符（`frenzyActive`、`FRENZY_LANE`、`frenzy.ts`） | 否（内部标识符） |
+| player | 角色 | 内部标识符（`playerX`、`playerR`、`player.ts`） | 否（内部标识符） |
+
+前四条是**玩家可见**的文案偏差，属于待清理项；后四条只出现在内部标识符与注释里，
+不影响玩家，但会污染检索。清理它们会改动产品代码，需另开票处理。
