@@ -243,7 +243,7 @@ describe('长按怪结算', () => {
       nextFeverAt: 60,
     });
 
-    const { state: next } = longPenalty(state, 1, '长按不足 3 秒');
+    const { state: next } = longPenalty(state, 1, '长按不足 2 秒');
 
     expect(next.combo).toBe(0);
     expect(next.frenzyActive).toBe(false);
@@ -258,7 +258,7 @@ describe('长按怪结算', () => {
     expect(long.removed).toBe(false); // 还没滑出屏幕，仍在场上
   });
 
-  it('按住不足 3 秒 → failLong', () => {
+  it('按住不足 2 秒 → failLong', () => {
     const state = makeState({ monsters: [holdMonster()] });
 
     const { state: next } = failLong(state, 1);

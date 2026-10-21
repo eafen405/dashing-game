@@ -56,7 +56,7 @@ export function StartScreen(props: StartScreenProps): JSX.Element {
         </span>
         <br />
         <span style={{ color: '#a6ff5e' }}>
-          长按：等头部进判定框时点击起手，按住 3 秒贯穿，头 / 1s / 尾各 +200。
+          长按：等头部进判定框时点击起手，按住 2 秒贯穿，头 / 1s / 尾各 +200。
           <br />
           错过时机或中途松手：COMBO 清零，不扣血。
         </span>

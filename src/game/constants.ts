@@ -38,8 +38,8 @@ export const PAIR_CRIT_GAIN = 1000; // 两轨都打进暴击区 1000 分
 export const PAIR_WINDOW = 0.18; // 两轨命中的时间窗（秒）
 export const PAIR_COLOR = '#ff5ecb';
 
-// 长按敌人：头部进入判定圈时点击起手，再按住该轨 3 秒贯穿
-export const LONG_HOLD_TIME = 3; // 需要连续按住的时间（秒）
+// 长按敌人：头部进入判定圈时点击起手，再按住该轨 2 秒贯穿
+export const LONG_HOLD_TIME = 2; // 需要连续按住的时间（秒）
 export const LONG_WAIT = 6; // 长按被暂停/切后台中断后，重新按住的宽限（秒）
 export const LONG_HEAD_GAIN = 200; // 击中头部 +200
 export const LONG_1S_GAIN = 200; // 按住满 1 秒 +200

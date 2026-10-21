@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TOP_AIR_TIME } from '../constants';
+import { LONG_HOLD_TIME, TOP_AIR_TIME } from '../constants';
 import { createRng } from '../rng';
 import { strike } from '../rules/strike';
 import { tick } from '../rules/tick';
@@ -63,7 +63,7 @@ describe('主推进', () => {
     expect(next.monsters).toHaveLength(0);
   });
 
-  it('长按怪按住满 3 秒后贯穿完成', () => {
+  it('长按怪按住满 2 秒后贯穿完成', () => {
     const held = makeState({
       monsters: [holdMonster({ anchored: true, holding: true, headAwarded: true })],
       holdMonsterId: 1,
@@ -79,6 +79,25 @@ describe('主推进', () => {
     expect(state.kills).toBe(1);
     expect(state.combo).toBe(1);
     expect(state.normalCount).toBe(1);
+  });
+
+  it('长按贯穿需要满 2 秒：1.95 秒未完成，2 秒完成', () => {
+    const held = makeState({
+      monsters: [holdMonster({ anchored: true, holding: true, headAwarded: true })],
+      holdMonsterId: 1,
+      holdInputId: 'p1',
+    });
+
+    let state = held;
+    for (let t = 0; t < LONG_HOLD_TIME - 0.05 - 1e-9; t += 0.05) {
+      state = tick(state, 0.05, createRng(1)).state;
+    }
+    expect(state.kills).toBe(0);
+    expect(state.holdMonsterId).toBe(1);
+
+    state = tick(state, 0.05, createRng(1)).state;
+    expect(state.kills).toBe(1);
+    expect(state.holdMonsterId).toBeNull();
   });
 
   it('长按怪按住满 1 秒发放中间得分，但不加连击', () => {

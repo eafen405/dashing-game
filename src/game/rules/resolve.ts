@@ -522,7 +522,7 @@ export function longPenalty(
   return { state: s, effects };
 }
 
-/** 按住不足 3 秒 —— `source.html:1147-1150`。 */
+/** 按住不足 2 秒 —— `source.html:1147-1150`。 */
 export function failLong(
   state: GameState,
   monsterId: number,
