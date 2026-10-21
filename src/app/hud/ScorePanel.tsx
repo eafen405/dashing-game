@@ -17,11 +17,7 @@ export interface ScorePanelProps {
 }
 
 /** 分数 + 最高分。 */
-export function ScorePanel({
-  score,
-  best,
-  frenzyActive,
-}: ScorePanelProps): ReactElement {
+export function ScorePanel({ score, best, frenzyActive }: ScorePanelProps): ReactElement {
   return (
     <>
       <div className="stat">

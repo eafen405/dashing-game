@@ -272,8 +272,7 @@ export class PlayerView {
     ctx.stroke();
 
     const eyeA = 0.75 + 0.25 * Math.sin(fc.vt * 4.2);
-    ctx.fillStyle =
-      (fc.hp / MAX_HP <= 0.3 ? 'rgba(255,77,109,' : 'rgba(120,240,255,') + eyeA + ')';
+    ctx.fillStyle = (fc.hp / MAX_HP <= 0.3 ? 'rgba(255,77,109,' : 'rgba(120,240,255,') + eyeA + ')';
     ctx.globalAlpha = 0.3;
     roundRectPath(ctx, -s * 0.2, -s * 0.98, s * 0.48, s * 0.24, s * 0.09);
     ctx.fill();

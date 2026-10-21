@@ -52,9 +52,7 @@ describe('表现层状态 · 效果事件', () => {
   it('粒子事件也受 260 上限约束', () => {
     const state = new PresentationState();
 
-    state.applyEffects([
-      { type: 'burst', x: 0, y: 0, color: '#fff', count: 1000, power: 1 },
-    ]);
+    state.applyEffects([{ type: 'burst', x: 0, y: 0, color: '#fff', count: 1000, power: 1 }]);
 
     expect(state.effects.particles).toHaveLength(MAX_PARTICLES);
   });

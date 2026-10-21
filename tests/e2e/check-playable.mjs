@@ -70,19 +70,19 @@ try {
   console.log('── 1. 打开产物 ──');
   await page.goto(pathToFileURL(DIST).href, { waitUntil: 'load' });
   await page.waitForSelector('.canvas-host canvas', { timeout: 20_000 });
-  assert(await page.locator('.overlay .tap-hint').count() > 0, '开始界面在');
-  assert(await page.locator('.hud .hp-bar').count() > 0, 'HUD 在');
+  assert((await page.locator('.overlay .tap-hint').count()) > 0, '开始界面在');
+  assert((await page.locator('.hud .hp-bar').count()) > 0, 'HUD 在');
 
   console.log('── 2. 点击舞台开始 ──');
   // 点标题（不是难度选择区 —— 难度区带 `data-no-strike`，点击它不该开始游戏）
   await page.mouse.click(640, 228);
   await page.waitForTimeout(300);
-  assert(await page.locator('.overlay .tap-hint').count() === 0, '开始界面消失（游戏已开始）');
+  assert((await page.locator('.overlay .tap-hint').count()) === 0, '开始界面消失（游戏已开始）');
 
   console.log('── 3. 点击上半屏出刀 ──');
   await page.mouse.click(900, 200);
   await page.waitForTimeout(120);
-  assert(await page.locator('.lane-top.hit').count() > 0, '上轨出现受击高亮（输入打通规则层）');
+  assert((await page.locator('.lane-top.hit').count()) > 0, '上轨出现受击高亮（输入打通规则层）');
   await page.screenshot({ path: join(SHOTS, '04b-playing.png') });
 
   console.log('── 4. 规则层在推进（等漏怪掉血）──');
@@ -94,7 +94,7 @@ try {
   await page.setViewportSize({ width: 500, height: 800 });
   await page.evaluate(() => globalThis.dispatchEvent(new globalThis.Event('orientationchange')));
   await page.waitForTimeout(400);
-  assert(await page.locator('.pause-card').count() > 0, '暂停界面出现（竖屏自动暂停）');
+  assert((await page.locator('.pause-card').count()) > 0, '暂停界面出现（竖屏自动暂停）');
   assert(await page.locator('.rotate').isVisible(), '竖屏提示可见');
   await page.screenshot({ path: join(SHOTS, '04b-portrait-paused.png') });
 
@@ -102,10 +102,13 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => globalThis.dispatchEvent(new globalThis.Event('orientationchange')));
   await page.waitForTimeout(400);
-  assert(await page.locator('.pause-card').count() === 0, '暂停界面消失（自动恢复）');
+  assert((await page.locator('.pause-card').count()) === 0, '暂停界面消失（自动恢复）');
   await page.screenshot({ path: join(SHOTS, '04b-resumed.png') });
 
-  assert(pageErrors.length === 0, `无页面异常${pageErrors.length ? '：' + pageErrors.join(' | ') : ''}`);
+  assert(
+    pageErrors.length === 0,
+    `无页面异常${pageErrors.length ? '：' + pageErrors.join(' | ') : ''}`,
+  );
 
   console.log(`\n✓ 端到端检查通过，截图 → ${SHOTS}`);
 } catch (err) {

@@ -47,12 +47,11 @@ export interface OrientationOptions {
  * 三重兜底：媒体查询 → 宽高比 → `screen.orientation.type`。
  */
 export function detectLandscape(win: Window): boolean {
-  const mq = typeof win.matchMedia === 'function' ? win.matchMedia('(orientation: landscape)') : null;
+  const mq =
+    typeof win.matchMedia === 'function' ? win.matchMedia('(orientation: landscape)') : null;
   const orientationType = win.screen?.orientation?.type ?? '';
   return (
-    (mq?.matches ?? false) ||
-    win.innerWidth > win.innerHeight ||
-    /landscape/i.test(orientationType)
+    (mq?.matches ?? false) || win.innerWidth > win.innerHeight || /landscape/i.test(orientationType)
   );
 }
 
@@ -92,7 +91,8 @@ export function attachOrientationWatcher(options: OrientationOptions): () => voi
     if (doc?.hidden && isRunning()) pause();
   };
 
-  const mq = typeof win.matchMedia === 'function' ? win.matchMedia('(orientation: landscape)') : null;
+  const mq =
+    typeof win.matchMedia === 'function' ? win.matchMedia('(orientation: landscape)') : null;
 
   win.addEventListener('orientationchange', update);
   win.addEventListener('resize', update);

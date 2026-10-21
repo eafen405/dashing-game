@@ -18,11 +18,7 @@ export interface PauseScreenProps {
 }
 
 /** 暂停界面。 */
-export function PauseScreen({
-  onResume,
-  onRestart,
-  onQuitToHome,
-}: PauseScreenProps): ReactElement {
+export function PauseScreen({ onResume, onRestart, onQuitToHome }: PauseScreenProps): ReactElement {
   return (
     <div className="overlay" data-no-strike="">
       <div className="pause-card">
