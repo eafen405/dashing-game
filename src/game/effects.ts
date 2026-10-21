@@ -15,7 +15,7 @@ import type { Lane } from './types';
  *
  * - `burst` —— 旧 `burst(x, y, color, n, power)`
  * - `ring` —— 旧 `rings.push({ x, y, t, life, r0, r1, color })`（`t` 是年龄，属表现层）
- * - `slash` —— 旧 `slashes.push({ x, x0, y, t, life, lane })`
+ * - `impact` —— 木棍命中点火花（旧 `slashes` 通道；不再有飞行刀光）
  * - `floater` —— 旧 `addFloater(x, y, text, color)`
  * - `toast` —— 旧 `showToast(text, color)`
  * - `lane-flash` —— 旧 `laneTop/laneBot.classList.add("hit")`（轨道受击高亮）
@@ -33,7 +33,7 @@ import type { Lane } from './types';
 export type Effect =
   | { type: 'burst'; x: number; y: number; color: string; count: number; power: number }
   | { type: 'ring'; x: number; y: number; life: number; r0: number; r1: number; color: string }
-  | { type: 'slash'; x: number; x0: number; y: number; life: number; lane: Lane }
+  | { type: 'impact'; x: number; y: number; life: number; lane: Lane }
   | { type: 'floater'; x: number; y: number; text: string; color: string }
   | { type: 'toast'; text: string; color: string }
   | { type: 'lane-flash'; lane: Lane }

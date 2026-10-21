@@ -8,7 +8,7 @@
  *      ▲ 只读快照
  * 规则层 game/   纯函数 tick(state,dt,rng)    60fps，无 DOM / 无 Pixi
  *      ▲ 事件
- * 表现层         particles / slashes / rings / floaters / shake    60fps，可变
+ * 表现层         particles / impacts / rings / floaters / shake    60fps，可变
  *      ▲ FrameView
  * 战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现   60fps
  * ```
@@ -29,8 +29,8 @@ import type { Lane, Layout, Monster, Phase } from '../game/types';
 export interface Effects {
   /** 粒子（旧 `particles`）。上限 260。 */
   readonly particles: readonly Particle[];
-  /** 刀光（旧 `slashes`）。 */
-  readonly slashes: readonly Slash[];
+  /** 命中点火花（旧 `slashes` 通道）。 */
+  readonly impacts: readonly Impact[];
   /** 冲击环（旧 `rings`）。 */
   readonly rings: readonly Ring[];
   /** 飘分文字（旧 `floaters`）。 */
@@ -51,12 +51,10 @@ export interface Particle {
   color: string;
 }
 
-/** 一道刀光（旧 `slashes.push({...})`）。 */
-export interface Slash {
+/** 一次命中火花。 */
+export interface Impact {
   /** 打击点 x。 */
   x: number;
-  /** 起点 x（角色身前）。 */
-  x0: number;
   y: number;
   /** 已存活时间（秒）。 */
   t: number;
@@ -156,7 +154,7 @@ export interface FrameView {
 
   // ---- 表现层可变状态 ----
 
-  /** 粒子 / 刀光 / 冲击环 / 飘字。 */
+  /** 粒子 / 命中火花 / 冲击环 / 飘字。 */
   readonly effects: Effects;
   /** 当前屏幕震动强度（0 = 无震动）。 */
   readonly shake: number;

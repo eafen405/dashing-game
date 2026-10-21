@@ -1,9 +1,9 @@
 /**
- * 表现层效果池 —— 粒子 / 刀光 / 冲击环 / 飘字。
+ * 表现层效果池 —— 粒子 / 命中火花 / 冲击环 / 飘字。
  *
  * 分层依据 ADR-0003「规则层不可变、表现层可变」：规则层只产出**效果事件**
  * （`src/game/effects.ts` 的 `Effect[]`），表现层决定「怎么画」——
- * 这里的可变状态（粒子 / 刀光 / 环 / 飘字）是**池化**的，渲染层只读。
+ * 这里的可变状态（粒子 / 命中火花 / 环 / 飘字）是**池化**的，渲染层只读。
  *
  * 三条硬约束（ADR-0004 · 性能靠构造，不靠基准）：
  *
@@ -20,7 +20,7 @@
  * 两者互不干扰（`src/game/**` 之外的代码不受 `Math.random()` 禁令约束）。
  */
 
-import type { Effects, Floater, Particle, Ring, Slash } from '../battlefield/types';
+import type { Effects, Floater, Impact, Particle, Ring } from '../battlefield/types';
 import type { Lane } from '../game/types';
 
 /** 粒子上限（与旧实现一致：`source.html:1258`）。 */
@@ -122,12 +122,12 @@ function advanceParticle(p: Particle, dt: number): boolean {
   return true;
 }
 
-function createSlash(): Slash {
-  return { x: 0, x0: 0, y: 0, t: 0, life: 0, lane: 'top' };
+function createImpact(): Impact {
+  return { x: 0, y: 0, t: 0, life: 0, lane: 'top' };
 }
 
-/** 刀光只推进年龄 —— 旧 `updateSlashes`（`source.html:1426-1431`）。 */
-function advanceSlash(s: Slash): boolean {
+/** 命中火花只推进年龄。 */
+function advanceImpact(s: Impact): boolean {
   return s.t < s.life;
 }
 
@@ -155,12 +155,12 @@ function advanceFloater(f: Floater, dt: number): boolean {
 /**
  * 效果池。
  *
- * 渲染层通过 `particles` / `slashes` / `rings` / `floaters` 四个只读数组读画面；
- * 上层（会话层）通过 `burst` / `addSlash` / `addRing` / `addFloater` 产生效果。
+ * 渲染层通过 `particles` / `impacts` / `rings` / `floaters` 四个只读数组读画面；
+ * 上层（会话层）通过 `burst` / `addImpact` / `addRing` / `addFloater` 产生效果。
  */
 export class EffectsPool implements Effects {
   private readonly particlePool = new TimedPool<Particle>(createParticle, advanceParticle);
-  private readonly slashPool = new TimedPool<Slash>(createSlash, advanceSlash);
+  private readonly impactPool = new TimedPool<Impact>(createImpact, advanceImpact);
   private readonly ringPool = new TimedPool<Ring>(createRing, advanceRing);
   private readonly floaterPool = new TimedPool<Floater>(createFloater, advanceFloater);
 
@@ -168,9 +168,9 @@ export class EffectsPool implements Effects {
   get particles(): readonly Particle[] {
     return this.particlePool.items;
   }
-  /** 活跃刀光。 */
-  get slashes(): readonly Slash[] {
-    return this.slashPool.items;
+  /** 活跃命中火花。 */
+  get impacts(): readonly Impact[] {
+    return this.impactPool.items;
   }
   /** 活跃冲击环。 */
   get rings(): readonly Ring[] {
@@ -231,11 +231,10 @@ export class EffectsPool implements Effects {
     p.color = color;
   }
 
-  /** 加一道刀光 —— 旧 `slashes.push({...})`（`source.html:2343` 之前的产生点）。 */
-  addSlash(x: number, x0: number, y: number, life: number, lane: Lane): void {
-    const s = this.slashPool.take();
+  /** 加一次命中火花 —— 就在打击点原地炸开。 */
+  addImpact(x: number, y: number, life: number, lane: Lane): void {
+    const s = this.impactPool.take();
     s.x = x;
-    s.x0 = x0;
     s.y = y;
     s.t = 0;
     s.life = life;
@@ -269,7 +268,7 @@ export class EffectsPool implements Effects {
   /** 推进一帧（所有池一起）。 */
   step(dt: number): void {
     this.particlePool.step(dt);
-    this.slashPool.step(dt);
+    this.impactPool.step(dt);
     this.ringPool.step(dt);
     this.floaterPool.step(dt);
   }
@@ -277,7 +276,7 @@ export class EffectsPool implements Effects {
   /** 清空所有效果。 */
   clear(): void {
     this.particlePool.clear();
-    this.slashPool.clear();
+    this.impactPool.clear();
     this.ringPool.clear();
     this.floaterPool.clear();
   }

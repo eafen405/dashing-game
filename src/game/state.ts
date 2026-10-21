@@ -13,7 +13,7 @@
  * **不在规则层的东西**：
  *   - `best`（跨局最高分）—— 属于 HUD / 持久化层，`resetGame()` 本来也不重置它
  *   - `difficulty` —— 由 `now` 推导（`difficultyAt(now)`），不需要独立字段
- *   - `vt`（视觉时钟）/ 粒子 / 刀光 / 冲击环 / 飘字 / 震动 —— 表现层
+ *   - `vt`（视觉时钟）/ 粒子 / 命中火花 / 冲击环 / 飘字 / 震动 —— 表现层
  */
 
 import { FEVER_COMBO, MAX_HP } from './constants';

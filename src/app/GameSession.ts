@@ -317,7 +317,7 @@ export class GameSession {
       this.stepRules(dt);
     }
 
-    // 暂停时粒子 / 环 / 刀光 / 飘字仍继续衰减（照抄旧实现）
+    // 暂停时粒子 / 环 / 命中火花 / 飘字仍继续衰减（照抄旧实现）
     this.presentation.step(dt);
     if (this.state.phase === 'running' && this.state.frenzyActive) this.emitFrenzy(dt);
 

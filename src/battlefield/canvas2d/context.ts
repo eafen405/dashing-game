@@ -14,7 +14,7 @@ import type { Effects } from '../types';
 /** 空效果集（没有效果时的占位）。 */
 export const EMPTY_EFFECTS: Effects = {
   particles: [],
-  slashes: [],
+  impacts: [],
   rings: [],
   floaters: [],
 };
@@ -61,7 +61,7 @@ export class FrameContext {
   holdMonster: HoldMonster | null = null;
   /** 在场怪物（渲染层只读）。 */
   monsters: readonly Monster[] = [];
-  /** 粒子 / 刀光 / 冲击环 / 飘字。 */
+  /** 粒子 / 命中火花 / 冲击环 / 飘字。 */
   effects: Effects = EMPTY_EFFECTS;
   /** 该轨上是否有**未完成的长按怪**（旧 `source.html:1633` 的 `monsters.some`）。 */
   readonly longInLane: { top: boolean; bottom: boolean } = { top: false, bottom: false };

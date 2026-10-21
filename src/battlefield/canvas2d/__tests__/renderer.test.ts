@@ -84,7 +84,7 @@ function holdMonster(overrides: Partial<HoldMonster> = {}): HoldMonster {
   };
 }
 
-const NO_EFFECTS: Effects = { particles: [], slashes: [], rings: [], floaters: [] };
+const NO_EFFECTS: Effects = { particles: [], impacts: [], rings: [], floaters: [] };
 
 function frame(overrides: Partial<FrameView> = {}): FrameView {
   return {

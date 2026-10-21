@@ -4,7 +4,7 @@
  * 布局固定为 900 × 500（DPR 1），对应旧实现「以 900 宽为基准」的设计：
  *   laneY.top = 140   laneY.bottom = 360
  *   playerR   = 46    playerX      = 106.3
- *   hitX      = 345.9 hitW         = 63
+ *   hitX      = 247.52 hitW        = 63
  *   zoneHalf  = 58.5  critHalf     = 29.25
  */
 
@@ -30,7 +30,7 @@ export function normalMonster(overrides: Partial<NormalMonster> = {}): NormalMon
     kind: 'normal',
     id: 1,
     lane: 'top',
-    x: 385.9,
+    x: LAYOUT.hitX + 40,
     y: 140,
     vx: -165,
     sf: 1,
@@ -49,7 +49,7 @@ export function holdMonster(overrides: Partial<HoldMonster> = {}): HoldMonster {
     kind: 'hold',
     id: 1,
     lane: 'top',
-    x: 300,
+    x: LAYOUT.hitX - 40,
     y: 140,
     len: 234,
     w: 234,
@@ -75,7 +75,7 @@ export function twinPair(overrides: Partial<TwinMonster> = {}): [TwinMonster, Tw
     kind: 'twin',
     id: 1,
     lane: 'top',
-    x: 385.9,
+    x: LAYOUT.hitX + 40,
     y: 140,
     vx: -165,
     sf: 1,

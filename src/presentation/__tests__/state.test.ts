@@ -38,13 +38,13 @@ describe('表现层状态 · 效果事件', () => {
 
     const events: Effect[] = [
       { type: 'ring', x: 1, y: 2, life: 0.3, r0: 5, r1: 28, color: '#a6ff5e' },
-      { type: 'slash', x: 3, x0: 4, y: 5, life: 0.25, lane: 'top' },
+      { type: 'impact', x: 3, y: 5, life: 0.25, lane: 'top' },
       { type: 'floater', x: 6, y: 7, text: '+700', color: '#ff5ecb' },
     ];
     state.applyEffects(events);
 
     expect(state.effects.rings).toHaveLength(1);
-    expect(state.effects.slashes).toHaveLength(1);
+    expect(state.effects.impacts).toHaveLength(1);
     expect(state.effects.floaters).toHaveLength(1);
     expect(state.effects.floaters[0]?.text).toBe('+700');
   });

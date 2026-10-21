@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { pressLane, strike } from '../rules/strike';
-import { holdMonster, makeState, normalMonster, twinPair } from './fixtures';
+import { LAYOUT, holdMonster, makeState, normalMonster, twinPair } from './fixtures';
 
 /** 判定区中心（hitX）。 */
-const HIT_X = 345.9;
+const HIT_X = LAYOUT.hitX;
 
 describe('出刀', () => {
   it('命中判定区内的普通怪：普攻 200 分，连击 +1', () => {

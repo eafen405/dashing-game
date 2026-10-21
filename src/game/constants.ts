@@ -50,6 +50,18 @@ export const LONG_ESCAPE_SPEED = 980;
 // FEVER 时两轨仍保留区分度：上轨亮金、下轨琥珀金
 export const FRENZY_LANE: Record<Lane, string> = { top: '#ffd24a', bottom: '#ff9a2e' };
 
+/**
+ * 木棍几何（单位：角色半径 playerR）。
+ *
+ * 判定框中心和棒尖共用这一组常量：打击点就落在棒子真的够得到的地方，
+ * 不再靠飞出去的刀光去够远处的怪。
+ */
+export const CLUB_PIVOT_X_R = 0.1; // 握棒支点相对角色中心
+export const CLUB_GRIP_R = 0.42; // 支点到握把
+export const CLUB_LEN_R = 2.55; // 握把到棒尖
+/** 角色中心到棒尖的最大水平距离。 */
+export const CLUB_REACH_R = CLUB_PIVOT_X_R + CLUB_GRIP_R + CLUB_LEN_R;
+
 export const SPEED_BASE = 165; // 初始移速 px/s（900 基准宽）
 export const SPEED_MAX = 300; // 移速上限（到达后不再增加）
 export const SPEED_RAMP = 75; // 用多少秒平滑升到上限

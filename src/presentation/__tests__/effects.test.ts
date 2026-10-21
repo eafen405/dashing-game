@@ -76,18 +76,18 @@ describe('效果池 · 产生', () => {
     expect(pool.particles).toHaveLength(MAX_PARTICLES);
   });
 
-  it('飘字 / 刀光 / 冲击环按旧实现的默认值产生', () => {
+  it('飘字 / 命中火花 / 冲击环按旧实现的默认值产生', () => {
     const pool = new EffectsPool();
 
     pool.addFloater(12, 34, '+200', '#a6ff5e');
-    pool.addSlash(100, 60, 140, 0.25, 'top');
+    pool.addImpact(100, 140, 0.25, 'top');
     pool.addRing(200, 140, 0.3, 5, 28, '#a6ff5e');
 
     const f = first(pool.floaters);
     expect(f).toMatchObject({ x: 12, y: 34, text: '+200', color: '#a6ff5e', t: 0 });
     expect(f.life).toBeCloseTo(0.95, 10);
     expect(f.vy).toBeCloseTo(-46, 10);
-    expect(pool.slashes[0]).toMatchObject({ x: 100, x0: 60, y: 140, lane: 'top', t: 0 });
+    expect(pool.impacts[0]).toMatchObject({ x: 100, y: 140, lane: 'top', t: 0 });
     expect(pool.rings[0]).toMatchObject({ x: 200, y: 140, r0: 5, r1: 28, color: '#a6ff5e', t: 0 });
   });
 });
@@ -125,15 +125,15 @@ describe('效果池 · 推进', () => {
     expect(pool.floaters[0]?.vy).toBeCloseTo(-46 * Math.pow(0.2, dt), 10);
   });
 
-  it('刀光与冲击环只推进年龄，不改其他字段', () => {
+  it('命中火花与冲击环只推进年龄，不改其他字段', () => {
     const pool = new EffectsPool();
-    pool.addSlash(100, 60, 140, 0.25, 'top');
+    pool.addImpact(100, 140, 0.25, 'top');
     pool.addRing(200, 140, 0.3, 5, 28, '#a6ff5e');
 
     pool.step(0.1);
 
-    expect(pool.slashes[0]).toMatchObject({ x: 100, x0: 60, y: 140, lane: 'top' });
-    expect(pool.slashes[0]?.t).toBeCloseTo(0.1, 10);
+    expect(pool.impacts[0]).toMatchObject({ x: 100, y: 140, lane: 'top' });
+    expect(pool.impacts[0]?.t).toBeCloseTo(0.1, 10);
     expect(pool.rings[0]).toMatchObject({ x: 200, y: 140, r0: 5, r1: 28 });
     expect(pool.rings[0]?.t).toBeCloseTo(0.1, 10);
   });
@@ -183,16 +183,16 @@ describe('效果池 · 回收', () => {
     expect(pool.particles[0]).toMatchObject({ x: 5, y: 5, color: '#0f0', t: 0 });
   });
 
-  it('刀光 / 冲击环 / 飘字到期后被回收', () => {
+  it('命中火花 / 冲击环 / 飘字到期后被回收', () => {
     const pool = new EffectsPool();
-    pool.addSlash(0, 0, 0, 0.1, 'top');
+    pool.addImpact(0, 0, 0.1, 'top');
     pool.addRing(0, 0, 0.1, 1, 2, '#fff');
     pool.addFloater(0, 0, 'x', '#fff');
 
     // 飘字的默认寿命是 0.95 秒（旧 addFloater），所以推进 1 秒
     pool.step(1);
 
-    expect(pool.slashes).toHaveLength(0);
+    expect(pool.impacts).toHaveLength(0);
     expect(pool.rings).toHaveLength(0);
     expect(pool.floaters).toHaveLength(0);
   });

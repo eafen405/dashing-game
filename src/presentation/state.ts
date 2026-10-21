@@ -8,7 +8,7 @@
  * ```
  *
  * 规则层只描述「发生了什么」（`src/game/effects.ts` 的 `Effect`），
- * 这里决定「怎么表现」：加粒子、加环、加刀光、加飘字、改震动、闪红。
+ * 这里决定「怎么表现」：加粒子、加环、加命中火花、加飘字、改震动、闪红。
  *
  * 少数事件（`toast` / `lane-flash` / `vibrate` / `hurt` / `fever-*` / `game-over`）
  * 是**上层（会话层 / HUD 层）**的事，本层不处理，通过 `EffectSink` 钩子转交。
@@ -51,7 +51,7 @@ export const PAIR_SMASH_DUR = 0.62;
  * （`effects` / `shake` / `playerFlash` / `pairSmash`）。
  */
 export class PresentationState {
-  /** 粒子 / 刀光 / 冲击环 / 飘字。 */
+  /** 粒子 / 命中火花 / 冲击环 / 飘字。 */
   readonly effects = new EffectsPool();
   /** 屏幕震动强度。 */
   readonly shake = new ShakeState();
@@ -80,8 +80,8 @@ export class PresentationState {
         case 'ring':
           this.effects.addRing(e.x, e.y, e.life, e.r0, e.r1, e.color);
           break;
-        case 'slash':
-          this.effects.addSlash(e.x, e.x0, e.y, e.life, e.lane);
+        case 'impact':
+          this.effects.addImpact(e.x, e.y, e.life, e.lane);
           break;
         case 'floater':
           this.effects.addFloater(e.x, e.y, e.text, e.color);
@@ -132,11 +132,11 @@ export class PresentationState {
    * 推进一帧。
    *
    * 衰减口径逐字照抄旧实现：
-   * - 粒子 / 环 / 刀光 / 飘字：`source.html:1378-1381` 与 `1405-1408`
+   * - 粒子 / 环 / 命中火花 / 飘字：`source.html:1378-1381` 与 `1405-1408`
    * - 角色红闪：`playerFlash = Math.max(0, playerFlash - dt*2.4)`（`source.html:1388`）
    * - 震动：`shake *= Math.pow(0.001, dt)`，`< 0.2` 归零（`source.html:1389-1390`）
    *
-   * 注意旧代码在 **paused 状态下粒子/环/刀光/飘字仍继续衰减**
+   * 注意旧代码在 **paused 状态下粒子/环/命中火花/飘字仍继续衰减**
    * （`stepVisualOnly`，`source.html:1400-1411`）—— 这里也是照抄的，
    * 暂停与否由上层决定要不要调用 `step()`。
    */

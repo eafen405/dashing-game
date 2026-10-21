@@ -8,18 +8,21 @@
  *     把在场怪物的尺寸重新贴合轨道
  */
 
+import { CLUB_REACH_R } from './constants';
 import { clamp } from './math';
 import type { Layout, Monster } from './types';
 
 /**
  * 计算战场布局（纯函数）。
  *
- * **已知差异 D2**（`legacy-semantics.md` §8）：旧实现里 `hitX` 在 `playerX`
- * **之前**算出来（`source.html:555` 用到 `560` 行才算出的 `playerX`），
- * 所以首次 `resize()` 时 `playerX` 恒为 0，`hitX` 会少算一段；
- * 第二次起 `hitX` 用的是**上一次**的 `playerX`。
- * 纯函数化后按**正确顺序**重算：`playerR → playerX → hitX → hitW →
- * zoneHalf → critHalf`，因此 `hitX` 与 `playerX` 始终自洽。
+ * `playerX` 必须排在 `hitX` 之前：判定框中心挂在棒尖上
+ * （`playerX + playerR * CLUB_REACH_R`），棒子多长，框就多远。
+ * 旧实现的 `hitX` 是「屏幕宽度 34%」的固定远景，木棍根本够不到，
+ * 现在不再沿用那套几何。
+ *
+ * 旧实现首次 `resize()` 时 `playerX` 恒为 0 的顺序 bug（D2）在这里也不存在：
+ * 所有依赖都按 `playerR → playerX → hitW → zoneHalf → critHalf → hitX`
+ * 的顺序从同一组入参算出来。
  */
 export function computeLayout(width: number, height: number, dpr: number): Layout {
   const laneY = {
@@ -29,12 +32,12 @@ export function computeLayout(width: number, height: number, dpr: number): Layou
 
   const playerR = clamp(height * 0.115, 22, 46);
   const playerX = Math.max(clamp(width * 0.085, 48, 120), playerR * 2.05 + 12);
-  // 依赖 playerX，所以必须排在 playerX 之后（旧代码这里是顺序 bug，见上方 D2 说明）
-  const hitX = Math.max(clamp(width * 0.34, 150, 430), playerX + playerR * 2.6 + 120);
   const hitW = clamp(width * 0.07, 58, 100);
   // 暴击区半宽 = 外圈半宽的一半：判定落在中心区间的概率约 50%
   const zoneHalf = hitW * 0.5 + clamp(width * 0.03, 16, 44);
   const critHalf = zoneHalf * 0.5;
+  // 判定框中心 = 棒尖：实打实挥棍能碰到的地方才判定
+  const hitX = playerX + playerR * CLUB_REACH_R;
 
   return { width, height, dpr, laneY, playerR, playerX, hitX, hitW, zoneHalf, critHalf };
 }

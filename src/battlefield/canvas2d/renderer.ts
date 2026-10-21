@@ -13,8 +13,8 @@
  * - `resize(layout)` 只做三件事：更新画布尺寸 / DPR / 重建静态图层。
  *
  * **绘制顺序**逐字照抄 `source.html:1466-1477`：
- * 背景 → 轨道 → 判定区 → 防线 → 角色 → 锁链 → 怪物 → 刀光 → 环 → 粒子 → 飘字 → FEVER 洗色。
- * 锁链在怪物**之下**、刀光在怪物**之上**、FEVER 洗色最顶。
+ * 背景 → 轨道 → 判定区 → 防线 → 角色 → 锁链 → 怪物 → 命中火花 → 环 → 粒子 → 飘字 → FEVER 洗色。
+ * 锁链在怪物**之下**、命中火花在怪物**之上**、FEVER 洗色最顶。
  */
 
 import type { Layout, Monster } from '../../game/types';
@@ -33,7 +33,7 @@ import { ParticleView } from './particle';
 import { PlayerView } from './player';
 import { RailsView } from './rails';
 import { RingView } from './ring';
-import { SlashView } from './slash';
+import { ImpactView } from './impact';
 import { TwinView } from './twin';
 
 /** DPR 上限（移动端 3x 屏只按 2x 渲染）—— 旧 `source.html:540`。 */
@@ -59,7 +59,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
   private readonly twin = new TwinView();
   private readonly monster = new MonsterView();
   private readonly holdMonster = new HoldMonsterView();
-  private readonly slash = new SlashView();
+  private readonly impact = new ImpactView();
   private readonly ring = new RingView();
   private readonly particle = new ParticleView();
   private readonly floater = new FloaterView();
@@ -129,7 +129,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     this.player.draw(this.fc);
     this.twin.draw(this.fc);
     this.drawMonsters();
-    this.slash.draw(this.fc);
+    this.impact.draw(this.fc);
     this.ring.draw(this.fc);
     this.particle.draw(this.fc);
     this.floater.draw(this.fc);

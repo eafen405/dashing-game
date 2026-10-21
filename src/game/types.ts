@@ -126,7 +126,7 @@ export type Monster = NormalMonster | TwinMonster | HoldMonster;
 /**
  * 规则层状态 —— 旧实现 45 个可变全局变量收成的**一个**不可变对象。
  *
- * 不含表现层的东西（粒子 / 刀光 / 冲击环 / 飘字 / 屏幕震动 / 角色闪白），
+ * 不含表现层的东西（粒子 / 命中火花 / 冲击环 / 飘字 / 屏幕震动 / 角色闪白），
  * 也不含跨局持久化的 `best`（最高分属于 HUD 层）。
  */
 export interface GameState {

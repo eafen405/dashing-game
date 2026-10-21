@@ -18,9 +18,11 @@
 
 import {
   ATTACK_DUR,
+  CLUB_GRIP_R,
+  CLUB_LEN_R,
+  CLUB_PIVOT_X_R,
   FRENZY_LANE,
   LANE,
-  LONG_COLOR,
   MAX_HP,
   TOP_AIR_TIME,
 } from '../../game/constants';
@@ -305,16 +307,11 @@ export class PlayerView {
       }
     }
 
-    const pivotX = s * 0.1;
+    const pivotX = s * CLUB_PIVOT_X_R;
     const pivotY = -s * 0.26;
-    const gripDist = s * 0.42;
+    const gripDist = s * CLUB_GRIP_R;
     const gripX = pivotX + Math.cos(clubA) * gripDist;
     const gripY = pivotY + Math.sin(clubA) * gripDist;
-
-    /* ---------- 长按冲击波：把「连续击打」连到怪物身上 ---------- */
-    if (hold && hold.holding) {
-      this.drawHoldBeam(fc, s, playerX, fc.layout.laneY[hold.lane], impact);
-    }
 
     /* ---------- FEVER 光环 ---------- */
     if (fc.frenzyActive) this.drawFever(fc, playerX, bodyY, s);
@@ -631,6 +628,7 @@ export class PlayerView {
     laneColor: string,
   ): void {
     const ctx = fc.ctx;
+    const L = s * CLUB_LEN_R;
     ctx.save();
     ctx.translate(gripX, gripY);
     ctx.rotate(angle);
@@ -642,7 +640,7 @@ export class PlayerView {
       ctx.lineWidth = s * 0.34;
       ctx.beginPath();
       ctx.moveTo(s * 0.02, 0);
-      ctx.lineTo(s * 1.18, 0);
+      ctx.lineTo(L * 0.95, 0);
       ctx.stroke();
     }
 
@@ -675,9 +673,9 @@ export class PlayerView {
     ctx.lineWidth = s * 0.025;
     ctx.beginPath();
     ctx.moveTo(s * 0.28, -s * 0.07);
-    ctx.quadraticCurveTo(s * 1.02, -s * 0.13, s * 1.16, -s * 0.06);
-    ctx.quadraticCurveTo(s * 1.24, 0, s * 1.16, s * 0.06);
-    ctx.quadraticCurveTo(s * 1.02, s * 0.13, s * 0.28, s * 0.07);
+    ctx.quadraticCurveTo(L * 0.82, -s * 0.13, L * 0.94, -s * 0.06);
+    ctx.quadraticCurveTo(L, 0, L * 0.94, s * 0.06);
+    ctx.quadraticCurveTo(L * 0.82, s * 0.13, s * 0.28, s * 0.07);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -687,7 +685,7 @@ export class PlayerView {
     ctx.lineWidth = s * 0.025;
     ctx.beginPath();
     ctx.moveTo(s * 0.42, -s * 0.035);
-    ctx.quadraticCurveTo(s * 0.92, -s * 0.075, s * 1.08, -s * 0.035);
+    ctx.quadraticCurveTo(L * 0.74, -s * 0.075, L * 0.87, -s * 0.035);
     ctx.stroke();
 
     // 尾端旋钮
@@ -696,13 +694,13 @@ export class PlayerView {
     ctx.arc(-s * 0.02, 0, s * 0.075, 0, Math.PI * 2);
     ctx.fill();
 
-    // 击打闪光
+    // 击打闪光（棒尖）
     if (impact > 0.02) {
       ctx.fillStyle = hexA(laneColor, 0.35 * impact);
-      starPath(ctx, s * 1.2, 0, s * (0.2 + 0.2 * impact), s * (0.07 + 0.07 * impact));
+      starPath(ctx, L * 0.97, 0, s * (0.2 + 0.2 * impact), s * (0.07 + 0.07 * impact));
       ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,' + 0.9 * impact + ')';
-      starPath(ctx, s * 1.2, 0, s * (0.1 + 0.12 * impact), s * (0.04 + 0.04 * impact));
+      starPath(ctx, L * 0.97, 0, s * (0.1 + 0.12 * impact), s * (0.04 + 0.04 * impact));
       ctx.fill();
     }
 
@@ -725,9 +723,10 @@ export class PlayerView {
 
     ctx.save();
     ctx.lineCap = 'round';
+    const L = s * CLUB_LEN_R;
 
     // 棒端扫过的细弧线
-    const r = gripDist + s * 1.14;
+    const r = gripDist + L;
     ctx.beginPath();
     ctx.arc(pivotX, pivotY, r, from, to, to < from);
     ctx.strokeStyle = hexA(color, 0.32 * strength);
@@ -747,50 +746,14 @@ export class PlayerView {
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(0, -s * 0.05);
-      ctx.quadraticCurveTo(s * 0.62, -s * 0.09, s * 1.2, -s * 0.055);
-      ctx.quadraticCurveTo(s * 1.26, 0, s * 1.2, s * 0.055);
-      ctx.quadraticCurveTo(s * 0.62, s * 0.09, 0, s * 0.05);
+      ctx.quadraticCurveTo(L * 0.5, -s * 0.09, L * 0.94, -s * 0.055);
+      ctx.quadraticCurveTo(L, 0, L * 0.94, s * 0.055);
+      ctx.quadraticCurveTo(L * 0.5, s * 0.09, 0, s * 0.05);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     }
     ctx.restore();
-  }
-
-  /** 长按时的能量冲击带：从角色身前一直连到怪物身上。 */
-  private drawHoldBeam(
-    fc: FrameContext,
-    s: number,
-    fromX: number,
-    laneY: number,
-    strike: number,
-  ): void {
-    const ctx = fc.ctx;
-    const x0 = fromX + s * 0.9;
-    const x1 = fc.layout.hitX + s * 0.9;
-    if (x1 <= x0) return;
-
-    const alpha = 0.12 + 0.5 * strike;
-    const half = s * (0.05 + 0.09 * strike);
-    const grad = ctx.createLinearGradient(x0, laneY, x1, laneY);
-    grad.addColorStop(0, hexA(LONG_COLOR, alpha));
-    grad.addColorStop(0.75, hexA(LONG_COLOR, alpha * 0.6));
-    grad.addColorStop(1, hexA(LONG_COLOR, 0));
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(x0, laneY - half);
-    ctx.lineTo(x1, laneY - half * 0.35);
-    ctx.lineTo(x1, laneY + half * 0.35);
-    ctx.lineTo(x0, laneY + half);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = hexA('#ffffff', 0.35 * strike);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(x0, laneY);
-    ctx.lineTo(x1, laneY);
-    ctx.stroke();
   }
 
   /** FEVER 光环 —— 保留旧版效果。 */

@@ -17,9 +17,9 @@ import {
   resolvePairSolo,
   startHold,
 } from '../rules/resolve';
-import { holdMonster, makeState, normalMonster, twinPair } from './fixtures';
+import { LAYOUT, holdMonster, makeState, normalMonster, twinPair } from './fixtures';
 
-const HIT_X = 345.9;
+const HIT_X = LAYOUT.hitX;
 
 describe('击破普通怪', () => {
   it('普攻 200 分，连击 +1，计入普攻数', () => {

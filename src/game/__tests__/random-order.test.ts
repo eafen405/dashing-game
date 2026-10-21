@@ -53,11 +53,10 @@ function legacyLayout(width: number, height: number) {
   const laneY = { top: height * 0.28, bottom: height * 0.72 };
   const playerR = legacyClamp(height * 0.115, 22, 46);
   const playerX = Math.max(legacyClamp(width * 0.085, 48, 120), playerR * 2.05 + 12);
-  const hitX = Math.max(legacyClamp(width * 0.34, 150, 430), playerX + playerR * 2.6 + 120);
   const hitW = legacyClamp(width * 0.07, 58, 100);
   const zoneHalf = hitW * 0.5 + legacyClamp(width * 0.03, 16, 44);
   const critHalf = zoneHalf * 0.5;
-  return { laneY, playerR, playerX, hitX, hitW, zoneHalf, critHalf };
+  return { laneY, playerR, playerX, hitW, zoneHalf, critHalf };
 }
 
 /* ------------------------------------------------------------------ *
@@ -86,7 +85,7 @@ describe('与旧实现逐点对照', () => {
     }
   });
 
-  it('布局几何在各种分辨率上与旧实现一致（仅 D2 顺序已修正）', () => {
+  it('布局中未改动的几何（轨道 / 角色 / 判定框宽度）与旧实现一致', () => {
     for (const [width, height] of [
       [320, 200],
       [900, 500],
@@ -100,7 +99,6 @@ describe('与旧实现逐点对照', () => {
       expect(actual.laneY.bottom).toBe(expected.laneY.bottom);
       expect(actual.playerR).toBe(expected.playerR);
       expect(actual.playerX).toBe(expected.playerX);
-      expect(actual.hitX).toBe(expected.hitX);
       expect(actual.hitW).toBe(expected.hitW);
       expect(actual.zoneHalf).toBe(expected.zoneHalf);
       expect(actual.critHalf).toBe(expected.critHalf);

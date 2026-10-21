@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { CLUB_REACH_R } from '../constants';
 import { computeLayout, refitMonsters } from '../layout';
 import { holdMonster, normalMonster } from './fixtures';
 
@@ -11,7 +12,7 @@ describe('战场布局', () => {
     expect(layout.laneY.bottom).toBeCloseTo(360, 10);
     expect(layout.playerR).toBeCloseTo(46, 10);
     expect(layout.playerX).toBeCloseTo(106.3, 10);
-    expect(layout.hitX).toBeCloseTo(345.9, 10);
+    expect(layout.hitX).toBeCloseTo(247.52, 10);
     expect(layout.hitW).toBeCloseTo(63, 10);
     expect(layout.zoneHalf).toBeCloseTo(58.5, 10);
     expect(layout.critHalf).toBeCloseTo(29.25, 10);
@@ -23,27 +24,27 @@ describe('战场布局', () => {
     expect(layout.critHalf).toBeCloseTo(layout.zoneHalf * 0.5, 10);
   });
 
-  it('修 Bug D2：hitX 由同一个布局里的 playerX 算出，不依赖上一次 resize', () => {
+  it('判定框中心就是棒尖，且不依赖上一次 resize（D2）', () => {
     const first = computeLayout(900, 500, 1);
     const second = computeLayout(900, 500, 1);
 
     // 旧实现里首次 resize 的 hitX 用的是 playerX = 0，所以两次算出的 hitX 不同。
     // 纯函数化后必须完全一致。
     expect(first.hitX).toBe(second.hitX);
-    expect(first.hitX).toBeCloseTo(first.playerX + first.playerR * 2.6 + 120, 10);
+    expect(first.hitX).toBeCloseTo(first.playerX + first.playerR * CLUB_REACH_R, 10);
   });
 
-  it('窄屏下 hitX 由 playerX 推导（clamp 的下限 150 不会生效）', () => {
+  it('窄屏下判定框同样跟着棒尖走', () => {
     const layout = computeLayout(320, 200, 1);
 
-    // playerR = 23、playerX = 59.15 → 59.15 + 23 * 2.6 + 120 = 238.95
-    expect(layout.hitX).toBeCloseTo(238.95, 10);
+    // playerR = 23、playerX = 59.15 → 59.15 + 23 * 3.07 = 129.76
+    expect(layout.hitX).toBeCloseTo(129.76, 10);
   });
 
-  it('宽屏下 hitX 退回到 clamp(W * 0.34, 150, 430) 的上限', () => {
+  it('宽屏下判定框仍贴着棒尖，不再被屏幕宽度拉远', () => {
     const layout = computeLayout(2560, 1440, 1);
 
-    expect(layout.hitX).toBe(430);
+    expect(layout.hitX).toBeCloseTo(261.22, 10);
   });
 
   it('尺寸变化后长按怪重新贴合轨道并改长度', () => {

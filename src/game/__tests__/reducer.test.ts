@@ -38,7 +38,7 @@ describe('规则层事件归约器', () => {
   });
 
   it('Press 对该轨挥刀', () => {
-    const state = makeState({ monsters: [normalMonster({ x: 385.9 })] });
+    const state = makeState({ monsters: [normalMonster({ x: LAYOUT.hitX + 40 })] });
 
     const { state: next } = reduce(
       state,
