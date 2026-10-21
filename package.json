@@ -12,11 +12,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "node tests/e2e/check-playable.mjs && node tests/e2e/flow-8-steps.mjs && node tests/e2e/input-desktop.mjs && node tests/e2e/portrait-progress.mjs && node tests/e2e/hud-stats.mjs && node tests/e2e/compare-legacy.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "node scripts/verify-single-file.mjs"
+    "verify": "node scripts/verify-single-file.mjs",
+    "trace": "node scripts/trace-gate.mjs"
   },
   "dependencies": {
+    "motion": "^14.5.0",
+    "pixi-filters": "^6.1.5",
     "pixi.js": "^8.22.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

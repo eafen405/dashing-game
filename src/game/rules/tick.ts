@@ -106,7 +106,10 @@ export function tick(
           s = penalized.state;
           effects.push(...penalized.effects);
           const missed = findMonster(s.monsters, m.id);
-          if (missed) moved.push(missed);
+          // 旧实现是「**先移动、再判定漏怪**」（`source.html:1309-1312`）→
+          // 漏怪那一帧怪已经移动过了。这里必须把移动后的 `x` 一起带过去，
+          // 否则逃逸滑出会比旧版晚一帧（golden trace 门禁在 B′ 模式下抓到过这个差异）。
+          if (missed) moved.push({ ...missed, x });
           continue;
         }
         moved.push({ ...m, x });
@@ -192,7 +195,9 @@ export function tick(
     const mateId = m.kind === 'twin' ? m.partnerId : null;
     // 角色默认在下轨地面上；上跳的 1 秒内视为在上轨上方。
     // 另一轨的怪擦身而过，不扣血；双生两轨各有一只，必定撞上角色。
-    const collides = mateId !== null || s.playerLane === null || s.playerLane === m.lane;
+    // `legacyCollision` 仅供 golden trace 对照：旧版没有上下轨，任何轨都扣血。
+    const collides =
+      s.legacyCollision || mateId !== null || s.playerLane === null || s.playerLane === m.lane;
     if (mateId !== null) {
       const mate = findMonster(s.monsters, mateId);
       if (mate && !mate.removed) {

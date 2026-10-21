@@ -8,13 +8,13 @@
  * 只有 `twinLinkCount` 变。
  */
 
-import type { HoldMonster, Lane, Layout, Monster, Phase, TwinMonster } from '../../game/types';
+import type { Lane, Layout, Monster, TwinMonster } from '../../game/types';
 import type { Effects } from '../types';
 
 /** 空效果集（没有效果时的占位）。 */
 export const EMPTY_EFFECTS: Effects = {
   particles: [],
-  impacts: [],
+  slashes: [],
   rings: [],
   floaters: [],
 };
@@ -35,12 +35,6 @@ export class FrameContext {
   layout!: Layout;
   /** 视觉时钟（旧 `vt`）—— 所有阶段都推进。 */
   vt = 0;
-  /** 局面阶段（角色只在 running 时持续走路）。 */
-  phase: Phase = 'idle';
-  /** 游戏时间（秒）—— 只在 running 阶段推进，地面滚动用它。 */
-  now = 0;
-  /** 世界前进速度（px/s）—— 与怪物移速一致。 */
-  scrollSpeed = 0;
   /** FEVER 是否生效。 */
   frenzyActive = false;
   /** 剩余生命值。 */
@@ -51,17 +45,9 @@ export class FrameContext {
   attackT = 0;
   /** 出招轨道。 */
   attackLane: Lane | null = null;
-  /** 角色驻守的轨道；默认下轨。 */
-  playerLane: Lane | null = null;
-  /** 上跳滞空剩余秒数（0 = 已落地）。 */
-  playerAirT = 0;
-  /** 双生击破下砸动画进度（0 = 未播放，1 = 刚触发）。 */
-  pairSmash = 0;
-  /** 正在被长按的那只长按怪（没有则为 `null`）。 */
-  holdMonster: HoldMonster | null = null;
   /** 在场怪物（渲染层只读）。 */
   monsters: readonly Monster[] = [];
-  /** 粒子 / 命中火花 / 冲击环 / 飘字。 */
+  /** 粒子 / 刀光 / 冲击环 / 飘字。 */
   effects: Effects = EMPTY_EFFECTS;
   /** 该轨上是否有**未完成的长按怪**（旧 `source.html:1633` 的 `monsters.some`）。 */
   readonly longInLane: { top: boolean; bottom: boolean } = { top: false, bottom: false };

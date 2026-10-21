@@ -20,3 +20,12 @@
 - `source.html:1633` —— 每帧、每条轨道各执行一次 `monsters.some` 扫描。
 - `source.html:978` 等 7 处 —— 用 `filter` 重建整个 `monsters` 数组代替就地移除。
 - `source.html:1276` —— `loop` 内每帧调用 `syncHUD()`，靠脏标记兜底；新实现改为事件驱动的订阅。
+
+**现状**（2026-10）：以上四个结构性热点均已消除 ——
+
+- ① `monsters.indexOf(p)` 的 O(n²) → 渲染器每帧预扫出"链主 = 上轨那只"，O(1) 判定（`battlefield/canvas2d/twin.ts`、`battlefield/pixi/twin.ts`）。
+- ② 每轨一次的 `monsters.some` 全量扫描 → 一次遍历同时算出两轨的"有长按怪"标志（`battlefield/canvas2d/renderer.ts`、`battlefield/pixi/PixiRenderer.ts`）。
+- ③ 7 处 `filter` 重建 `monsters` 数组 → 收敛为**每 tick 一处**（`game/rules/tick.ts`），且只回收已离场的怪物。
+- ④ 每帧 `syncHUD()` → 事件驱动的 `hudStore` 订阅（`app/hud/hudStore.ts`）。
+
+CI 仍不做任何性能断言；帧预算分配见上表，未做实机测量。

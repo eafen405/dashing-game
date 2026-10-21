@@ -1,10 +1,11 @@
 /**
- * 背景 —— 上轨以上的天空 / 星空。
+ * 背景 —— 星空 + 中线。
  *
  * 逐字搬自 `source.html:1480-1505`（`drawBackground`）与 `579-591`（`buildStars`）。
  *
  * **静态内容不每帧重建**：星空数据只在 `resize()` 时生成一次
- * （旧代码本来也是 `buildStars()` 只在 `resize()` 里调）。
+ * （旧代码本来也是 `buildStars()` 只在 `resize()` 里调），
+ * 中线的渐变也只在 `resize()` 时建一次，不每帧 `createLinearGradient`。
  * 星星的**位置**是动画（横向流动），所以每帧仍要画 —— 这是画面本身，不是重建。
  */
 
@@ -23,14 +24,17 @@ interface Star {
 /** 背景视图。 */
 export class BackgroundView {
   private stars: Star[] = [];
+  private ownerCtx: CanvasRenderingContext2D | null = null;
+  private midGradient: CanvasGradient | null = null;
   private w = 0;
   private h = 0;
 
-  /** 尺寸变化时重建星空。 */
+  /** 尺寸变化时重建星空与中线渐变。 */
   resize(layout: Layout): void {
     this.w = layout.width;
     this.h = layout.height;
     this.buildStars();
+    this.midGradient = null;
   }
 
   /** 星空 —— `source.html:579-591`。 */
@@ -52,7 +56,12 @@ export class BackgroundView {
 
   draw(fc: FrameContext): void {
     const ctx = fc.ctx;
+    if (this.ownerCtx !== ctx) {
+      this.ownerCtx = ctx;
+      this.midGradient = null;
+    }
     const w = this.w;
+    const h = this.h;
     const vt = fc.vt;
 
     // 星空
@@ -66,5 +75,21 @@ export class BackgroundView {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    // 中线
+    const mid = h / 2;
+    if (!this.midGradient) {
+      const g = ctx.createLinearGradient(0, 0, w, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.5, 'rgba(255,255,255,.10)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      this.midGradient = g;
+    }
+    ctx.strokeStyle = this.midGradient;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, mid);
+    ctx.lineTo(w, mid);
+    ctx.stroke();
   }
 }

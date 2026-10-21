@@ -49,9 +49,16 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
   // 轨道受击高亮（旧实现给轨道 DOM 节点加 class）
   effects.push({ type: 'lane-flash', lane });
 
-  // 命中火花：就在棒尖 / 打击点原地炸开，不再飞剑气
+  // 刀光：从角色身前划向打击点
   const laneYv = layout.laneY[lane];
-  effects.push({ type: 'impact', x: layout.hitX, y: laneYv, life: 0.24, lane });
+  effects.push({
+    type: 'slash',
+    x: layout.hitX,
+    x0: layout.playerX + layout.playerR * 1.05,
+    y: laneYv,
+    life: 0.3,
+    lane,
+  });
 
   const tol = layout.zoneHalf;
 

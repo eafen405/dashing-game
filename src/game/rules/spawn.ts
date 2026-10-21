@@ -78,19 +78,26 @@ export function laneBlocked(monsters: readonly Monster[], lane: Lane): boolean {
  * 实际上 `some()` 是逐轨判断的 —— 普通怪只占自己那条轨，另一条仍会被返回；
  * 只有**两轨都有怪**时才返回 `null`（等下一次刷新再试）。这正是空轨语义。
  * 若改成「只算长按怪占用」，长按怪就会刷进有普通怪的轨道并吞掉该轨输入，
- * 是比刷新频率更严重的可玩性 bug。
+ * 是比刷新频率更严重的可玩性 bug（票 11）。
  *
  * 随机数消费：两轨都空时消耗**一次** PRNG（`Math.random() < 0.5` 选轨）；
  * 只有一轨为空时直接返回该轨，**不**消耗 PRNG；两轨都有怪时也不消耗。
+ *
+ * @param onlyLong `true` 时回到票 02 的 D1 修法（**只有长按怪**算占用）。
+ *   这是票 03 golden trace 模式 A 的对照开关，生产路径不可达（见 `types.ts`）。
  */
-export function clearLane(monsters: readonly Monster[], rng: Rng): Lane | null {
-  const laneEmpty = (lane: Lane): boolean =>
-    monsters.every((m) => m.removed || m.lane !== lane);
-  const topEmpty = laneEmpty('top');
-  const botEmpty = laneEmpty('bottom');
-  if (topEmpty && botEmpty) return rng.next() < 0.5 ? 'top' : 'bottom';
-  if (topEmpty) return 'top';
-  if (botEmpty) return 'bottom';
+export function clearLane(
+  monsters: readonly Monster[],
+  rng: Rng,
+  onlyLong = false,
+): Lane | null {
+  const laneBusy = (lane: Lane): boolean =>
+    monsters.some((m) => m.lane === lane && !m.removed && (!onlyLong || m.kind === 'hold'));
+  const topBusy = laneBusy('top');
+  const botBusy = laneBusy('bottom');
+  if (!topBusy && !botBusy) return rng.next() < 0.5 ? 'top' : 'bottom';
+  if (!topBusy) return 'top';
+  if (!botBusy) return 'bottom';
   return null;
 }
 
@@ -231,7 +238,7 @@ export function spawnMonster(state: GameState, rng: Rng): { state: GameState; ef
     // 关键：`clearLane()` 的求值（及其内部的 PRNG 消耗）发生在 0.28 判定**之前**。
     // 旧实现写的是 `if (lane && Math.random() < 0.28)`，短路语义保持不变：
     // `lane` 为 null 时不消耗这一次 PRNG。
-    const lane = clearLane(state.monsters, rng);
+    const lane = clearLane(state.monsters, rng, state.legacyClearLane);
     if (lane !== null && rng.next() < 0.28) {
       const spawned = spawnLong(state, lane, rng);
       // 旧实现的顺序：`spawnLong(lane)` 之后才掷 `rand(14, 18)`

@@ -1,3 +1,28 @@
+/**
+ * 样式 —— 逐字搬自旧实现 `source.html:10-278`（`<style>` 段）。
+ *
+ * **只改选择器，不改视觉参数**：颜色 / 尺寸 / 透明度 / 动画曲线全部照抄，
+ * 目标是「与旧 source.html 视觉一致」（票 04 的验收要求）。
+ *
+ * 选择器的对应关系：
+ *   `#app` → `.app`　`#game` → `.game`　`#hud` → `.hud`　`#stage` → `.stage`
+ *   `#rotate` → `.rotate`　`#toast` → `.toast`　`#frenzy` → `.frenzy-flash`
+ *   `#hurt` → `.hurt-flash`　`#hpFill` → `.hp-fill`　`#hpText` → `.hp-text`
+ *   `#btnPause` / `#btnFull` → `.icon-button`　`#btnRestart` → `.primary-button`
+ *   `#btnDiff` → `.ghost-button`　`#pause .card` → `.pause-card`
+ *   `#scoreText` → `.stat-value`　`#comboText` → `.combo-value`
+ *   `#critText` → `.crit-text`　`#comboLabel` → `.combo-label`
+ *
+ * **ID 换类要盯权重**：`#` 是 (1,0,0)，`.` 只有 (0,1,0)——
+ * 凡是被 `.stat b`（0,1,1）之类的规则压着的属性，类选择器要写成
+ * `.stat .crit-text`（0,2,0）才等效。已按此逐条核对过。
+ *
+ * 新增的两处（为了 React 版能跑）：
+ *   - `.canvas-host` —— 渲染器把 canvas 挂进去的容器（占满舞台，位置在 `#tint` 与 `#vignette` 之间，
+ *     与旧代码里 canvas 的层叠顺序一致）
+ *   - `.debug-stats` —— 开发期 `?debug` 的帧率挂件
+ */
+
 :root {
   color-scheme: dark;
   --bg: #070a12;
@@ -7,37 +32,33 @@
   --p2: #ff8a4f;
   --danger: #ff4d6d;
   --ok: #43e08c;
-  --gold: #ffd24a;
 }
 
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  /* 长按是核心操作：任何元素都不许被选中 / 唤起系统长按菜单 */
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-}
-
-::selection {
-  background: transparent;
 }
 
 html,
 body,
 #root {
-  width: 100%;
-  height: 100%;
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  overflow: hidden;
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, -apple-system,
+  font-family:
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    system-ui,
+    -apple-system,
     sans-serif;
+  overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
   user-select: none;
@@ -45,6 +66,788 @@ body {
   -webkit-touch-callout: none;
 }
 
-button {
+.app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ============ 竖屏提醒 ============ */
+.rotate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 30%, #16213e 0%, #070a12 70%);
+}
+
+.phone {
+  width: 96px;
+  height: 160px;
+  border: 4px solid var(--ink);
+  border-radius: 16px;
+  position: relative;
+  animation: rot 2.2s ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
+.phone::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ink);
+  opacity: 0.7;
+}
+
+.phone::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px dashed rgba(238, 243, 255, 0.35);
+}
+
+@keyframes rot {
+  0%,
+  20% {
+    transform: rotate(0deg);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+.rotate h1 {
+  font-size: 24px;
+  margin: 0;
+  letter-spacing: 2px;
+}
+
+.rotate p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(79, 209, 255, 0.12);
+  border: 1px solid rgba(79, 209, 255, 0.35);
+  color: var(--p1);
+  font-size: 14px;
+}
+
+/* ============ 游戏界面 ============ */
+.game {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse at 15% 12%, rgba(79, 209, 255, 0.1), transparent 55%),
+    radial-gradient(ellipse at 85% 88%, rgba(255, 138, 79, 0.1), transparent 55%),
+    linear-gradient(180deg, #0a0f1e 0%, #070a12 55%, #0a0f1e 100%);
+}
+
+/* 顶部 HUD */
+.hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px
+    calc(16px + env(safe-area-inset-left));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(10, 15, 30, 0.9), rgba(10, 15, 30, 0.4));
+}
+
+.hp-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.hp-icon {
+  font-size: 17px;
+  color: var(--danger);
+  line-height: 1;
+}
+
+.hp-bar {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hp-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, #ff4d6d, #ff8a4f);
+  transition: transform 0.18s ease-out;
+  border-radius: 7px;
+}
+
+.hp-fill.low {
+  background: linear-gradient(90deg, #ff2d55, #ff4d6d);
+  animation: lowPulse 1s infinite;
+}
+
+@keyframes lowPulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.hp-text {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  min-width: 74px;
+  text-align: right;
+  color: #ffd9e0;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.8vw, 22px);
+  margin-left: auto;
+}
+
+.stat {
+  text-align: center;
+  line-height: 1.1;
+}
+
+.stat b {
+  display: block;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat span {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.stat-value.frenzy {
+  color: #ffd24a;
+  text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
+}
+
+/* 连击数 —— 旧代码里只有 `#comboText` 会脉动，分数只变色不变形 */
+.combo-value {
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.combo-value.frenzy {
+  color: #ffd24a;
+  text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
+  /* 脉冲由 Motion 驱动（`ComboBadge.tsx` 的 `motion.b`）——
+     CSS 动画的优先级高于内联样式，两边都写会打架，所以这里不再声明 animation。 */
+}
+
+.combo-label {
+  display: inline-block;
+  min-width: 66px;
+  text-align: center;
+  transition:
+    color 0.25s ease,
+    text-shadow 0.25s ease;
+}
+
+.combo-label.fever {
+  color: #ffd24a;
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 暴击 / 普攻计数 —— 旧代码是 `#critText`（ID，15px）；
+   这里用 `.stat .crit-text` 压过 `.stat b` 的 17px（`#` 换成了类，权重会掉一级）。 */
+.stat .crit-text {
+  font-size: 15px;
+  color: #ffe6a3;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* 票 07：`frenzyPulse` 的关键帧已删 —— 脉冲改由 Motion 驱动
+   （见 `src/app/hud/ComboBadge.tsx`），CSS 动画与内联 transform 不能同时存在。 */
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.icon-button:active {
+  transform: scale(0.94);
+}
+
+.icon-button svg {
+  display: block;
+}
+
+/* 舞台 */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Cpath d='M16 1v6M16 25v6M1 16h6M25 16h6'/%3E%3C/g%3E%3C/svg%3E")
+      16 16,
+    crosshair;
+  outline: none;
+}
+
+/* 渲染器挂载点 —— 层叠顺序与旧代码里的 canvas 一致（tint 之下、vignette 之上） */
+.canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-host canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 静态氛围层交给合成器，避免每帧在 canvas 里重画全屏渐变 */
+.tint,
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tint {
+  background:
+    linear-gradient(180deg, rgba(79, 209, 255, 0.05), rgba(79, 209, 255, 0)) top/100% 50% no-repeat,
+    linear-gradient(0deg, rgba(255, 138, 79, 0.05), rgba(255, 138, 79, 0)) bottom/100% 50% no-repeat;
+}
+
+.vignette {
+  z-index: 1;
+}
+
+/* 两条轨道的点击层（透明命中区 + 高亮边框） */
+.lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 2;
+}
+
+.lane .hint {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right));
+  font-size: 11px;
+  color: rgba(238, 243, 255, 0.3);
+  letter-spacing: 2px;
+  pointer-events: none;
+  font-weight: 600;
+}
+
+.lane-top .hint {
+  top: 8px;
+}
+
+.lane-bottom .hint {
+  bottom: 8px;
+}
+
+.lane-top {
+  top: 0;
+  height: 50%;
+}
+
+.lane-bottom {
+  top: 50%;
+  height: 50%;
+}
+
+.lane-top.hit::after {
+  background: linear-gradient(90deg, rgba(79, 209, 255, 0), rgba(79, 209, 255, 0.14));
+  animation: flash 0.22s ease-out;
+}
+
+.lane-bottom.hit::after {
+  background: linear-gradient(90deg, rgba(255, 138, 79, 0), rgba(255, 138, 79, 0.14));
+  animation: flash 0.22s ease-out;
+}
+
+@keyframes flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 开始 / 结束 遮罩 */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  padding: 20px;
+  background: radial-gradient(circle at 50% 45%, rgba(12, 20, 40, 0.72), rgba(5, 8, 16, 0.92));
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  transition:
+    opacity 0.25s ease,
+    visibility 0.25s;
+}
+
+/* 结算面板入场动效由 Motion 驱动（`GameOverScreen.tsx`）——
+   关掉 CSS 的 opacity 过渡，避免两套动画同时改一个属性。 */
+.overlay.gameover-enter {
+  transition: none;
+}
+
+.overlay h2 {
+  margin: 0;
+  font-size: clamp(22px, 4.6vw, 34px);
+  letter-spacing: 3px;
+}
+
+.overlay .sub {
+  color: var(--muted);
+  font-size: clamp(12px, 2.1vw, 15px);
+  line-height: 1.8;
+  max-width: 44em;
+}
+
+.legend {
+  display: flex;
+  gap: 26px;
+  margin: 10px 0 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.legend div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(11px, 2vw, 14px);
+  color: #cdd8f0;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+  background: currentColor;
+}
+
+/* 难度选择 */
+.diff-pick {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.diff-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cdd8f0;
   font-family: inherit;
+}
+
+.diff-btn .stars {
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: #8d9ab8;
+  line-height: 1;
+}
+
+.diff-btn .dname {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.diff-btn.active {
+  border-color: rgba(79, 209, 255, 0.65);
+  background: linear-gradient(180deg, rgba(79, 209, 255, 0.2), rgba(79, 209, 255, 0.07));
+  color: #eaf8ff;
+  box-shadow: 0 0 16px rgba(79, 209, 255, 0.22);
+}
+
+.diff-btn.active .stars {
+  color: #ffd24a;
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.75);
+}
+
+.diff-btn:active {
+  transform: scale(0.96);
+}
+
+.go-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* 旧代码是 `.go-actions #btnRestart{margin-top:0}`（压掉 `#btnRestart` 的 14px） */
+.go-actions .primary-button {
+  margin-top: 0;
+}
+
+.ghost-button {
+  padding: 12px 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #cdd8f0;
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+
+.ghost-button:active {
+  transform: scale(0.96);
+}
+
+.tap-hint {
+  margin-top: 12px;
+  font-size: clamp(14px, 2.6vw, 18px);
+  font-weight: 600;
+  color: #fff;
+  padding: 10px 26px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(79, 209, 255, 0.22), rgba(255, 138, 79, 0.22));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+/* 矮屏（手机横屏）压缩开始界面，保证难度选择与开始提示都在屏内 */
+@media (max-height: 410px) {
+  .overlay {
+    gap: 2px;
+    padding: 10px 16px 14px;
+  }
+  .overlay h2 {
+    font-size: 22px;
+    letter-spacing: 2px;
+  }
+  .legend {
+    margin: 4px 0 0;
+    gap: 18px;
+  }
+  .legend div {
+    font-size: 11px;
+  }
+  .overlay .sub {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .diff-pick {
+    margin: 8px 0 0;
+    gap: 8px;
+  }
+  .diff-btn {
+    padding: 6px 12px;
+    border-radius: 11px;
+  }
+  .diff-btn .stars {
+    font-size: 13px;
+  }
+  .diff-btn .dname {
+    font-size: 10px;
+  }
+  .tap-hint {
+    margin-top: 7px;
+    font-size: 13px;
+    padding: 7px 20px;
+  }
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 24px rgba(79, 209, 255, 0.35);
+  }
+}
+
+.gameover-big {
+  font-size: clamp(30px, 6vw, 46px);
+  letter-spacing: 4px;
+  color: var(--danger);
+}
+
+.score-row {
+  display: flex;
+  gap: clamp(18px, 4vw, 44px);
+  margin: 10px 0 4px;
+}
+
+.score-row .k {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.score-row .v {
+  font-size: clamp(20px, 4vw, 30px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.primary-button {
+  margin-top: 14px;
+  padding: 12px 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 209, 255, 0.5);
+  background: rgba(79, 209, 255, 0.14);
+  color: #dff4ff;
+  font-size: 16px;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+
+.primary-button:active {
+  transform: scale(0.96);
+}
+
+.pause-card {
+  padding: 22px 30px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 18, 34, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.pause-card h2 {
+  font-size: 24px;
+  letter-spacing: 4px;
+}
+
+.pause-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pause-row button {
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+  font-family: inherit;
+}
+
+.pause-row button.primary {
+  border-color: rgba(79, 209, 255, 0.5);
+  background: rgba(79, 209, 255, 0.16);
+  color: #dff4ff;
+}
+
+.pause-row button:active {
+  transform: scale(0.96);
+}
+
+/* 顶部提示条（命中/受击文字） */
+.toast {
+  position: absolute;
+  left: 56%;
+  top: 52%;
+  transform: translate(-50%, -50%) scale(0.9);
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  font-size: clamp(16px, 3.4vw, 24px);
+  font-weight: 800;
+  letter-spacing: 3px;
+  white-space: nowrap;
+  text-shadow: 0 0 18px currentColor;
+}
+
+.toast.show {
+  animation: toastIn 0.8s ease-out forwards;
+}
+
+@keyframes toastIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -80%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -108%) scale(1);
+  }
+}
+
+/* FEVER 触发金色闪屏 */
+.frenzy-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle at 18% 50%,
+    rgba(255, 210, 74, 0.42),
+    rgba(255, 140, 40, 0) 62%
+  );
+}
+
+.frenzy-flash.show {
+  animation: frenzyFlash 0.9s ease-out;
+}
+
+@keyframes frenzyFlash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 受击红屏 */
+.hurt-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at 12% 50%,
+    rgba(255, 40, 80, 0.55),
+    rgba(255, 40, 80, 0) 60%
+  );
+}
+
+.hurt-flash.show {
+  animation: hurtFlash 0.45s ease-out;
+}
+
+@keyframes hurtFlash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 开发期帧率挂件（?debug） */
+.debug-stats {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 7;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #9fe8ff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* 横屏判定：只有横屏才显示游戏 */
+.game {
+  display: none;
+}
+
+.app.landscape .game {
+  display: flex;
+}
+
+.app.landscape .rotate {
+  display: none;
+}
+
+.app:not(.landscape) .game {
+  display: none;
 }

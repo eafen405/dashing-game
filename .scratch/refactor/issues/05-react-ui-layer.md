@@ -46,28 +46,79 @@ Blocked by: 02, 04
 
 ## Answer
 
-随 04b 一并实现（依赖 02 / 04 已 resolved），完整流程已跑通：
+票 04b 已经把 React UI 层实现并合并，本票做的是**验证 + 补齐 + 拿量化证据**。
 
-- `src/app/App.tsx`：唯一 React 根。`GameSession` 生命周期在 `useEffect` 中创建/销毁；
-  `useSyncExternalStore(hudStore.subscribe, hudStore.getSnapshot)` 读取 HUD；竖屏状态用
-  `watchOrientation()` 订阅。React 只渲染 `idle | paused | over` 覆盖层与 HUD，
-  不参与逐帧渲染。
-- `src/app/GameSession.ts`：规则层状态在实例字段中，不在 React state；每帧
-  `stepRules(dt)` → `presentation.step(dt)` → `renderer.render(frame)` → `hud.update()`。
-- 组件：`screens/StartScreen.tsx`（含 1★/2★ 难度）、`PauseScreen.tsx`（继续 / 重开 /
-  回主页面）、`GameOverScreen.tsx`（SCORE / MAX COMBO / KILLS / BEST）、
-  `RotatePrompt.tsx`、`hud/Hud.tsx`（血条 + 分数/连击/暴击普攻/BEST 面板，内联
-  `Stat` 子组件）。样式自 `source.html` 移植到 `src/app/app.css`（`.dual-app` /
-  `.game` / `.hud` / `.stage` / `.overlay` / 各类反馈动画）。
-- `src/presentation/hudStore.ts`：`useSyncExternalStore` 外部 store + 快照脏检查；
-  hp / score / combo / crit / normal / best / fever 秒数（`Math.ceil`）任一变化才通知；
-  100 次同值更新不触发订阅者（有单测）。
-- 输入：`src/input/pointer.ts`、`keyboard.ts`、`orientation.ts`；统一产出规则层
-  `press` 事件，规则层不接触 DOM 事件。竖屏自动暂停并记录来源，转回横屏仅恢复
-  “因旋转而暂停”的对局。
-- 震动：本移植版未接入 `navigator.vibrate`（旧版仅在移动端受击时触发），留待
-  09 视觉/手感打磨时统一处理；不影响验收项。
-- 验收证据（Playwright，`file://` 单文件产物）：开始覆盖层 1 → 选 2★ → 开始后 0；
-  游玩 8s：2000 分 / 7 连击 / 6 暴击 / 1 普攻 / BEST 2000；暂停卡片出现，继续后
-  覆盖层 0；回主页后 HUD 归零且标题恢复；转竖屏出现提示并暂停，转横屏提示消失且
-  自动恢复；零输入 21s 自然结算，重开/刷新 HUD 正常；无 pageerror / console error。
+### 补齐的 04b 缺口
+
+| 缺口 | 处理 |
+| --- | --- |
+| **HUD 统计块顺序与旧版不一致**（spec D5） | 旧版是 `SCORE → COMBO → 暴击/普攻 → BEST`，04b 把 `BEST` 提到了 `COMBO` 前面。已拆出 `hud/BestStat.tsx`，改回旧顺序。**程序化断言**（不是肉眼）：`tests/e2e/compare-legacy.mjs` 用 Playwright 分别读旧版 `source.html` 与新版的 `#hud .stat span` 文本序列比对，不一致即红。 |
+| 结算界面旧版文案与字段顺序 | `SCORE / MAX COMBO / KILLS` 三项顺序、`历史最高分 N` 文案、`再来一局 / 选择难度` 按钮顺序，全部与旧版逐字对齐（同一脚本断言）。 |
+| combo 标签 | `FEVER Ns` / `COMBO` 由 `hudStore` 派生（`feverT` 取整 → 标签每秒才变一次，不带着 HUD 一起 60fps 重渲染）。 |
+| 难度星级选择 | 补回 `data-diff="1|2"`，交互与样式对齐旧版（`★` / `★★`，1 星默认高亮）。 |
+| CSS 权重回归（`#` 换 `.` 掉一级） | `.stat b`（0,1,1）会压过 `.crit-text`（0,1,0）→ 暴击计数字号从 15px 变 17px，改成 `.stat .crit-text`（0,2,0）。分数的 `.frenzy` 不该脉动（旧版只有 `#comboText` 脉动）→ 拆出 `.combo-value`。`.go-actions` 里「再来一局」的 `margin-top` 补回旧版的 0。 |
+
+### HUD 不做 60fps 重渲染 —— 量化证据
+
+新增 `src/app/hud/hudStats.ts`（5 个计数器，暴露到 `window.__HUD_STATS__`）：
+
+| 计数 | 含义 |
+| --- | --- |
+| `publishes` | `hudStore.publish()` 调用次数 ≈ 帧数 |
+| `notifications` | 订阅者被通知次数（**值真的变了**才 +1） |
+| `renders` | `HudView` 提交次数（**唯一产出 DOM 变化的一层**） |
+| `shellRenders` | 外层 `Hud` 提交次数（父组件事件带着重跑，不产出 DOM 变化） |
+| `domMutations` | HUD 子树 `MutationObserver` 计数 |
+
+`Hud` 拆成**外壳 + `memo` 化的 `HudView`**：外壳每次父组件 setState 都会重跑（它要重读快照），
+但**代价高的 DOM 协调被 `memo` 挡在 `HudView` 里，只在值真的变了时才发生**。
+
+实测（`tests/e2e/hud-stats.mjs`，每个场景 30 秒；连续两次跑数字一致）：
+
+| 场景 | 帧数 | HUD DOM 变更 | 内容渲染 | 外壳渲染 | 事件数 |
+| --- | --- | --- | --- | --- | --- |
+| A 静置（不操作） | 1801 | **27（1.50%）** | 13 | 16 | 13 次漏怪 |
+| B 连续出刀（每 ~120ms 一次） | 1803 | **79（4.38%）** | 20 | 225 | 231 次出刀 |
+
+分子随**事件**增长（漏怪 / 命中），不随帧增长：静置 30 秒里 HUD 只动了 27 次。
+场景 B 里外壳被父组件事件带着重跑了 225 次，但**产出 DOM 变化的只有 20 次** ——
+DOM 协调被 `memo` 挡在「值变化」这一层。
+
+变更明细（`MutationObserver` 记的）也印证了这一点：
+场景 A 全是 `hp-fill@style` + `hp-text`（每次掉血 2 处），场景 B 全是
+`stat-value` / `combo-value` / `crit-text`（每次命中分数 / 连击 / 暴击计数变化）。
+
+### 竖屏自动暂停 + 进度保留
+
+`tests/e2e/portrait-progress.mjs`：转竖屏 → 自动暂停 → 隔 1.5 秒再读，**分数 / 连击 / 血量逐字不变**；
+转回横屏 → 页面侧监听 `resize`，读到的**恢复瞬间** HUD 数值与暂停前完全相同（不是重开一局）。
+
+### 端到端
+
+新增 6 个 e2e 脚本 + 共享脚手架 `tests/e2e/lib/harness.mjs`：
+
+| 脚本 | 覆盖 |
+| --- | --- |
+| `flow-8-steps.mjs` | 开始 → 选难度 → 游戏（出刀/命中/飘字/掉血/连击）→ 暂停 → 恢复 → 结算 → 重开 → 回主页 → 最高分持久化（每步一张截图） |
+| `hud-stats.mjs` | 上面那张量化表 |
+| `portrait-progress.mjs` | 竖屏自动暂停 + 进度保留 |
+| `input-desktop.mjs` | 鼠标上/下半屏、键盘 `↑/W/↓/S`、`P`、`Enter/Space` |
+| `hold-monster-keyboard.mjs` | 键盘长按怪走完 3 秒（`长按中…` → `长按贯穿！`） |
+| `compare-legacy.mjs` | 与旧版 `source.html` 并排对比（开始界面 / HUD / 暂停 / 结算） |
+
+截图目录默认落在仓库内 `dist/e2e-shots/`（`dist/` 已 gitignore），可用 `E2E_SHOTS_DIR` 覆盖。
+CI 增加了一步 `npm run test:e2e`（在 `build` 之后）。
+
+### 验收结果
+
+- `npm run typecheck` / `npm run lint` / `npm test`（26 文件 300 用例）/ `npm run build` / `node scripts/verify-single-file.mjs` 全过。
+- `npm run test:e2e` 全过（3m40s）。
+- `npm run trace`（golden trace 门禁）**通过**，1m23s。
+
+### 已知限制
+
+- FEVER 期间角色周身的金色火花（旧 `emitFrenzy`）归票 07，本票未做。
+- `hold-monster-keyboard.mjs` 依赖长按怪的 28% 概率刷新，跑得慢且有概率性，**未接进 CI**。
+- 竖屏自动暂停靠视口比例判定（`innerWidth > innerHeight`）+ `orientationchange` 事件；真机上的
+  `screen.orientation.lock` 行为需要实机确认。
+

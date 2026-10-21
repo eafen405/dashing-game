@@ -22,6 +22,7 @@ export * from './layout';
 export * from './reducer';
 export * from './rng';
 export * from './state';
+export * from './trace';
 export * from './types';
 export * from './rules/difficulty';
 export * from './rules/fever';

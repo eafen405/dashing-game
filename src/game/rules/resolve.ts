@@ -438,7 +438,14 @@ export function startHold(
 
   const effects: Effect[] = [
     { type: 'lane-flash', lane: m.lane },
-    { type: 'impact', x: longHeadX(m), y: m.y, life: 0.24, lane: m.lane },
+    {
+      type: 'slash',
+      x: longHeadX(m),
+      x0: state.layout.playerX + state.layout.playerR * 1.05,
+      y: m.y,
+      life: 0.3,
+      lane: m.lane,
+    },
   ];
 
   const held = findMonster(s.monsters, monsterId);

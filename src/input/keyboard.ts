@@ -1,47 +1,92 @@
 /**
- * 键盘输入映射 —— 旧实现 `source.html:2566-2585`。
+ * 键盘输入 —— 桌面调试用。
  *
- * 这里只把按键翻译成**意图**；「开始 / 重开 / 暂停」等状态判断由会话层做。
+ * 照抄 `source.html:2566-2583`：
+ *
+ * ```
+ * keydown:
+ *   if (e.repeat) return;               // 长按不重复触发
+ *   ↑ / W   → 开始界面：开始游戏；否则：上轨出刀
+ *   ↓ / S   → 开始界面：开始游戏；否则：下轨出刀
+ *   P       → running 暂停 / paused 恢复
+ *   Enter / Space → 开始界面：开始游戏；结算界面：再来一局
+ * keyup:
+ *   ↑ / W   → release("key-top")
+ *   ↓ / S   → release("key-bottom")
+ * ```
+ *
+ * `keyup` 也要发 `Release` —— 长按怪靠它判失败（`source.html:2580-2583`）。
  */
 
-import type { Lane } from '../game/types';
+import { KEY_INPUT_ID, mapKeyDown, mapKeyUp } from './mapping';
+import type { InputSink } from './types';
 
-/** 键盘意图。 */
-export type KeyAction =
-  | { type: 'press'; lane: Lane; inputId: string }
-  | { type: 'release'; inputId: string }
-  | { type: 'toggle-pause' }
-  | { type: 'confirm' };
-
-/** 按下（keydown）映射。 */
-export function keyActionFor(code: string): KeyAction | null {
-  switch (code) {
-    case 'ArrowUp':
-    case 'KeyW':
-      return { type: 'press', lane: 'top', inputId: 'key-top' };
-    case 'ArrowDown':
-    case 'KeyS':
-      return { type: 'press', lane: 'bottom', inputId: 'key-bottom' };
-    case 'KeyP':
-      return { type: 'toggle-pause' };
-    case 'Enter':
-    case 'Space':
-      return { type: 'confirm' };
-    default:
-      return null;
-  }
+/** 键盘输入的接线参数。 */
+export interface KeyboardInputOptions {
+  /** 事件接收端。 */
+  sink: InputSink;
+  /** 当前是否停在开始界面。 */
+  isStartScreen: () => boolean;
+  /** 当前是否已结算。 */
+  isOver: () => boolean;
+  /** 开始界面上的「点击开始」。 */
+  onStartFromTap: () => void;
+  /** `P` 键：暂停 / 恢复切换。 */
+  onTogglePause: () => void;
+  /** 结算界面上的「再来一局」。 */
+  onRestart: () => void;
+  /** 事件所在的 window（默认 `window`；测试时注入假实现）。 */
+  win?: Window;
 }
 
-/** 松开（keyup）映射：只处理两条轨道的长按释放。 */
-export function releaseInputFor(code: string): string | null {
-  switch (code) {
-    case 'ArrowUp':
-    case 'KeyW':
-      return 'key-top';
-    case 'ArrowDown':
-    case 'KeyS':
-      return 'key-bottom';
-    default:
-      return null;
-  }
+/**
+ * 接上键盘输入。
+ *
+ * @returns 解绑函数（组件卸载时调用）。
+ */
+export function attachKeyboardInput(options: KeyboardInputOptions): () => void {
+  const { sink, isStartScreen, isOver, onStartFromTap, onTogglePause, onRestart } = options;
+  const win = options.win ?? window;
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    // 长按不重复触发（旧代码 `if (e.repeat) return;`）
+    if (event.repeat) return;
+
+    const action = mapKeyDown(event.code, {
+      isStartScreen: isStartScreen(),
+      isOver: isOver(),
+    });
+
+    switch (action.type) {
+      case 'press':
+        sink.press(action.lane, KEY_INPUT_ID[action.lane]);
+        break;
+      case 'startFromTap':
+        onStartFromTap();
+        break;
+      case 'togglePause':
+        onTogglePause();
+        break;
+      case 'restart':
+        onRestart();
+        break;
+      case 'none':
+        break;
+    }
+  };
+
+  const onKeyUp = (event: KeyboardEvent): void => {
+    const action = mapKeyUp(event.code);
+    if (action.type === 'release') {
+      sink.release(KEY_INPUT_ID[action.lane]);
+    }
+  };
+
+  win.addEventListener('keydown', onKeyDown);
+  win.addEventListener('keyup', onKeyUp);
+
+  return () => {
+    win.removeEventListener('keydown', onKeyDown);
+    win.removeEventListener('keyup', onKeyUp);
+  };
 }

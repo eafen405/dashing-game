@@ -93,12 +93,7 @@ export class TwinView {
     ctx.restore();
   }
 
-  private drawNode(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    active: boolean,
-  ): void {
+  private drawNode(ctx: CanvasRenderingContext2D, x: number, y: number, active: boolean): void {
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(x, y, active ? 3.4 : 2.6, 0, Math.PI * 2);

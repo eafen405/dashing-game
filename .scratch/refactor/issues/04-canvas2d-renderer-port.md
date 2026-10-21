@@ -56,24 +56,61 @@ Blocked by: 02
 
 ## Answer
 
-04a（表现层 + 12 个 Canvas 2D view，合并 `5685c89`）之后，本票由 04b 补完会话层并接线，
-新工程现在**真正可玩**（不再依赖 `source.html`）：
+已实现并合并到集成分支 `feat/refactor-v2`。本票被拆成两个并行子任务实现，
+再由父会话接线合并：
 
-- `src/app/GameSession.ts`：持有规则层 `GameState`、种子 PRNG、`PresentationState`、渲染器与
-  rAF 循环；`Start / Pause / Resume / Restart / Home / Resize / 输入` 全部经 `reduce()` 转成
-  规则层事件。React 不进入 60fps 路径，`FrameView` 每帧复用同一对象。
-- 时间语义对齐旧版：`visualTime`（粒子/刀光/冲击环/飘字）始终推进；规则时间只在
-  `running`（以及 idle/over 的残留攻击动画）推进；暂停时表现层继续衰减、攻击动画冻结。
-- 渲染器接线：构造时 `mount`，`ResizeObserver` + `resize()` 同步 `Layout`，DPR 上限 2；
-  `render(frame)` 直接传规则层数组，渲染器跳过已移除怪物；视口晕影走 CSS 变量。
-- 输入：`src/input/pointer.ts`（半屏 → 轨道、pointerId 映射、鼠标仅左键）、
-  `keyboard.ts`（↑/W、↓/S、P、Enter/Space）、`orientation.ts`（竖屏自动暂停 / 横屏恢复）。
-- HUD 快照：`src/presentation/hudStore.ts`，脏检查后仅通知真正变化的字段；
-  FEVER 秒数 `Math.ceil` 量化，BEST 取 `max(best, score)`。
-- 验证：`npm run typecheck` / `lint` / `test`（180 用例）/ `build` / `verify-single-file`
-  全绿；900×460 dsf2 下与旧 `source.html` 并排截图核对 HUD、双轨、角色、判定区、开始/结算层。
-  Playwright 实测：开始 → 选 2★ → 游玩（8s 得 2000 分、6 暴击 / 1 普攻）→ 暂停/继续 →
-  回主页 → 竖屏暂停/横屏恢复 → 结算 → 重开 → 刷新，均无 pageerror / console error。
-- 最高分：得分 300 后自然结算，`localStorage["dualrail_best"]` 写入 `300`，重开与刷新后
-  HUD BEST 仍为 300。
-- 本票不包含 06+ 的 Pixi 渲染器与 10 的删除 `source.html`；`source.html` 继续作为对照物。
+- **票 04a**（`98d3303` / 合并 `5685c89`）—— 表现层效果池 + Canvas 2D 渲染器（12 个 view）
+- **票 04b**（`f047aab` → `19cbc09` / 合并 `be38098`）—— 会话层 + 输入层 + HUD/界面层
+- **接线**（`192d1a4`）—— `src/battlefield/types.ts` 的 `BattlefieldRenderer` / `FrameView` 契约
+
+### 目录
+
+```
+src/battlefield/
+  types.ts              BattlefieldRenderer / FrameView 契约
+  canvas2d/             background / rails / defense-line / hit-zone / player /
+                        monster / twin / hold-monster / slash / ring / particle /
+                        floater / frenzy / paths / lane-color / math / context / renderer
+src/presentation/       效果池（对象池 + swap-remove）、震动、PresentationState
+src/app/                GameSession / screenMachine / hud/ / screens/ / best.ts / presentation.ts
+src/input/              pointer / keyboard / orientation / mapping
+tests/e2e/              Playwright 可玩性检查
+```
+
+### 四个结构性热点的修法
+
+| 热点 | 旧位置 | 修法 |
+|---|---|---|
+| O(n²) 的 `monsters.indexOf` | `source.html:1989` | 预建索引，绘制循环内零查找 |
+| 每帧每轨的 `monsters.some` 扫描 | `source.html:1633` | 维护「每轨最近目标」索引 |
+| 7 处 `filter` 重建 `monsters` | `978`/`1024`/`1046`/`1188`/`1229`/`1325`/`1370` | 统一就地移除（swap-remove） |
+| 每帧数组字面量分配 | 绘制循环 | 预分配 + 复用，渲染路径零分配 |
+
+静态内容（星空 / 轨道渐变）**只在 `resize` 时重建**。
+
+### 双时钟语义（照抄旧实现）
+
+- `now` 只在 running 阶段推进；`visualTime`（旧 `vt`）**在所有阶段都推进**
+- `paused` 时 `attackT` **不**衰减，但粒子/环/刀光/飘字**继续**衰减
+- `pause()` **不**重置 `lastT`，只有 `resume()` 重置（旧 `source.html:690-698`）
+
+### 验收
+
+- 297 个测试全绿（`typecheck` / `lint` / `test` / `build` / `verify-single-file`）
+- 产物 `dist/index.html` **293 KB**（gzip 91.7 KB），`file://` 下可运行、画布有内容
+- 端到端 Playwright：开始 → 出刀 → 受击 → 竖屏自动暂停 → 转横屏自动恢复，全链路通
+- 黄金轨迹门禁 `npm run trace` 仍然全绿（渲染层改动不影响规则层 —— 这正是分层的收益）
+
+### 过程中发现并修掉的真 bug
+
+指针输入原本挂在画布宿主（`.canvas-host`）上，而开始/暂停/结算遮罩是它的兄弟节点
+→ 遮罩点击永远收不到，「点击屏幕开始」无效。已改为挂在 `.stage` 上（与旧代码 `#stage` 一致）。
+
+### 已知限制
+
+- **FEVER 期间角色周身的金色火花**（旧 `emitFrenzy`，`source.html:1238-1254`）没实现 ——
+  属表现层，留给票 07。
+- 旧代码 `setTimeout(resize, 70/260)` 的兜底没搬（改用 `ResizeObserver`）。
+- `hudStore` 放在 `src/app/hud/hudStore.ts`（不是 `src/presentation/`）——
+  因为 04a 已占用 `src/presentation/`，避免冲突。
+- 固定种子 `DEFAULT_SEED = 20240601`，每局完全一样（可复现/对照）；旧版是 `Math.random()`。

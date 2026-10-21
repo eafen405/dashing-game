@@ -26,17 +26,27 @@ export const INITIAL_PAIR_COOLDOWN = 4.5;
 /** 初始长按怪冷却（`source.html:665`）。 */
 export const INITIAL_LONG_COOLDOWN = 6.0;
 
-/** 构造一局游戏的初始状态。 */
+/**
+ * 构造一局游戏的初始状态。
+ *
+ * @param options.legacyClearLane **仅供 golden trace 对照** —— 让 `clearLane()`
+ *   回到旧实现的错误口径。默认 `false`；规则层的 `Start` 事件不传这个选项，
+ *   所以生产路径永远拿不到 `true`（见 `types.ts` 里同名字段的说明）。
+ */
 export function createGameState(options: {
   diffLevel: Difficulty;
   seed: number;
   layout: Layout;
+  legacyClearLane?: boolean;
+  legacyCollision?: boolean;
 }): GameState {
   return {
     phase: 'running',
     seed: options.seed,
     diffLevel: options.diffLevel,
     layout: options.layout,
+    legacyClearLane: options.legacyClearLane ?? false,
+    legacyCollision: options.legacyCollision ?? false,
 
     now: 0,
     hp: MAX_HP,

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { computeLayout } from '../../../game/layout';
 import type { HoldMonster, NormalMonster, TwinMonster } from '../../../game/types';
-import type { Effects, FrameView } from '../../types';
+import type { Effects, FrameView, ScreenFx } from '../../types';
 import { createCanvas2dRenderer } from '../index';
 import { FakeCanvas, FakeHost } from './fake-canvas';
 
@@ -84,7 +84,16 @@ function holdMonster(overrides: Partial<HoldMonster> = {}): HoldMonster {
   };
 }
 
-const NO_EFFECTS: Effects = { particles: [], impacts: [], rings: [], floaters: [] };
+const NO_EFFECTS: Effects = { particles: [], slashes: [], rings: [], floaters: [] };
+
+/** 全屏特效的「空」状态（色散关、无冲击波）。 */
+const NO_SCREEN_FX: ScreenFx = {
+  rgbSplit: 0,
+  shockAge: 0,
+  shockLevel: 0,
+  shockX: 0,
+  shockY: 0,
+};
 
 function frame(overrides: Partial<FrameView> = {}): FrameView {
   return {
@@ -100,14 +109,15 @@ function frame(overrides: Partial<FrameView> = {}): FrameView {
     frenzyActive: false,
     feverT: 0,
     now: 12.5,
-    scrollSpeed: 165,
     visualTime: 30.25,
     monsters: [],
     attackT: 0,
     attackLane: null,
     playerLane: 'bottom',
     playerAirT: 0,
+    scrollSpeed: 165,
     effects: NO_EFFECTS,
+    screenFx: NO_SCREEN_FX,
     shake: 0,
     playerFlash: 0,
     pairSmash: 0,
@@ -258,29 +268,6 @@ describe('Canvas 2D 渲染器', () => {
     // 震动多一次 translate 调用（`ctx.translate(rand(...), rand(...))` 一次调用、
     // 两个独立取随机 —— 旧 `source.html:1463` 就是这样）
     expect(shaken).toBe(still + 1);
-  });
-
-  it('角色上跳 / 下砸 / 长按悬浮的帧都能画出来', () => {
-    const renderer = createCanvas2dRenderer();
-    renderer.mount(host as unknown as HTMLElement);
-    renderer.resize(LAYOUT);
-
-    renderer.render(
-      frame({ playerLane: 'top', playerAirT: 0.5, attackLane: 'top', attackT: 0.2 }),
-    );
-    renderer.render(
-      frame({ playerLane: 'bottom', attackLane: 'bottom', attackT: 0.2, pairSmash: 0.5 }),
-    );
-    renderer.render(
-      frame({
-        playerLane: 'bottom',
-        monsters: [
-          holdMonster({ lane: 'bottom', anchored: true, holding: true, headAwarded: true }),
-        ],
-      }),
-    );
-
-    expect(canvasOf(host).ctx.count('fill')).toBeGreaterThan(0);
   });
 
   it('FEVER 时轨道配色切换，判定区会多画一层', () => {

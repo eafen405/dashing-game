@@ -13,8 +13,8 @@
  * - `resize(layout)` 只做三件事：更新画布尺寸 / DPR / 重建静态图层。
  *
  * **绘制顺序**逐字照抄 `source.html:1466-1477`：
- * 背景 → 轨道 → 判定区 → 防线 → 角色 → 锁链 → 怪物 → 命中火花 → 环 → 粒子 → 飘字 → FEVER 洗色。
- * 锁链在怪物**之下**、命中火花在怪物**之上**、FEVER 洗色最顶。
+ * 背景 → 轨道 → 判定区 → 防线 → 角色 → 锁链 → 怪物 → 刀光 → 环 → 粒子 → 飘字 → FEVER 洗色。
+ * 锁链在怪物**之下**、刀光在怪物**之上**、FEVER 洗色最顶。
  */
 
 import type { Layout, Monster } from '../../game/types';
@@ -24,7 +24,6 @@ import { FrameContext } from './context';
 import { DefenseLineView } from './defense-line';
 import { FloaterView } from './floater';
 import { FrenzyView } from './frenzy';
-import { GroundView } from './ground';
 import { HitZoneView } from './hit-zone';
 import { HoldMonsterView } from './hold-monster';
 import { rand } from './math';
@@ -33,7 +32,7 @@ import { ParticleView } from './particle';
 import { PlayerView } from './player';
 import { RailsView } from './rails';
 import { RingView } from './ring';
-import { ImpactView } from './impact';
+import { SlashView } from './slash';
 import { TwinView } from './twin';
 
 /** DPR 上限（移动端 3x 屏只按 2x 渲染）—— 旧 `source.html:540`。 */
@@ -51,7 +50,6 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
   private readonly monsterIndex = new Map<number, Monster>();
 
   private readonly background = new BackgroundView();
-  private readonly ground = new GroundView();
   private readonly rails = new RailsView();
   private readonly defenseLine = new DefenseLineView();
   private readonly hitZone = new HitZoneView();
@@ -59,7 +57,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
   private readonly twin = new TwinView();
   private readonly monster = new MonsterView();
   private readonly holdMonster = new HoldMonsterView();
-  private readonly impact = new ImpactView();
+  private readonly slash = new SlashView();
   private readonly ring = new RingView();
   private readonly particle = new ParticleView();
   private readonly floater = new FloaterView();
@@ -111,10 +109,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     // 抖动（旧 `source.html:1462-1464`：两次独立取随机）
     if (frame.shake > 0.2) {
-      ctx.translate(
-        this.jitter(frame.shake),
-        this.jitter(frame.shake),
-      );
+      ctx.translate(this.jitter(frame.shake), this.jitter(frame.shake));
     }
 
     this.fillFrameContext(ctx, frame, layout);
@@ -122,14 +117,13 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     // 绘制顺序逐字照抄 `source.html:1466-1477`
     this.background.draw(this.fc);
-    this.ground.draw(this.fc);
     this.rails.draw(this.fc);
     this.hitZone.draw(this.fc);
     this.defenseLine.draw(this.fc);
     this.player.draw(this.fc);
     this.twin.draw(this.fc);
     this.drawMonsters();
-    this.impact.draw(this.fc);
+    this.slash.draw(this.fc);
     this.ring.draw(this.fc);
     this.particle.draw(this.fc);
     this.floater.draw(this.fc);
@@ -141,26 +135,16 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     return rand(-shake, shake) * 0.5;
   }
 
-  private fillFrameContext(
-    ctx: CanvasRenderingContext2D,
-    frame: FrameView,
-    layout: Layout,
-  ): void {
+  private fillFrameContext(ctx: CanvasRenderingContext2D, frame: FrameView, layout: Layout): void {
     const fc = this.fc;
     fc.ctx = ctx;
     fc.layout = layout;
     fc.vt = frame.visualTime;
-    fc.phase = frame.phase;
-    fc.now = frame.now;
-    fc.scrollSpeed = frame.scrollSpeed;
     fc.frenzyActive = frame.frenzyActive;
     fc.hp = frame.hp;
     fc.playerFlash = frame.playerFlash;
     fc.attackT = frame.attackT;
     fc.attackLane = frame.attackLane;
-    fc.playerLane = frame.playerLane;
-    fc.playerAirT = frame.playerAirT;
-    fc.pairSmash = frame.pairSmash;
     fc.monsters = frame.monsters;
     fc.effects = frame.effects;
   }
@@ -184,18 +168,13 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     fc.longInLane.top = false;
     fc.longInLane.bottom = false;
-    fc.holdMonster = null;
     fc.twinLinkCount = 0;
 
     this.monsterIndex.clear();
     for (const m of monsters) this.monsterIndex.set(m.id, m);
 
     for (const m of monsters) {
-      if (m.kind === 'hold' && !m.removed) {
-        fc.longInLane[m.lane] = true;
-        // 正在被按住的那只（同一时刻最多一只）驱动角色的悬浮连击动画
-        if (m.anchored && !m.escaped) fc.holdMonster = m;
-      }
+      if (m.kind === 'hold' && !m.removed) fc.longInLane[m.lane] = true;
     }
 
     for (const m of monsters) {
@@ -251,7 +230,6 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
   private rebuildStaticLayers(layout: Layout): void {
     this.background.resize(layout);
-    this.ground.resize(layout);
     this.rails.resize(layout);
     this.defenseLine.resize();
   }

@@ -1,153 +1,367 @@
 /**
- * 会话层 —— 把规则层 / 表现层 / 渲染层 / 输入 / HUD 接在一起。
+ * 会话层 —— 把规则层、表现层、渲染器接到一起。
  *
- * 这是票 04b 的「会话编排」：
+ * **职责**（`legacy-semantics.md` §0 的双时钟语义都落在这里）：
  *
- * ```
- * requestAnimationFrame
- *   ├─ 规则层 reduce(Tick) ──────────────► GameState
- *   ├─ 表现层 applyEffects / step ───────► particles / shake / flash
- *   ├─ 战场层 render(FrameView) ─────────► canvas
- *   └─ HUD 快照 update（脏检查） ────────► React（低频）
- * ```
+ * 1. 持有规则层状态（**在字段里，不在 React state 里** —— 60fps 不能触发 React 协调）。
+ * 2. 驱动 rAF 循环：`dt = min((ts - lastT)/1000, 0.05)` → `reduce(state, {type:'Tick', dt}, rng)`。
+ * 3. 把规则层产出的 `effects` 交给表现层，组装 `FrameView` 交给渲染器。
+ * 4. 维护**视觉时钟** `visualTime`（旧代码的 `vt`）—— **所有阶段都推进**，
+ *    而规则层的 `now` 只在 running 推进（这条由规则层的 `tick()` 保证）。
+ * 5. 表现层的衰减（粒子 / 环 / 刀光 / 飘字 / 震动 / 角色闪白）**所有阶段都推进**
+ *    （旧代码 `stepVisualOnly`，`source.html:1400-1411`）——
+ *    而 `attackT` 在 paused 时**不**衰减（这条同样由规则层的 `tick()` 保证）。
  *
- * **React 不参与 60fps 路径**：会话只持有规则状态（普通字段，不是 React state），
- * 每帧最多向 `HudStore` 推一次快照，而 `HudStore` 只在可见字段变化时通知订阅者。
+ * **渲染器靠依赖注入**（`BattlefieldRenderer`）—— 会话层不 import 任何具体渲染实现，
+ * 所以换渲染器（Canvas 2D / Pixi）不需要动会话层。
+ *
+ * **PRNG 由会话层持有并注入**：规则层要求「同一个状态 + 同一个事件 → 同一个结果」，
+ * 所以随机源不能待在不可变状态里（`src/game/rng.ts` 的说明）。
  */
 
 import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
-import { GOLD } from '../game/constants';
-import { computeLayout } from '../game/layout';
-import { reduce } from '../game/reducer';
+import type { Effect } from '../game/effects';
+import { FEVER_TIME, GOLD } from '../game/constants';
 import { createRng, type Rng } from '../game/rng';
-import { createGameState } from '../game/state';
-import type { Difficulty, GameState, Lane, Layout } from '../game/types';
+import { reduce } from '../game/reducer';
 import { speedNow } from '../game/rules/difficulty';
-import { isPrimaryPointer, laneFromClientY, pointerInputId } from '../input/pointer';
-import { keyActionFor, releaseInputFor } from '../input/keyboard';
-import { MAX_PARTICLES } from '../presentation/effects';
-import type { HudStore } from '../presentation/hudStore';
-import { PresentationState, PAIR_SMASH_DUR, type EffectSink } from '../presentation/state';
+import { MAX_DT } from '../game/rules/tick';
+import { createGameState } from '../game/state';
+import type { Difficulty, GameState, Lane, Layout, Monster, Phase } from '../game/types';
+import type { InputSink } from '../input/types';
+import { canTransition } from './screenMachine';
+import { createEffectSink, createPresentation, type PresentationPort } from './presentation';
 
-/** 最高分的 localStorage 键（旧 `source.html:463`）。 */
-export const BEST_KEY = 'dualrail_best';
-
-/** 单帧最大步长 —— 与规则层 `MAX_DT` 保持一致，视觉时钟也按这个值推进。 */
-const MAX_DT = 0.05;
-
-/** 会话层需要 UI 做的低频反馈（动画 / 震动），不参与 60fps。 */
-export interface SessionUi {
-  toast(text: string, color: string): void;
-  laneFlash(lane: Lane): void;
-  hurt(): void;
-  feverFlash(): void;
-  /** 开局 / 回主页时清掉残留的提示与闪屏。 */
-  clearFeedback(): void;
-}
-
-/** 构造会话所需的宿主元素与依赖。 */
+/** 会话层的构造参数。 */
 export interface GameSessionOptions {
-  /** 输入区域（画布所在的舞台）。 */
-  stage: HTMLElement;
-  /** 渲染器挂载点。 */
-  host: HTMLElement;
-  /** 战场渲染器（当前是 Canvas 2D，08 票后换成 Pixi）。 */
+  /** 渲染器（依赖注入 —— 会话层不认识任何具体实现）。 */
   renderer: BattlefieldRenderer;
-  /** HUD 快照仓库。 */
-  hud: HudStore;
-  /** 低频 UI 反馈。 */
-  ui: SessionUi;
+  /** 渲染器的挂载点。 */
+  host: HTMLElement;
+  /** 难度星级。 */
+  diffLevel: Difficulty;
+  /** 本局种子（PRNG 用；同一颗种子必得同一局）。 */
+  seed: number;
+  /** 初始布局。 */
+  layout: Layout;
+  /** 表现层（默认用 04a 的 `PresentationState` 适配）。
+   *
+   * 传自定义实现时注意：DOM 副作用（toast / 闪屏 / 震动 / 结算）由表现层的
+   * `EffectSink` 转交，自定义实现要自己接上，否则这些效果会被丢弃。 */
+  presentation?: PresentationPort;
+  /** 每帧回调（调试 / 观察用；不要在这里做重活）。 */
+  onFrame?: (frame: FrameView) => void;
+  /** 规则层效果回调（toast / 受击闪屏 / 震动 / 结算等 DOM 侧副作用）。 */
+  onEffect?: (effect: Effect) => void;
+  /** 局面阶段变化回调。 */
+  onPhaseChange?: (phase: Phase) => void;
+  /** 帧调度（默认 `requestAnimationFrame`；测试时注入假实现）。 */
+  scheduleFrame?: (cb: (ts: number) => void) => number;
+  /** 取消帧（默认 `cancelAnimationFrame`）。 */
+  cancelFrame?: (handle: number) => void;
 }
 
-/** 把 `FrameView` 的只读字段改成可写，便于复用同一个帧对象。 */
-type MutableFrame = { -readonly [K in keyof FrameView]: FrameView[K] };
-
-/** 读取历史最高分 —— 与旧实现一样，读写都吞掉异常（Safari `file://`）。 */
-function loadBest(): number {
-  try {
-    return +(localStorage.getItem(BEST_KEY) ?? 0) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** 写入历史最高分。 */
-function saveBest(value: number): void {
-  try {
-    localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // 隐私模式 / file:// 下可能禁用 localStorage —— 最高分退化为仅本局显示
-  }
-}
-
-/** 表现层视觉随机（旧 `rand`）。 */
-function rand(a: number, b: number): number {
-  return a + Math.random() * (b - a);
-}
-
-/** 会话层。 */
-export class GameSession {
-  private readonly stage: HTMLElement;
+/**
+ * 会话。
+ *
+ * 生命周期：`mount()` → （`start()` / `pause()` / `resume()` …）→ `dispose()`。
+ */
+export class GameSession implements InputSink {
+  private readonly options: GameSessionOptions;
   private readonly renderer: BattlefieldRenderer;
-  private readonly hud: HudStore;
-  private readonly ui: SessionUi;
-  private readonly presentation: PresentationState;
-  private readonly sink: EffectSink;
+  private readonly presentation: PresentationPort;
+  private readonly host: HTMLElement;
 
-  private rng: Rng;
   private state: GameState;
-  private best = 0;
-  private selectedDifficulty: Difficulty = 1;
+  private rng: Rng;
+  private diffLevel: Difficulty;
+  private readonly seed: number;
 
-  private raf = 0;
-  private lastT = 0;
+  /** 视觉时钟（旧代码的 `vt`）—— 所有阶段都推进。 */
   private visualTime = 0;
-  private frenzySparkT = 0;
-  private pausedByOrientation = false;
+  /** 上一帧时间戳（0 表示「还没开始」）。 */
+  private lastT = 0;
+  private rafHandle: number | null = null;
+  private mounted = false;
   private disposed = false;
 
-  private readonly frame: MutableFrame;
-  private lastW = -1;
-  private lastH = -1;
-  private lastDpr = -1;
-  private resizeObserver: ResizeObserver | null = null;
-  private resizeTimers: number[] = [];
+  /** 在场怪物的复用缓冲（避免每帧重建数组 —— ADR-0004）。 */
+  private readonly monsterBuffer: Monster[] = [];
 
   constructor(options: GameSessionOptions) {
-    this.stage = options.stage;
+    this.options = options;
     this.renderer = options.renderer;
-    this.hud = options.hud;
-    this.ui = options.ui;
-    this.best = loadBest();
+    this.host = options.host;
+    this.diffLevel = options.diffLevel;
+    this.seed = options.seed;
+    this.presentation =
+      options.presentation ??
+      createPresentation(
+        createEffectSink((effect) => {
+          options.onEffect?.(effect);
+        }),
+      );
+    this.rng = createRng(options.seed);
+    this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
+    // 表现层要知道角色在哪 —— FEVER 周身火花绕着角色发射。
+    this.presentation.setLayout(options.layout);
+  }
 
-    const layout = this.measureLayout();
-    this.state = {
-      ...createGameState({ diffLevel: this.selectedDifficulty, seed: 0, layout }),
-      phase: 'idle',
-    };
-    this.rng = createRng(1);
+  private initialStateOptions(): { diffLevel: Difficulty; seed: number; layout: Layout } {
+    return { diffLevel: this.diffLevel, seed: this.seed, layout: this.options.layout };
+  }
 
-    this.sink = {
-      toast: (text, color) => this.ui.toast(text, color),
-      laneFlash: (lane) => this.ui.laneFlash(lane),
-      vibrate: (pattern) => {
-        try {
-          navigator.vibrate(pattern);
-        } catch {
-          // 部分浏览器没有震动 API / 被权限策略禁用 —— 静默忽略
-        }
-      },
-      hurt: () => this.ui.hurt(),
-      feverStart: () => this.ui.feverFlash(),
-      feverEnd: () => {
-        // FEVER 结束只有 toast（规则层已发），没有额外闪屏
-      },
-      gameOver: () => this.finishGameOver(),
-    };
-    this.presentation = new PresentationState(this.sink);
+  // ── 生命周期 ──────────────────────────────────────────────
 
+  /**
+   * 挂载渲染器并开始渲染循环。
+   *
+   * 循环**常驻**（旧实现也是常驻的 —— 空闲时背景星空照常流动），
+   * 暂停时走「只推进表现层」的分支。
+   *
+   * 幂等：重复调用只会挂载一次。
+   */
+  async mount(): Promise<void> {
+    if (this.disposed || this.mounted) return;
+    this.mounted = true;
+    await this.renderer.mount(this.host);
+    if (this.disposed) return;
+    this.rafHandle = this.schedule(this.tickFrame);
+  }
+
+  /** 释放资源（卸载组件时调用）。 */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.rafHandle !== null) {
+      this.cancel(this.rafHandle);
+      this.rafHandle = null;
+    }
+    this.renderer.unmount();
+  }
+
+  // ── 局面阶段 ──────────────────────────────────────────────
+
+  /** 当前局面阶段。 */
+  get phase(): Phase {
+    return this.state.phase;
+  }
+
+  /** 当前规则层状态（只读快照）。 */
+  getState(): GameState {
+    return this.state;
+  }
+
+  /** 开始一局（idle → running）。非法转换被拒（静默）。 */
+  start(): void {
+    if (!canTransition(this.state.phase, 'start')) return;
+    this.beginRound();
+  }
+
+  /** 重开一局（paused / over → running）。 */
+  restart(): void {
+    if (!canTransition(this.state.phase, 'restart')) return;
+    this.beginRound();
+  }
+
+  /** 暂停（running → paused）。 */
+  pause(): void {
+    if (!canTransition(this.state.phase, 'pause')) return;
+    // 旧实现的 `pauseGame()` **不**重置 `lastT`（只有 `resumeGame()` 重置）——
+    // 暂停期间帧照走，表现层照常衰减。
+    this.applyEvent({ type: 'Pause' });
+  }
+
+  /** 继续（paused → running）。 */
+  resume(): void {
+    if (!canTransition(this.state.phase, 'resume')) return;
+    this.applyEvent({ type: 'Resume' });
+    this.lastT = 0;
+  }
+
+  /** 回主页面（paused → idle）。 */
+  quitToHome(): void {
+    if (!canTransition(this.state.phase, 'quitToHome')) return;
+    this.resetToIdle();
+  }
+
+  /** 回难度选择（over → idle）。 */
+  chooseDifficulty(): void {
+    if (!canTransition(this.state.phase, 'chooseDifficulty')) return;
+    this.resetToIdle();
+  }
+
+  // ── 输入 ─────────────────────────────────────────────────
+
+  /** 按下半屏。非 running 时由规则层拒绝（`pressLane` 首行判断）。 */
+  press(lane: Lane, inputId: string): void {
+    this.applyEvent({ type: 'Press', lane, inputId });
+  }
+
+  /** 松开输入。只有松开发起长按的那根输入才判定长按中断。 */
+  release(inputId: string): void {
+    this.applyEvent({ type: 'Release', inputId });
+  }
+
+  /** 取消长按但不惩罚（暂停 / 切后台）。 */
+  cancelHold(): void {
+    this.applyEvent({ type: 'CancelHold' });
+  }
+
+  // ── 布局 ─────────────────────────────────────────────────
+
+  /** 尺寸变化：重新贴合轨道并通知渲染器。 */
+  resize(layout: Layout): void {
+    this.applyEvent({ type: 'Resize', layout });
+    this.renderer.resize(layout);
+    // 表现层也要知道角色在哪 —— FEVER 周身火花绕着角色发射。
+    this.presentation.setLayout(layout);
+  }
+
+  /**
+   * 切换难度星级。
+   *
+   * 难度是**跨局选择**（旧实现的 `diffLevel` 是模块级变量，`resetGame()` 不重置它），
+   * 所以换难度不影响当前局的规则状态，但会影响**下一局**开局时的难度。
+   */
+  setDifficulty(diffLevel: Difficulty): void {
+    this.diffLevel = diffLevel;
+    this.applyEvent({ type: 'SetDifficulty', diffLevel });
+  }
+
+  /**
+   * 开发期钩子：把一批效果事件**直接灌进表现层**（`?debug` 专用）。
+   *
+   * 绕过规则层 —— 用来在端到端测试里**稳定复现**某个瞬间
+   * （例如「一个暴击瞬间的画面」），而不用真的打到那一下。
+   *
+   * 画面仍然是**真的**：渲染层照常渲染，表现层照常推进。
+   * 规则层（`src/game/**`）一行都没改。
+   */
+  applyDebugEffects(effects: readonly Effect[]): void {
+    this.presentation.apply(effects);
+  }
+
+  /**
+   * 开发期钩子：强制 FEVER 开关（`?debug` 专用）。
+   *
+   * 改的是**会话层持有的规则状态快照**（与规则层真实触发 FEVER 时的字段一致），
+   * 规则层（`src/game/**`）一行都没改。
+   *
+   * 附带的事件与规则层 `rules/fever.ts` 的完全一致
+   * （`fever-start` + toast + vibrate），所以画面与真实 FEVER 相同。
+   */
+  setDebugFever(on: boolean): void {
+    this.state = { ...this.state, frenzyActive: on, feverT: on ? FEVER_TIME : 0 };
+    if (on) {
+      this.presentation.apply([
+        { type: 'fever-start' },
+        { type: 'toast', text: 'FEVER！10 秒 ×1.5', color: GOLD },
+        { type: 'vibrate', pattern: [0, 40, 60, 90] },
+      ]);
+    } else {
+      this.presentation.apply([{ type: 'fever-end' }]);
+    }
+  }
+
+  // ── 内部 ─────────────────────────────────────────────────
+
+  private beginRound(): void {
+    // 每局都重置 PRNG —— 同一颗种子必得同一局（便于复现与对照）。
+    this.rng = createRng(this.seed);
+    this.state = createGameState({
+      diffLevel: this.diffLevel,
+      seed: this.seed,
+      layout: this.state.layout,
+    });
+    this.presentation.reset();
+    this.lastT = 0;
+    this.notifyPhase();
+  }
+
+  private resetToIdle(): void {
+    this.rng = createRng(this.seed);
+    this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
+    this.presentation.reset();
+    this.lastT = 0;
+    this.notifyPhase();
+  }
+
+  /** 归约一个规则层事件，并把产生的效果交给表现层与上层。 */
+  private applyEvent(event: Parameters<typeof reduce>[1]): void {
+    const previousPhase = this.state.phase;
+    const { state, effects } = reduce(this.state, event, this.rng);
+    this.state = state;
+    // 表现层消费效果事件；DOM 副作用由表现层的 `EffectSink` 转交给 `onEffect`。
+    if (effects.length > 0) this.presentation.apply(effects);
+    if (state.phase !== previousPhase) this.notifyPhase();
+  }
+
+  private notifyPhase(): void {
+    this.options.onPhaseChange?.(this.state.phase);
+  }
+
+  private schedule(cb: (ts: number) => void): number {
+    const scheduleFrame = this.options.scheduleFrame;
+    if (scheduleFrame) return scheduleFrame(cb);
+    return requestAnimationFrame(cb);
+  }
+
+  private cancel(handle: number): void {
+    const cancelFrame = this.options.cancelFrame;
+    if (cancelFrame) {
+      cancelFrame(handle);
+      return;
+    }
+    cancelAnimationFrame(handle);
+  }
+
+  /**
+   * 一帧。
+   *
+   * 顺序照抄旧实现的 `loop()`（`source.html:1276-1398`）：
+   *   1. 视觉时钟推进（**所有阶段**）
+   *   2. 规则层推进（`now` 只在 running 推进；`attackT` 在 paused 不衰减 —— 规则层内部保证）
+   *   3. 表现层衰减（**所有阶段**）
+   *   4. 渲染
+   */
+  private readonly tickFrame = (ts: number): void => {
+    if (this.disposed) return;
+    this.rafHandle = this.schedule(this.tickFrame);
+
+    const dt = this.computeDt(ts);
+    this.visualTime += dt;
+
+    this.applyEvent({ type: 'Tick', dt });
+
+    this.presentation.advance(dt);
+
+    this.render();
+  };
+
+  /** `dt = min((ts - lastT)/1000, 0.05)` —— `source.html:1279-1282`。 */
+  private computeDt(ts: number): number {
+    if (!this.lastT) {
+      this.lastT = ts;
+      return 0;
+    }
+    const dt = Math.min((ts - this.lastT) / 1000, MAX_DT);
+    this.lastT = ts;
+    return dt;
+  }
+
+  /** 组装一帧并交给渲染器。 */
+  private render(): void {
     const s = this.state;
-    this.frame = {
+
+    // 在场怪物：已离场的（`removed`）不进画面（`FrameView` 契约）。
+    // 用复用缓冲，避免每帧新建数组。
+    this.monsterBuffer.length = 0;
+    for (const m of s.monsters) {
+      if (!m.removed) this.monsterBuffer.push(m);
+    }
+
+    const frame: FrameView = {
       layout: s.layout,
       phase: s.phase,
       hp: s.hp,
@@ -160,435 +374,21 @@ export class GameSession {
       frenzyActive: s.frenzyActive,
       feverT: s.feverT,
       now: s.now,
-      scrollSpeed: 0,
-      visualTime: 0,
-      monsters: s.monsters,
+      visualTime: this.visualTime,
+      monsters: this.monsterBuffer,
       attackT: s.attackT,
       attackLane: s.attackLane,
       playerLane: s.playerLane,
       playerAirT: s.airT,
-      effects: this.presentation.effects,
-      shake: 0,
-      playerFlash: 0,
-      pairSmash: 0,
+      scrollSpeed: speedNow(s.now, this.diffLevel),
+      effects: this.presentation.snapshot,
+      shake: this.presentation.shake,
+      playerFlash: this.presentation.playerFlash,
+      pairSmash: this.presentation.pairSmash,
+      screenFx: this.presentation.screenFx,
     };
 
-    this.renderer.mount(options.host);
-    this.resize(true);
-    this.hud.update(this.state, this.best);
-
-    this.attachInput();
-    this.observeResize();
-    this.raf = requestAnimationFrame(this.loop);
-  }
-
-  // ── 生命周期 ─────────────────────────────────────────────
-
-  /** 开始一局新游戏。 */
-  start(diffLevel: Difficulty = this.selectedDifficulty): void {
-    this.selectedDifficulty = diffLevel;
-    this.pausedByOrientation = false;
-    this.frenzySparkT = 0;
-    this.presentation.reset();
-    this.ui.clearFeedback();
-
-    // 开局前补一次布局，避免旋转后第一帧用旧尺寸
-    this.resize();
-    const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    this.rng = createRng(seed);
-    const result = reduce(
-      this.state,
-      {
-        type: 'Start',
-        diffLevel,
-        seed,
-        layout: this.state.layout,
-      },
-      this.rng,
-    );
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.lastT = 0;
-    this.hud.update(this.state, this.best);
-    this.render();
-  }
-
-  /** 重开一局（保留当前难度）。 */
-  restart(): void {
-    this.start(this.selectedDifficulty);
-  }
-
-  /** 回主页面：清空当前局，保留难度选择与最高分。 */
-  home(): void {
-    this.pausedByOrientation = false;
-    this.frenzySparkT = 0;
-    this.presentation.reset();
-    this.ui.clearFeedback();
-    this.rng = createRng(1);
-    this.state = {
-      ...createGameState({
-        diffLevel: this.selectedDifficulty,
-        seed: 0,
-        layout: this.state.layout,
-      }),
-      phase: 'idle',
-    };
-    this.lastT = 0;
-    this.hud.update(this.state, this.best);
-    this.render();
-  }
-
-  /** 暂停（手动）。 */
-  pause(): void {
-    if (this.state.phase !== 'running') return;
-    this.pausedByOrientation = false;
-    this.enterPause();
-  }
-
-  /** 继续。 */
-  resume(): void {
-    if (this.state.phase !== 'paused') return;
-    this.pausedByOrientation = false;
-    const result = reduce(this.state, { type: 'Resume' }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.lastT = 0;
-    this.hud.update(this.state, this.best);
-    this.render();
-  }
-
-  /**
-   * 横竖屏切换 —— 旧 `source.html:500-531` 的行为：
-   * 转竖屏自动暂停并记住「是旋转导致的暂停」，转回横屏自动继续。
-   */
-  setLandscape(landscape: boolean): void {
-    if (!landscape) {
-      if (this.state.phase === 'running') {
-        this.enterPause();
-        this.pausedByOrientation = true;
-      }
-      return;
-    }
-    if (this.pausedByOrientation && this.state.phase === 'paused') {
-      this.resume();
-    }
-  }
-
-  /** 选择难度（开始界面 / 键盘开局使用）。 */
-  setDifficulty(diffLevel: Difficulty): void {
-    this.selectedDifficulty = diffLevel;
-    if (this.state.phase === 'idle') {
-      const result = reduce(this.state, { type: 'SetDifficulty', diffLevel }, this.rng);
-      this.state = result.state;
-      this.hud.update(this.state, this.best);
-    }
-  }
-
-  /** 彻底释放：停循环、移除监听、卸载渲染器。 */
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    cancelAnimationFrame(this.raf);
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
-    for (const timer of this.resizeTimers) clearTimeout(timer);
-    this.resizeTimers.length = 0;
-    this.detachInput();
-    this.renderer.unmount();
-  }
-
-  // ── 循环 ─────────────────────────────────────────────────
-
-  private loop = (ts: number): void => {
-    if (this.disposed) return;
-    this.raf = requestAnimationFrame(this.loop);
-
-    if (!this.lastT) this.lastT = ts;
-    let dt = (ts - this.lastT) / 1000;
-    this.lastT = ts;
-    if (!Number.isFinite(dt) || dt < 0) dt = 0;
-    dt = Math.min(dt, MAX_DT);
-    this.visualTime += dt;
-
-    if (this.state.phase === 'running') {
-      this.stepRules(dt);
-    } else if (this.state.phase !== 'paused' && this.state.attackT > 0) {
-      // idle / over 只衰减出招动作（旧 `stepVisualOnly`）
-      this.stepRules(dt);
-    }
-
-    // 暂停时粒子 / 环 / 命中火花 / 飘字仍继续衰减（照抄旧实现）
-    this.presentation.step(dt);
-    if (this.state.phase === 'running' && this.state.frenzyActive) this.emitFrenzy(dt);
-
-    this.render();
-    this.hud.update(this.state, this.best);
-  };
-
-  private stepRules(dt: number): void {
-    const result = reduce(this.state, { type: 'Tick', dt }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-  }
-
-  /**
-   * FEVER 火花 —— 逐字照抄旧 `emitFrenzy()`（`source.html:1238-1253`）。
-   *
-   * 每帧概率由 `frenzySparkT` 控制，粒子上限 260。
-   */
-  private emitFrenzy(dt: number): void {
-    this.frenzySparkT -= dt;
-    if (this.frenzySparkT > 0) return;
-    if (this.presentation.effects.particles.length >= MAX_PARTICLES) return;
-    this.frenzySparkT = rand(0.035, 0.08);
-
-    const { playerX, playerR, laneY } = this.state.layout;
-    const ringY = laneY[this.state.playerLane ?? 'bottom'];
-    const a = rand(0, Math.PI * 2);
-    const rr = playerR * rand(1.2, 2.1);
-    this.presentation.effects.addSpark(
-      playerX + Math.cos(a) * rr,
-      ringY + Math.sin(a) * rr,
-      -rand(40, 160),
-      rand(-70, 20),
-      rand(1.4, 3.2),
-      rand(0.3, 0.7),
-      Math.random() < 0.35 ? '#fff4c2' : GOLD,
-    );
-  }
-
-  private render(): void {
-    const s = this.state;
-    const f = this.frame;
-    f.layout = s.layout;
-    f.phase = s.phase;
-    f.hp = s.hp;
-    f.score = s.score;
-    f.combo = s.combo;
-    f.maxCombo = s.maxCombo;
-    f.kills = s.kills;
-    f.critCount = s.critCount;
-    f.normalCount = s.normalCount;
-    f.frenzyActive = s.frenzyActive;
-    f.feverT = s.feverT;
-    f.now = s.now;
-    f.scrollSpeed = speedNow(s.now, s.diffLevel);
-    f.visualTime = this.visualTime;
-    f.monsters = s.monsters;
-    f.attackT = s.attackT;
-    f.attackLane = s.attackLane;
-    f.playerLane = s.playerLane;
-    f.playerAirT = s.airT;
-    f.effects = this.presentation.effects;
-    f.shake = this.presentation.shake.value;
-    f.playerFlash = this.presentation.playerFlash;
-    f.pairSmash =
-      this.presentation.pairSmashT > 0
-        ? 1 - this.presentation.pairSmashT / PAIR_SMASH_DUR
-        : 0;
-    this.renderer.render(f);
-  }
-
-  // ── 规则事件 ─────────────────────────────────────────────
-
-  private press(lane: Lane, inputId: string): void {
-    if (this.state.phase !== 'running') return;
-    const result = reduce(this.state, { type: 'Press', lane, inputId }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.hud.update(this.state, this.best);
-  }
-
-  private release(inputId: string): void {
-    if (this.state.phase !== 'running') return;
-    const result = reduce(this.state, { type: 'Release', inputId }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.hud.update(this.state, this.best);
-  }
-
-  private cancelHold(): void {
-    if (this.state.holdMonsterId === null) return;
-    const result = reduce(this.state, { type: 'CancelHold' }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-  }
-
-  private enterPause(): void {
-    const result = reduce(this.state, { type: 'Pause' }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.hud.update(this.state, this.best);
-    this.render();
-  }
-
-  private finishGameOver(): void {
-    if (this.state.phase !== 'over') return;
-    if (this.state.score > this.best) {
-      this.best = this.state.score;
-      saveBest(this.best);
-    }
-    this.hud.update(this.state, this.best);
-  }
-
-  // ── 输入 ─────────────────────────────────────────────────
-
-  private attachInput(): void {
-    this.stage.addEventListener('pointerdown', this.onPointerDown, { passive: false });
-    this.stage.addEventListener('touchstart', this.onTouchStart, { passive: false });
-    window.addEventListener('pointerup', this.onPointerUp);
-    window.addEventListener('pointercancel', this.onPointerUp);
-    window.addEventListener('blur', this.onBlur);
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
-    document.addEventListener('visibilitychange', this.onVisibilityChange);
-    document.addEventListener('contextmenu', this.onContextMenu);
-    document.addEventListener('touchmove', this.onTouchMove, { passive: false });
-  }
-
-  private detachInput(): void {
-    this.stage.removeEventListener('pointerdown', this.onPointerDown);
-    this.stage.removeEventListener('touchstart', this.onTouchStart);
-    window.removeEventListener('pointerup', this.onPointerUp);
-    window.removeEventListener('pointercancel', this.onPointerUp);
-    window.removeEventListener('blur', this.onBlur);
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
-    document.removeEventListener('visibilitychange', this.onVisibilityChange);
-    document.removeEventListener('contextmenu', this.onContextMenu);
-    document.removeEventListener('touchmove', this.onTouchMove);
-  }
-
-  private onPointerDown = (event: PointerEvent): void => {
-    if (this.state.phase !== 'running') return;
-    if (!isPrimaryPointer(event)) return;
-    const lane = laneFromClientY(event.clientY, this.stage.getBoundingClientRect());
-    if (!lane) return;
-    event.preventDefault();
-    this.press(lane, pointerInputId(event));
-  };
-
-  private onPointerUp = (event: PointerEvent): void => {
-    this.release(pointerInputId(event));
-  };
-
-  /**
-   * 压掉手机浏览器的长按菜单。
-   *
-   * 长按是核心操作（长条怪要按住 2 秒），但 UC / 360 / 小米这类浏览器
-   * 会在长按时弹出「标记广告」/ 选词菜单，把手指抢走、长按直接中断。
-   * 在 touchstart 里阻止默认行为可以抑制 WebView 自带的长按手势；
-   * 按钮和弹层要保留正常点击，所以只接管游戏舞台。
-   */
-  private onTouchStart = (event: TouchEvent): void => {
-    const target = event.target as Element | null;
-    if (target?.closest('button, a, input, select, textarea, .overlay')) return;
-    event.preventDefault();
-  };
-
-  private onBlur = (): void => {
-    this.cancelHold();
-  };
-
-  private onKeyDown = (event: KeyboardEvent): void => {
-    if (event.repeat) return;
-    const action = keyActionFor(event.code);
-    if (!action) return;
-
-    if (action.type === 'toggle-pause') {
-      event.preventDefault();
-      if (this.state.phase === 'running') this.pause();
-      else if (this.state.phase === 'paused') this.resume();
-      return;
-    }
-
-    if (action.type === 'confirm') {
-      event.preventDefault();
-      if (this.state.phase === 'idle') this.start();
-      else if (this.state.phase === 'over') this.restart();
-      return;
-    }
-
-    if (action.type !== 'press') return;
-    event.preventDefault();
-    if (this.state.phase === 'idle') this.start();
-    else if (this.state.phase === 'running') this.press(action.lane, action.inputId);
-  };
-
-  private onKeyUp = (event: KeyboardEvent): void => {
-    const inputId = releaseInputFor(event.code);
-    if (inputId) this.release(inputId);
-  };
-
-  private onVisibilityChange = (): void => {
-    if (document.hidden && this.state.phase === 'running') this.pause();
-  };
-
-  private onContextMenu = (event: Event): void => {
-    event.preventDefault();
-  };
-
-  private onTouchMove = (event: TouchEvent): void => {
-    event.preventDefault();
-  };
-
-  // ── 尺寸 ─────────────────────────────────────────────────
-
-  private observeResize(): void {
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(this.stage);
-    window.addEventListener('resize', this.onWindowResize);
-    window.addEventListener('orientationchange', this.onWindowResize);
-  }
-
-  private onWindowResize = (): void => {
-    this.resize();
-    for (const timer of this.resizeTimers) clearTimeout(timer);
-    // 移动端旋转后尺寸可能晚一两帧才稳定（旧实现在 70ms / 260ms 各补一次）
-    this.resizeTimers = [
-      window.setTimeout(() => this.resize(), 70),
-      window.setTimeout(() => this.resize(), 260),
-    ];
-  };
-
-  private measureLayout(): Layout {
-    const rect = this.stage.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    return computeLayout(rect.width, rect.height, dpr);
-  }
-
-  private resize(force = false): void {
-    if (this.disposed) return;
-    const rect = this.stage.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) return;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (
-      !force &&
-      Math.abs(rect.width - this.lastW) < 0.01 &&
-      Math.abs(rect.height - this.lastH) < 0.01 &&
-      dpr === this.lastDpr
-    ) {
-      return;
-    }
-
-    this.lastW = rect.width;
-    this.lastH = rect.height;
-    this.lastDpr = dpr;
-
-    const layout = computeLayout(rect.width, rect.height, dpr);
-    const result = reduce(this.state, { type: 'Resize', layout }, this.rng);
-    this.state = result.state;
-    this.presentation.applyEffects(result.effects);
-    this.renderer.resize(layout);
-    this.applyVignette(layout);
-  }
-
-  /** 静态暗角交给 CSS 合成层（旧 `source.html:542-548`）。 */
-  private applyVignette(layout: Layout): void {
-    const rIn = Math.min(layout.width, layout.height) * 0.32;
-    const rOut = Math.max(layout.width, layout.height) * 0.72;
-    this.stage.style.setProperty('--vignette-in', `${rIn.toFixed(1)}px`);
-    this.stage.style.setProperty('--vignette-out', `${rOut.toFixed(1)}px`);
+    this.renderer.render(frame);
+    this.options.onFrame?.(frame);
   }
 }

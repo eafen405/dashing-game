@@ -37,3 +37,15 @@ Blocked by: 09
 
 - 这一票做完，"零构建零依赖"就彻底不是这个仓库的描述了 —— 这是 ADR-0001 明确接受的后果。
 - 交付时把 `dist/index.html` 作为可分享产物给用户实测。
+
+## Comments
+
+- **2026-10-21（交接收口）**：文档前半已完成并合入集成分支 —— README 改写、CHANGELOG、
+  GLOSSARY / ADR 现状核对（`bb2ca5c`，合并于 `43386f2`）。本票仍未 resolved：
+  剩余「产物体积上限告警」「删除 `source.html`」「最终验收」，且都排在 08/09 之后。
+- **删 `source.html` 前必须先裁决**：它现在仍是 golden trace 的生成源
+  （`scripts/legacy/patch-legacy.mjs` 读它生成 `legacy-harness-*.html`），
+  也是 `tests/e2e/compare-legacy.mjs` / `fx-moments.mjs` 的旧版对照对象。
+  直接删除会让 `npm run trace` 与 e2e 变红。两条路：保留它作为只读参照物，
+  或把 legacy harness 固化成可提交的基线、改写对照脚本的数据源后再删。
+  详见 [handoff.md](../handoff.md)。

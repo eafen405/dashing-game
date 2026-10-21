@@ -8,7 +8,7 @@
  *      ▲ 只读快照
  * 规则层 game/   纯函数 tick(state,dt,rng)    60fps，无 DOM / 无 Pixi
  *      ▲ 事件
- * 表现层         particles / impacts / rings / floaters / shake    60fps，可变
+ * 表现层         particles / slashes / rings / floaters / shake    60fps，可变
  *      ▲ FrameView
  * 战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现   60fps
  * ```
@@ -29,12 +29,61 @@ import type { Lane, Layout, Monster, Phase } from '../game/types';
 export interface Effects {
   /** 粒子（旧 `particles`）。上限 260。 */
   readonly particles: readonly Particle[];
-  /** 命中点火花（旧 `slashes` 通道）。 */
-  readonly impacts: readonly Impact[];
+  /** 刀光（旧 `slashes`）。 */
+  readonly slashes: readonly Slash[];
   /** 冲击环（旧 `rings`）。 */
   readonly rings: readonly Ring[];
   /** 飘分文字（旧 `floaters`）。 */
   readonly floaters: readonly Floater[];
+}
+
+/**
+ * 粒子形态 —— 表现层决定「怎么画」。
+ *
+ * 旧实现只有一种形态（圆点）；票 07 拆成三种，让普攻 / 暴击 / FEVER
+ * **一眼可辨**（形状 / 速度 / 颜色 / 生命周期都不同）。
+ *
+ * - `spark` —— 普攻：圆点，轨道色，旧版速度与寿命。
+ * - `shard` —— 暴击：细长碎片，金 / 白，更快更亮。
+ * - `ember` —— FEVER：四角星芒，暖金，更慢更持久。
+ */
+export type ParticleForm = 'spark' | 'shard' | 'ember';
+
+/** 刀光形态 —— 主刀光 / 暴击余晖（余晖是暴击时追加的一层淡金色拖尾）。 */
+export type SlashKind = 'main' | 'afterglow';
+
+/** 冲击环档位 —— 普攻 / 暴击 / 双生同破（决定环的粗细与颜色分档）。 */
+export type RingTier = 'normal' | 'crit' | 'twin';
+
+/**
+ * 冲击波总时长（秒）—— **表现层与渲染层共享的口径**。
+ *
+ * 表现层用它计时（`PresentationState.screenFx.shockAge`），
+ * 渲染层用它反推滤镜的最大半径（`radius = speed × SHOCK_LIFE`）——
+ * 两者必须一致，否则波会在半路消失或拖尾。
+ */
+export const SHOCK_LIFE = 0.42;
+
+/**
+ * 全屏特效状态 —— 表现层 → 渲染层。
+ *
+ * **表现层拥有**这份状态（含插值与计时），渲染层只负责把它映射到滤镜参数上
+ * （色散的分量偏移、冲击波的时间 / 半径 / 中心）。
+ *
+ * 滤镜实例本身**只创建一次**（见 `src/battlefield/pixi/filters.ts`），
+ * 靠这里插值出来的数值过渡，不重建实例。
+ */
+export interface ScreenFx {
+  /** FEVER 色散强度（0 = 关闭，1 = 全强度）。 */
+  readonly rgbSplit: number;
+  /** 冲击波已播放时间（秒）。`shockLevel === 0` 时无意义。 */
+  readonly shockAge: number;
+  /** 冲击波强度档（0 = 无 / 1 = 暴击 / 2 = 双生同破）。 */
+  readonly shockLevel: number;
+  /** 冲击波中心 x（CSS 像素）。 */
+  readonly shockX: number;
+  /** 冲击波中心 y（CSS 像素）。 */
+  readonly shockY: number;
 }
 
 /** 单个粒子（旧 `particles.push({...})`）。 */
@@ -49,18 +98,24 @@ export interface Particle {
   /** 总寿命（秒）。 */
   life: number;
   color: string;
+  /** 粒子形态（表现层决定）。 */
+  form: ParticleForm;
 }
 
-/** 一次命中火花。 */
-export interface Impact {
+/** 一道刀光（旧 `slashes.push({...})`）。 */
+export interface Slash {
   /** 打击点 x。 */
   x: number;
+  /** 起点 x（角色身前）。 */
+  x0: number;
   y: number;
   /** 已存活时间（秒）。 */
   t: number;
   /** 总寿命（秒）。 */
   life: number;
   lane: Lane;
+  /** 刀光形态（主刀光 / 暴击余晖）。 */
+  kind: SlashKind;
 }
 
 /** 一个冲击环（旧 `rings.push({...})`）。 */
@@ -76,6 +131,8 @@ export interface Ring {
   /** 结束半径。 */
   r1: number;
   color: string;
+  /** 环的档位（表现层按批次签名打上，决定粗细与颜色分档）。 */
+  tier: RingTier;
 }
 
 /** 一条飘分文字（旧 `addFloater(x, y, text, color)`）。 */
@@ -124,12 +181,6 @@ export interface FrameView {
   readonly feverT: number;
   /** 游戏时间（秒）—— 只在 running 阶段推进。 */
   readonly now: number;
-  /**
-   * 世界前进速度（px/s）—— 与怪物移速一致。
-   *
-   * 地面 / 轨道刻度的滚动用它，让画面读成「角色向前走」而不是「怪物冲过来」。
-   */
-  readonly scrollSpeed: number;
 
   /**
    * 视觉时钟（秒）—— 旧实现的 `vt`。
@@ -151,10 +202,12 @@ export interface FrameView {
   readonly playerLane: Lane | null;
   /** 上跳滞空剩余秒数（0 = 已落地）。 */
   readonly playerAirT: number;
+  /** 当前滚屏速度（px/s）—— 背景 / 地面装饰的流动速度。 */
+  readonly scrollSpeed: number;
 
   // ---- 表现层可变状态 ----
 
-  /** 粒子 / 命中火花 / 冲击环 / 飘字。 */
+  /** 粒子 / 刀光 / 冲击环 / 飘字。 */
   readonly effects: Effects;
   /** 当前屏幕震动强度（0 = 无震动）。 */
   readonly shake: number;
@@ -162,6 +215,8 @@ export interface FrameView {
   readonly playerFlash: number;
   /** 双生击破下砸动画进度（0 = 未播放，1 = 刚触发）。 */
   readonly pairSmash: number;
+  /** 全屏特效（色散 / 冲击波）—— 表现层插值好的数值，渲染层直接映射到滤镜。 */
+  readonly screenFx: ScreenFx;
 }
 
 /**
