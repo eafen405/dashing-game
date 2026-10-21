@@ -19,7 +19,7 @@ import type { FrameContext } from './context';
 import { destroyGradient, linearGradient } from './gradient';
 import { arcPath, attachPath, setFillGradient, setStroke } from './gfx';
 import { clamp, easeOutCubic, lerp } from './math';
-import { hexA, laneColorOf } from './palette';
+import { GOLD, hexA, laneColorOf } from './palette';
 
 /** 同时存在的刀光上限（池子大小）。 */
 const MAX_SLASHES = 10;
@@ -29,6 +29,15 @@ const BEAM_HALF_W = 1.5;
 
 /** 光柱渐变的参考 alpha（`vp = 0` 时的 `0.45`）。 */
 const BEAM_REF_ALPHA = 0.45;
+
+/** 余晖的外圈描边宽度系数（相对主刀光的打击点新月）。 */
+const AFTERGLOW_OUTER_W = 2.6;
+/** 余晖的内圈描边宽度系数。 */
+const AFTERGLOW_INNER_W = 1.5;
+/** 余晖的外圈 alpha。 */
+const AFTERGLOW_OUTER_A = 0.2;
+/** 余晖的内圈 alpha。 */
+const AFTERGLOW_INNER_A = 0.42;
 
 /** 一道刀光的复用槽位。 */
 interface SlashSlot {
@@ -85,6 +94,12 @@ export class SlashView {
       if (!sl || !slot) continue;
       const p = clamp(sl.t / sl.life, 0, 1);
       const color = laneColorOf(sl.lane, fc.frenzyActive);
+
+      // 0) 暴击余晖（票 07）—— 只在打击点留一道更宽、更淡的金色拖尾。
+      if (sl.kind === 'afterglow') {
+        this.drawAfterglow(slot, sl.x, sl.y, p);
+        continue;
+      }
 
       // 1) 飞行斩：从剑尖飞向打击点的新月。
       const flyP = clamp(p / 0.34, 0, 1);
@@ -167,6 +182,31 @@ export class SlashView {
   destroy(): void {
     for (const gradient of this.beamGradients.values()) destroyGradient(gradient);
     this.beamGradients.clear();
+  }
+
+  /**
+   * 暴击余晖 —— 票 07。
+   *
+   * 暴击时在主刀光之外**追加**的一层金色拖尾：只有打击点的新月，
+   * 没有飞行斩也没有光柱，宽度更大、alpha 更低、寿命更长（1.7 倍）。
+   */
+  private drawAfterglow(slot: SlashSlot, x: number, y: number, p: number): void {
+    const fade = 1 - p;
+    slot.flyRoot.visible = false;
+    slot.hitRoot.visible = true;
+    slot.hitRoot.position.set(x, y);
+    slot.hitRoot.rotation = -0.95 + p * 0.62;
+    const hitGfx = slot.hitGfx;
+    hitGfx.clear();
+    const len = 22 + p * 54;
+    const crescent = arcPath(0, 0, len, -1.05, 1.05);
+    setStroke(hitGfx, 14 * AFTERGLOW_OUTER_W, GOLD, AFTERGLOW_OUTER_A, 'round');
+    hitGfx.beginPath();
+    hitGfx.context.path(crescent);
+    hitGfx.stroke();
+    setStroke(hitGfx, 7 * AFTERGLOW_INNER_W, GOLD, AFTERGLOW_INNER_A * fade, 'round');
+    attachPath(hitGfx, crescent);
+    hitGfx.stroke();
   }
 
   /** 光柱渐变（按颜色缓存 —— 只有 4 种可能的轨道色）。 */

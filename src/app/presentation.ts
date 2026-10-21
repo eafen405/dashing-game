@@ -17,8 +17,9 @@
  * 轨道高亮 / 震动 / 结算 都通过 `EffectSink` 转交给上层（会话层 → React 层）。
  */
 
-import type { Effects } from '../battlefield/types';
+import type { Effects, ScreenFx } from '../battlefield/types';
 import type { Effect } from '../game/effects';
+import type { Layout } from '../game/types';
 import { PresentationState, type EffectSink } from '../presentation';
 
 /** 表现层端口。 */
@@ -33,6 +34,10 @@ export interface PresentationPort {
   readonly shake: number;
   /** 角色受击红闪强度。 */
   readonly playerFlash: number;
+  /** 全屏特效（色散强度 / 冲击波计时与中心）。 */
+  readonly screenFx: ScreenFx;
+  /** 更新战场布局 —— FEVER 周身火花要知道角色在哪。 */
+  setLayout(layout: Layout): void;
   /** 清空（开新局时）。 */
   reset(): void;
 }
@@ -57,6 +62,10 @@ export function createPresentation(sink: EffectSink | null = null): Presentation
     get playerFlash(): number {
       return state.playerFlash;
     },
+    get screenFx(): ScreenFx {
+      return state.screenFx;
+    },
+    setLayout: (layout) => state.setLayout(layout),
     reset: () => state.reset(),
   };
 }

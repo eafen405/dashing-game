@@ -214,6 +214,22 @@ export function GameApp({
     sessionRef.current = session;
     void session.mount();
 
+    // ── 开发期钩子（`?debug`）──────────────────────────────
+    //
+    // `window.__FX_DEBUG__` —— 端到端测试用它把效果事件直接灌进表现层，
+    // 从而**稳定复现**某个瞬间（暴击 / FEVER / 双生同破）而不必真的打到那一下。
+    // 画面仍然是真渲染；不带 `?debug` 时这个对象根本不存在。
+    if (DEBUG) {
+      (globalThis as unknown as { __FX_DEBUG__?: unknown }).__FX_DEBUG__ = {
+        /** 灌一批效果事件到表现层。 */
+        apply: (effects: Effect[]) => session.applyDebugEffects(effects),
+        /** 当前布局（算点击位置用）。 */
+        layout: () => session.getState().layout,
+        /** 强制 FEVER（规则状态 + 表现层一起）。 */
+        fever: (on: boolean) => session.setDebugFever(on),
+      };
+    }
+
     // ── 输入接线 ──────────────────────────────────────────
     const detachPointer = attachPointerInput({
       stage,

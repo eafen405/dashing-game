@@ -283,7 +283,8 @@ body {
 .combo-value.frenzy {
   color: #ffd24a;
   text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
-  animation: frenzyPulse 0.8s ease-in-out infinite;
+  /* 脉冲由 Motion 驱动（`ComboBadge.tsx` 的 `motion.b`）——
+     CSS 动画的优先级高于内联样式，两边都写会打架，所以这里不再声明 animation。 */
 }
 
 .combo-label {
@@ -310,11 +311,8 @@ body {
   white-space: nowrap;
 }
 
-@keyframes frenzyPulse {
-  50% {
-    transform: scale(1.16);
-  }
-}
+/* 票 07：`frenzyPulse` 的关键帧已删 —— 脉冲改由 Motion 驱动
+   （见 `src/app/hud/ComboBadge.tsx`），CSS 动画与内联 transform 不能同时存在。 */
 
 .icon-button {
   width: 38px;
@@ -459,6 +457,12 @@ body {
   transition:
     opacity 0.25s ease,
     visibility 0.25s;
+}
+
+/* 结算面板入场动效由 Motion 驱动（`GameOverScreen.tsx`）——
+   关掉 CSS 的 opacity 过渡，避免两套动画同时改一个属性。 */
+.overlay.gameover-enter {
+  transition: none;
 }
 
 .overlay h2 {

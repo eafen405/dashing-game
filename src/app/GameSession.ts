@@ -21,6 +21,7 @@
 
 import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
 import type { Effect } from '../game/effects';
+import { FEVER_TIME, GOLD } from '../game/constants';
 import { createRng, type Rng } from '../game/rng';
 import { reduce } from '../game/reducer';
 import { MAX_DT } from '../game/rules/tick';
@@ -101,6 +102,8 @@ export class GameSession implements InputSink {
       );
     this.rng = createRng(options.seed);
     this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
+    // 表现层要知道角色在哪 —— FEVER 周身火花绕着角色发射。
+    this.presentation.setLayout(options.layout);
   }
 
   private initialStateOptions(): { diffLevel: Difficulty; seed: number; layout: Layout } {
@@ -210,6 +213,8 @@ export class GameSession implements InputSink {
   resize(layout: Layout): void {
     this.applyEvent({ type: 'Resize', layout });
     this.renderer.resize(layout);
+    // 表现层也要知道角色在哪 —— FEVER 周身火花绕着角色发射。
+    this.presentation.setLayout(layout);
   }
 
   /**
@@ -221,6 +226,41 @@ export class GameSession implements InputSink {
   setDifficulty(diffLevel: Difficulty): void {
     this.diffLevel = diffLevel;
     this.applyEvent({ type: 'SetDifficulty', diffLevel });
+  }
+
+  /**
+   * 开发期钩子：把一批效果事件**直接灌进表现层**（`?debug` 专用）。
+   *
+   * 绕过规则层 —— 用来在端到端测试里**稳定复现**某个瞬间
+   * （例如「一个暴击瞬间的画面」），而不用真的打到那一下。
+   *
+   * 画面仍然是**真的**：渲染层照常渲染，表现层照常推进。
+   * 规则层（`src/game/**`）一行都没改。
+   */
+  applyDebugEffects(effects: readonly Effect[]): void {
+    this.presentation.apply(effects);
+  }
+
+  /**
+   * 开发期钩子：强制 FEVER 开关（`?debug` 专用）。
+   *
+   * 改的是**会话层持有的规则状态快照**（与规则层真实触发 FEVER 时的字段一致），
+   * 规则层（`src/game/**`）一行都没改。
+   *
+   * 附带的事件与规则层 `rules/fever.ts` 的完全一致
+   * （`fever-start` + toast + vibrate），所以画面与真实 FEVER 相同。
+   */
+  setDebugFever(on: boolean): void {
+    this.state = { ...this.state, frenzyActive: on, feverT: on ? FEVER_TIME : 0 };
+    if (on) {
+      this.presentation.apply([
+        { type: 'fever-start' },
+        { type: 'toast', text: 'FEVER！10 秒 ×1.5', color: GOLD },
+        { type: 'vibrate', pattern: [0, 40, 60, 90] },
+      ]);
+    } else {
+      this.presentation.apply([{ type: 'fever-end' }]);
+    }
   }
 
   // ── 内部 ─────────────────────────────────────────────────
@@ -340,6 +380,7 @@ export class GameSession implements InputSink {
       effects: this.presentation.snapshot,
       shake: this.presentation.shake,
       playerFlash: this.presentation.playerFlash,
+      screenFx: this.presentation.screenFx,
     };
 
     this.renderer.render(frame);

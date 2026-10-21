@@ -41,6 +41,13 @@ export class HitZoneView {
   readonly container = new Container();
 
   private readonly gfx = new Graphics();
+  /**
+   * 外圈光晕（票 07：挂到 `glow` 层，参与 bloom）。
+   *
+   * **不**挂在 `container` 下 —— 渲染器把它单独放进 `glow` 层。
+   * 光晕是半透明径向渐变，没有遮挡语义，挪到最上层只会被 bloom 提亮。
+   */
+  readonly haloGfx = new Graphics();
   private readonly textLayer = new Container();
 
   /** 光晕渐变缓存（按颜色字符串）。 */
@@ -77,7 +84,11 @@ export class HitZoneView {
   draw(fc: FrameContext): void {
     const g = this.gfx;
     g.clear();
+    const halo = this.haloGfx;
+    halo.clear();
     const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 5);
+    this.drawHalo(halo, fc, 'top', fc.layout.laneY.top, pulse);
+    this.drawHalo(halo, fc, 'bottom', fc.layout.laneY.bottom, pulse);
     this.drawZone(g, fc, 'top', fc.layout.laneY.top, pulse);
     this.drawZone(g, fc, 'bottom', fc.layout.laneY.bottom, pulse);
   }
@@ -88,6 +99,27 @@ export class HitZoneView {
   }
 
   // ── 内部 ──────────────────────────────────────────────────
+
+  /**
+   * 外圈光晕（径向渐变）—— 画在 `glow` 层（票 07：参与 bloom）。
+   */
+  private drawHalo(
+    g: Graphics,
+    fc: FrameContext,
+    lane: Lane,
+    y: number,
+    pulse: number,
+  ): void {
+    const { layout } = fc;
+    const R = layout.zoneHalf;
+    const color = laneColorOf(lane, fc.frenzyActive);
+    const glow = this.glowGradientFor(color);
+    if (!glow) return;
+    setFillGradient(g, glow, (0.16 + pulse * 0.09) / GLOW_REF_ALPHA);
+    g.beginPath();
+    g.circle(layout.hitX, y, R * 1.5);
+    g.fill();
+  }
 
   private drawZone(
     g: Graphics,
@@ -102,15 +134,6 @@ export class HitZoneView {
     const r = layout.critHalf; // 内圈半径 = 暴击判定范围
     const color = laneColorOf(lane, fc.frenzyActive);
     const critCol = fc.frenzyActive ? '#ffffff' : GOLD;
-
-    // 外圈光晕（径向渐变）。
-    const glow = this.glowGradientFor(color);
-    if (glow) {
-      setFillGradient(g, glow, (0.16 + pulse * 0.09) / GLOW_REF_ALPHA);
-      g.beginPath();
-      g.circle(hitX, y, R * 1.5);
-      g.fill();
-    }
 
     // 外圈：普攻判定（填充 + 两道描边）。
     const outer = circlePath(hitX, y, R);
