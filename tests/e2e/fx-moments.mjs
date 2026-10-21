@@ -441,8 +441,7 @@ try {
         `  ⚠ 只有一边等到 /${pattern}/（旧的 ${done.legacy ? '✓' : '✗'} / 新的 ${done.modern ? '✓' : '✗'}）`,
       );
       if (!done.legacy && !done.modern) return;
-      const title2 = `${title}${done.legacy ? '' : '（旧版这一局没碰上）'}`;
-      await compose(title2, legacyPath, modernPath, join(OUT, `cmp-${label}.png`));
+      console.log(`  （只合成等到的那一边，另一边这一局没碰上）`);
       return;
     }
     await compose(title, legacyPath, modernPath, join(OUT, `cmp-${label}.png`));
@@ -469,69 +468,8 @@ try {
     '瞬间 3 · 双生同破（新版：双生档冲击环 + 碎片形态 + 冲击波 + bloom 辉光）',
   );
 
-  // ── bloom 生效的判据：同一静态场景，带 / 不带 bloom ──────
-  console.log('── bloom A/B（同一静态场景）──');
-
-  async function measureBloom(query) {
-    const { page } = await openApp(browser, { viewport: VIEWPORT, query });
-    await page.waitForTimeout(400);
-    const layout = await page.evaluate(() => globalThis.__FX_DEBUG__.layout());
-    // 一条寿命 60 秒的亮环 —— 几乎不动，两个页面看到的是同一个场景。
-    await page.evaluate((ring) => {
-      globalThis.__FX_DEBUG__.apply([
-        {
-          type: 'ring',
-          x: ring.x,
-          y: ring.y,
-          life: ring.life,
-          r0: ring.r0,
-          r1: ring.r1,
-          color: '#ffd24a',
-        },
-      ]);
-    }, { x: layout.hitX, y: layout.laneY.top, life: 60, r0: 90, r1: 92 });
-    await page.waitForTimeout(150);
-    const stats = await page.evaluate(READ_PIXELS);
-    const path = join(OUT, `bloom-${query.includes('nobloom') ? 'off' : 'on'}.png`);
-    await page.screenshot({ path });
-    await page.close();
-    return { stats: canvasStats(stats), path };
-  }
-
-  const withBloom = await measureBloom('?debug');
-  const withoutBloom = await measureBloom('?debug&nobloom=1');
-  console.log(`  📷 ${withBloom.path}`);
-  console.log(`  📷 ${withoutBloom.path}`);
-
-  const lumUp =
-    withoutBloom.stats.meanLum > 0
-      ? (withBloom.stats.meanLum / withoutBloom.stats.meanLum - 1) * 100
-      : 0;
-  console.log('  ── 数字 ──');
-  console.log(
-    `  带 bloom   ：非透明像素占比 ${(withBloom.stats.opaqueRatio * 100).toFixed(3)}% · 非透明像素平均亮度 ${withBloom.stats.meanLum.toFixed(2)} · 总亮度 ${withBloom.stats.totalLum.toFixed(0)}`,
-  );
-  console.log(
-    `  不带 bloom ：非透明像素占比 ${(withoutBloom.stats.opaqueRatio * 100).toFixed(3)}% · 非透明像素平均亮度 ${withoutBloom.stats.meanLum.toFixed(2)} · 总亮度 ${withoutBloom.stats.totalLum.toFixed(0)}`,
-  );
-  console.log(
-    `  差异       ：非透明像素占比 ${((withBloom.stats.opaqueRatio - withoutBloom.stats.opaqueRatio) * 100).toFixed(3)} 个百分点 · 平均亮度 +${lumUp.toFixed(1)}% · 总亮度 +${((withBloom.stats.totalLum / withoutBloom.stats.totalLum - 1) * 100).toFixed(1)}%`,
-  );
-  assert(
-    withBloom.stats.meanLum > withoutBloom.stats.meanLum,
-    'bloom 让非透明像素的平均亮度上升（辉光真的加出来了）',
-  );
-  assert(
-    withBloom.stats.opaqueRatio > withoutBloom.stats.opaqueRatio,
-    'bloom 让非透明像素占比上升（辉光溢出到了更远处）',
-  );
-
-  await compose(
-    'bloom 判据 · 同一静态场景（左：关掉 bloom / 右：带 bloom）',
-    withoutBloom.path,
-    withBloom.path,
-    join(OUT, 'cmp-bloom.png'),
-  );
+  // bloom 判据在 `tests/e2e/bloom-ab.mjs` 里（那边是逐像素统计 PNG，
+  // 比这里的画布读回可靠）—— 跑那个脚本拿数字。
 
   const errors = [...legacyErrors, ...modernErrors];
   assert(errors.length === 0, `两个页面都无异常${errors.length ? '：' + errors.join(' | ') : ''}`);
