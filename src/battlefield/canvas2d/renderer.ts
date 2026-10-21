@@ -109,10 +109,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
 
     // 抖动（旧 `source.html:1462-1464`：两次独立取随机）
     if (frame.shake > 0.2) {
-      ctx.translate(
-        this.jitter(frame.shake),
-        this.jitter(frame.shake),
-      );
+      ctx.translate(this.jitter(frame.shake), this.jitter(frame.shake));
     }
 
     this.fillFrameContext(ctx, frame, layout);
@@ -138,11 +135,7 @@ export class Canvas2dRenderer implements BattlefieldRenderer {
     return rand(-shake, shake) * 0.5;
   }
 
-  private fillFrameContext(
-    ctx: CanvasRenderingContext2D,
-    frame: FrameView,
-    layout: Layout,
-  ): void {
+  private fillFrameContext(ctx: CanvasRenderingContext2D, frame: FrameView, layout: Layout): void {
     const fc = this.fc;
     fc.ctx = ctx;
     fc.layout = layout;

@@ -21,7 +21,11 @@ describe('横竖屏判定', () => {
   });
 
   it('screen.orientation.type 命中 → 横屏', () => {
-    const win = new FakeWindow({ innerWidth: 400, innerHeight: 800, orientationType: 'landscape-primary' });
+    const win = new FakeWindow({
+      innerWidth: 400,
+      innerHeight: 800,
+      orientationType: 'landscape-primary',
+    });
     expect(detectLandscape(win as unknown as Window)).toBe(true);
   });
 

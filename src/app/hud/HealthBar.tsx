@@ -33,7 +33,9 @@ export function HealthBar({ hp, maxHp = MAX_HP }: HealthBarProps): ReactElement 
           style={{ transform: `scaleX(${ratio})` }}
         />
       </div>
-      <div className="hp-text">{Math.max(0, hp)} / {maxHp}</div>
+      <div className="hp-text">
+        {Math.max(0, hp)} / {maxHp}
+      </div>
     </div>
   );
 }

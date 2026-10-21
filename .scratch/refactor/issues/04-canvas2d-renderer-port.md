@@ -1,6 +1,6 @@
 # 04 — Canvas 2D 渲染器搬迁
 
-Status: claimed
+Status: resolved
 Blocked by: 02
 
 ## 目标
@@ -53,3 +53,64 @@ Blocked by: 02
 
 - 这一票是**故意的中间态**：多花约 1.5 天换来"每个阶段结束都有可玩且可对照的版本"，后面 06/07 出问题时能立刻二分定位是架构问题还是渲染问题。
 - Canvas 2D 实现在 08 票会被删除。
+
+## Answer
+
+已实现并合并到集成分支 `feat/refactor-v2`。本票被拆成两个并行子任务实现，
+再由父会话接线合并：
+
+- **票 04a**（`98d3303` / 合并 `5685c89`）—— 表现层效果池 + Canvas 2D 渲染器（12 个 view）
+- **票 04b**（`f047aab` → `19cbc09` / 合并 `be38098`）—— 会话层 + 输入层 + HUD/界面层
+- **接线**（`192d1a4`）—— `src/battlefield/types.ts` 的 `BattlefieldRenderer` / `FrameView` 契约
+
+### 目录
+
+```
+src/battlefield/
+  types.ts              BattlefieldRenderer / FrameView 契约
+  canvas2d/             background / rails / defense-line / hit-zone / player /
+                        monster / twin / hold-monster / slash / ring / particle /
+                        floater / frenzy / paths / lane-color / math / context / renderer
+src/presentation/       效果池（对象池 + swap-remove）、震动、PresentationState
+src/app/                GameSession / screenMachine / hud/ / screens/ / best.ts / presentation.ts
+src/input/              pointer / keyboard / orientation / mapping
+tests/e2e/              Playwright 可玩性检查
+```
+
+### 四个结构性热点的修法
+
+| 热点 | 旧位置 | 修法 |
+|---|---|---|
+| O(n²) 的 `monsters.indexOf` | `source.html:1989` | 预建索引，绘制循环内零查找 |
+| 每帧每轨的 `monsters.some` 扫描 | `source.html:1633` | 维护「每轨最近目标」索引 |
+| 7 处 `filter` 重建 `monsters` | `978`/`1024`/`1046`/`1188`/`1229`/`1325`/`1370` | 统一就地移除（swap-remove） |
+| 每帧数组字面量分配 | 绘制循环 | 预分配 + 复用，渲染路径零分配 |
+
+静态内容（星空 / 轨道渐变）**只在 `resize` 时重建**。
+
+### 双时钟语义（照抄旧实现）
+
+- `now` 只在 running 阶段推进；`visualTime`（旧 `vt`）**在所有阶段都推进**
+- `paused` 时 `attackT` **不**衰减，但粒子/环/刀光/飘字**继续**衰减
+- `pause()` **不**重置 `lastT`，只有 `resume()` 重置（旧 `source.html:690-698`）
+
+### 验收
+
+- 297 个测试全绿（`typecheck` / `lint` / `test` / `build` / `verify-single-file`）
+- 产物 `dist/index.html` **293 KB**（gzip 91.7 KB），`file://` 下可运行、画布有内容
+- 端到端 Playwright：开始 → 出刀 → 受击 → 竖屏自动暂停 → 转横屏自动恢复，全链路通
+- 黄金轨迹门禁 `npm run trace` 仍然全绿（渲染层改动不影响规则层 —— 这正是分层的收益）
+
+### 过程中发现并修掉的真 bug
+
+指针输入原本挂在画布宿主（`.canvas-host`）上，而开始/暂停/结算遮罩是它的兄弟节点
+→ 遮罩点击永远收不到，「点击屏幕开始」无效。已改为挂在 `.stage` 上（与旧代码 `#stage` 一致）。
+
+### 已知限制
+
+- **FEVER 期间角色周身的金色火花**（旧 `emitFrenzy`，`source.html:1238-1254`）没实现 ——
+  属表现层，留给票 07。
+- 旧代码 `setTimeout(resize, 70/260)` 的兜底没搬（改用 `ResizeObserver`）。
+- `hudStore` 放在 `src/app/hud/hudStore.ts`（不是 `src/presentation/`）——
+  因为 04a 已占用 `src/presentation/`，避免冲突。
+- 固定种子 `DEFAULT_SEED = 20240601`，每局完全一样（可复现/对照）；旧版是 `Math.random()`。

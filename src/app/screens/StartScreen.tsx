@@ -42,11 +42,12 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         漏掉一次，角色失去 20 点血量（初始 250）。
         <br />
         <span style={{ color: '#ffd24a' }}>
-          每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10
-          秒，期间得分 ×1.5。
+          每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10 秒，期间得分 ×1.5。
         </span>
         <br />
-        <span style={{ color: '#ff5ecb' }}>双生：锁链相连，同击 700（双暴 1000）；单破另一只自爆 -20。</span>
+        <span style={{ color: '#ff5ecb' }}>
+          双生：锁链相连，同击 700（双暴 1000）；单破另一只自爆 -20。
+        </span>
         <br />
         <span style={{ color: '#a6ff5e' }}>
           长按：等头部进判定框时点击起手，按住 3 秒贯穿，头 / 1s / 尾各 +200。

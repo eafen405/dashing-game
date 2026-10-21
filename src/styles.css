@@ -172,8 +172,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding:
-    calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px
+  padding: calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px
     calc(16px + env(safe-area-inset-left));
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(180deg, rgba(10, 15, 30, 0.9), rgba(10, 15, 30, 0.4));
@@ -748,7 +747,11 @@ body {
   z-index: 4;
   pointer-events: none;
   opacity: 0;
-  background: radial-gradient(circle at 18% 50%, rgba(255, 210, 74, 0.42), rgba(255, 140, 40, 0) 62%);
+  background: radial-gradient(
+    circle at 18% 50%,
+    rgba(255, 210, 74, 0.42),
+    rgba(255, 140, 40, 0) 62%
+  );
 }
 
 .frenzy-flash.show {
@@ -771,7 +774,11 @@ body {
   z-index: 4;
   pointer-events: none;
   opacity: 0;
-  background: radial-gradient(ellipse at 12% 50%, rgba(255, 40, 80, 0.55), rgba(255, 40, 80, 0) 60%);
+  background: radial-gradient(
+    ellipse at 12% 50%,
+    rgba(255, 40, 80, 0.55),
+    rgba(255, 40, 80, 0) 60%
+  );
 }
 
 .hurt-flash.show {
