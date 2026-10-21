@@ -25,6 +25,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runLegacyTrace } from './legacy/trace-legacy.mjs';
+import { writeHarness } from './legacy/patch-legacy.mjs';
 import { replayTrace } from './replay-new.mjs';
 import { analyzeCoverage } from './trace-coverage.mjs';
 import { DIFFICULTIES, FRAMES, SEEDS } from './trace-spec.mjs';
@@ -71,7 +72,8 @@ function diffFrames(a, b) {
     }
     for (const f of TOLERANT) {
       const d = Math.abs(a[i][f] - b[i][f]);
-      if (!(d <= TOL)) return { frame: i, path: f, kind: 'tolerant', a: a[i][f], b: b[i][f], delta: d };
+      if (!(d <= TOL))
+        return { frame: i, path: f, kind: 'tolerant', a: a[i][f], b: b[i][f], delta: d };
     }
     if (a[i].monsters.length !== b[i].monsters.length) {
       return {
@@ -134,12 +136,19 @@ const MODE_MATRIX = {
 let failures = 0;
 const coverageTotals = {};
 
+// 先把 harness 重新生成一遍 —— 门禁必须跑在**当前**源码打出来的 harness 上，
+// 否则 `src/game/trace.ts`（共享事件剧本）改了而 harness 还是旧的，结论就是假的。
 for (const mode of modes) {
   const spec = MODE_MATRIX[mode];
   if (!spec) {
     console.error(`未知模式：${mode}（只支持 A | Bprime | C）`);
     process.exit(2);
   }
+  writeHarness(spec.legacy);
+}
+
+for (const mode of modes) {
+  const spec = MODE_MATRIX[mode];
   console.log(`\n══ 模式 ${mode}${spec.gate ? '（门禁）' : '（仅报告）'} ══`);
 
   for (const seed of SEEDS) {

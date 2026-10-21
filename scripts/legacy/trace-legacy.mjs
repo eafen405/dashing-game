@@ -21,7 +21,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { launchChromium } from '../browser.mjs';
-import { DT, FRAMES, VIEWPORT } from '../trace-spec.mjs';
+import { FRAMES, VIEWPORT } from '../trace-spec.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -51,20 +51,17 @@ export async function runLegacyTrace(options = {}) {
       (noDraw ? '&nodraw=1' : '');
 
     await page.goto(url);
-    await page.waitForFunction(() => !!window.__harness);
-    await page.evaluate(() => window.__harness.start());
+    await page.waitForFunction(() => !!globalThis.window.__harness);
+    await page.evaluate(() => globalThis.window.__harness.start());
 
-    const result = await page.evaluate(
-      (n) => {
-        const step = window.__harness.stepFrames(n);
-        return {
-          step,
-          trace: window.__harness.trace(),
-          rulesDraws: window.__harness.rulesDraws(),
-        };
-      },
-      frames,
-    );
+    const result = await page.evaluate((n) => {
+      const step = globalThis.window.__harness.stepFrames(n);
+      return {
+        step,
+        trace: globalThis.window.__harness.trace(),
+        rulesDraws: globalThis.window.__harness.rulesDraws(),
+      };
+    }, frames);
     return result;
   } finally {
     await browser.close();
@@ -110,7 +107,9 @@ if (process.argv[1] && process.argv[1].endsWith('trace-legacy.mjs')) {
     `[trace-legacy] mode=${mode} seed=${seed} diff=${diff} ` +
       `帧数=${result.trace.length} 步进=${result.step.stepped} ` +
       `结束状态=${result.step.state} 规则随机消费=${result.rulesDraws}` +
-      (last ? ` hp=${last.hp} score=${last.score} combo=${last.combo} maxCombo=${last.maxCombo}` : ''),
+      (last
+        ? ` hp=${last.hp} score=${last.score} combo=${last.combo} maxCombo=${last.maxCombo}`
+        : ''),
   );
   if (out) console.log(`[trace-legacy] → ${out}`);
 }

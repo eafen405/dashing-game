@@ -44,13 +44,7 @@ export type TraceMonsterKind = 'normal' | 'twin' | 'hold';
  * 保证「同一只怪在同一帧」在两边得到同一个字符串。
  */
 export type TraceMonsterState =
-  | 'normal'
-  | 'twin'
-  | 'twin-pending'
-  | 'hold'
-  | 'hold-anchored'
-  | 'hold-holding'
-  | 'hold-escaped';
+  'normal' | 'twin' | 'twin-pending' | 'hold' | 'hold-anchored' | 'hold-holding' | 'hold-escaped';
 
 /** 归一化后的怪物标志（两边各自的原始字段映射到这里）。 */
 export interface TraceMonsterFlags {
@@ -444,8 +438,7 @@ export function nextEvents(
     if (plan === 'complete' || plan === 'fail') {
       const headX = longMonster.x + longMonster.h * 0.46;
       const headInZone =
-        headX >= snapshot.hitX - snapshot.zoneHalf &&
-        headX <= snapshot.hitX + snapshot.zoneHalf;
+        headX >= snapshot.hitX - snapshot.zoneHalf && headX <= snapshot.hitX + snapshot.zoneHalf;
       if (!s.longStarted && headInZone && longMonster.state === 'hold') {
         events.push({ type: 'press', lane: longMonster.lane, id: 'hold' });
         s.longStarted = true;
@@ -608,7 +601,6 @@ export function nextEvents(
 
   return { events, script: s };
 }
-
 
 /** 旧版怪物的字段 → 归一化标志（供旧 harness 用）。 */
 export function legacyMonsterFlags(m: {

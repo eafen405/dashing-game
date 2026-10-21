@@ -97,10 +97,7 @@ describe('B′ 开关确实改变长按怪的生成口径', () => {
     );
     expect(fixed.state.monsters.some((m) => m.kind === 'hold')).toBe(true);
 
-    const legacy = spawnMonster(
-      { ...baseState(), legacyClearLane: true },
-      recordingRng([0.1]),
-    );
+    const legacy = spawnMonster({ ...baseState(), legacyClearLane: true }, recordingRng([0.1]));
     expect(legacy.state.monsters.some((m) => m.kind === 'hold')).toBe(false);
   });
 

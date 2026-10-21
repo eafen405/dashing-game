@@ -47,8 +47,16 @@ function frame(overrides: Partial<TraceFrame> = {}): TraceFrame {
 }
 
 /** 造一只普通怪（x 离判定区中心的距离 = `dist`）。 */
-function normal(lane: 'top' | 'bottom', dist: number, id = 1) {
-  return { kind: 'normal' as const, lane, x: 345.9 + dist, y: 0, w: 49.5, h: 78, state: 'normal' as const };
+function normal(lane: 'top' | 'bottom', dist: number) {
+  return {
+    kind: 'normal' as const,
+    lane,
+    x: 345.9 + dist,
+    y: 0,
+    w: 49.5,
+    h: 78,
+    state: 'normal' as const,
+  };
 }
 
 /** 造一只双生怪。 */

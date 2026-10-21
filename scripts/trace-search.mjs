@@ -39,7 +39,8 @@ function parseArgs(argv) {
 const options = parseArgs(process.argv.slice(2));
 const from = Number(options.from ?? 20240101);
 const count = Number(options.count ?? 60);
-const diffs = options.diff === 'all' || options.diff === undefined ? DIFFICULTIES : [Number(options.diff)];
+const diffs =
+  options.diff === 'all' || options.diff === undefined ? DIFFICULTIES : [Number(options.diff)];
 
 /** 十条必须覆盖的路径。 */
 const REQUIRED = [
