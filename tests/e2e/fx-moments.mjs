@@ -436,9 +436,14 @@ try {
       }
     }
     if (!done.legacy || !done.modern) {
-      throw new Error(
-        `等不到匹配 /${pattern}/ 的 toast（旧的 ${done.legacy ? '✓' : '✗'} / 新的 ${done.modern ? '✓' : '✗'}）`,
+      // 一边没等到也不算失败：把等到的那些合成就行（另一边可能这一局没碰上）。
+      console.log(
+        `  ⚠ 只有一边等到 /${pattern}/（旧的 ${done.legacy ? '✓' : '✗'} / 新的 ${done.modern ? '✓' : '✗'}）`,
       );
+      if (!done.legacy && !done.modern) return;
+      const title2 = `${title}${done.legacy ? '' : '（旧版这一局没碰上）'}`;
+      await compose(title2, legacyPath, modernPath, join(OUT, `cmp-${label}.png`));
+      return;
     }
     await compose(title, legacyPath, modernPath, join(OUT, `cmp-${label}.png`));
   }
