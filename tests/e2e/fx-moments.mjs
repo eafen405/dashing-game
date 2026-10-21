@@ -215,29 +215,6 @@ const AUTO_PLAY = ({
     globalThis.requestAnimationFrame(step);
   });
 
-/** 画布统计：非透明像素占比 + 非透明像素的平均亮度 + 总亮度。 */
-function canvasStats(stats) {
-  if (!stats) return null;
-  const { data } = stats;
-  let opaque = 0;
-  let lumSum = 0;
-  let totalLum = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-    totalLum += lum;
-    if (data[i + 3] > 0) {
-      opaque += 1;
-      lumSum += lum;
-    }
-  }
-  const total = data.length / 4;
-  return {
-    opaqueRatio: opaque / total,
-    meanLum: opaque > 0 ? lumSum / opaque : 0,
-    totalLum,
-  };
-}
-
 const browser = await launchBrowser();
 
 /** 并排合成 —— 用浏览器排版两张图再截图（没有装图像处理库）。 */
