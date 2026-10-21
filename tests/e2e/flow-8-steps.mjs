@@ -18,6 +18,9 @@
  * 断言全部落在**可观察的 DOM 状态**上（元素文本 / 类名 / `localStorage`）。
  */
 
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   assert,
   isGameOver,
@@ -27,6 +30,7 @@ import {
   readHud,
   readPhase,
   readStoredBest,
+  SHOTS,
   shot,
   strike,
   toastCount,
@@ -112,8 +116,9 @@ try {
   // 整页截图一次约 190ms、裁剪截图约 95ms —— 所以先拍裁剪图抓新月，再拍整页。
   const stage = await page.locator('.stage').boundingBox();
   await strike(page, 'top');
+  mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({
-    path: '/home/eafen405/refactor-notes/shots/05/04-slash-detail.png',
+    path: join(SHOTS, '04-slash-detail.png'),
     clip: { x: stage.x + 120, y: stage.y, width: 560, height: 380 },
   });
   await shot(page, '04-slash.png');

@@ -176,12 +176,7 @@ export default tseslint.config(
             // 跨层相对 import：分层是**单向**的 —— 上层依赖规则层，规则层不依赖任何上层。
             // `patterns` 匹配的是 import 源码原文，所以 `../../app/best` 这类相对路径也会命中。
             {
-              group: [
-                '**/app/**',
-                '**/battlefield/**',
-                '**/presentation/**',
-                '**/input/**',
-              ],
+              group: ['**/app/**', '**/battlefield/**', '**/presentation/**', '**/input/**'],
               message:
                 '规则层不得反向依赖上层（app / battlefield / presentation / input）—— 分层是单向的：上层依赖规则层，规则层不依赖任何上层。',
             },
