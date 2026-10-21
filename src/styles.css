@@ -13,6 +13,14 @@
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  /* 长按是核心操作：任何元素都不许被选中 / 唤起系统长按菜单 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+::selection {
+  background: transparent;
 }
 
 html,

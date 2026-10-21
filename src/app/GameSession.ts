@@ -435,6 +435,7 @@ export class GameSession {
 
   private attachInput(): void {
     this.stage.addEventListener('pointerdown', this.onPointerDown, { passive: false });
+    this.stage.addEventListener('touchstart', this.onTouchStart, { passive: false });
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('pointercancel', this.onPointerUp);
     window.addEventListener('blur', this.onBlur);
@@ -447,6 +448,7 @@ export class GameSession {
 
   private detachInput(): void {
     this.stage.removeEventListener('pointerdown', this.onPointerDown);
+    this.stage.removeEventListener('touchstart', this.onTouchStart);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('blur', this.onBlur);
@@ -468,6 +470,20 @@ export class GameSession {
 
   private onPointerUp = (event: PointerEvent): void => {
     this.release(pointerInputId(event));
+  };
+
+  /**
+   * 压掉手机浏览器的长按菜单。
+   *
+   * 长按是核心操作（长条怪要按住 3 秒），但 UC / 360 / 小米这类浏览器
+   * 会在长按时弹出「标记广告」/ 选词菜单，把手指抢走、长按直接中断。
+   * 在 touchstart 里阻止默认行为可以抑制 WebView 自带的长按手势；
+   * 按钮和弹层要保留正常点击，所以只接管游戏舞台。
+   */
+  private onTouchStart = (event: TouchEvent): void => {
+    const target = event.target as Element | null;
+    if (target?.closest('button, a, input, select, textarea, .overlay')) return;
+    event.preventDefault();
   };
 
   private onBlur = (): void => {
