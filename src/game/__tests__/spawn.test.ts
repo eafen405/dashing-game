@@ -26,6 +26,22 @@ describe('轨道占用判断', () => {
     expect(clearLane(monsters, recordingRng([0.1]))).toBe('top');
   });
 
+  it('对照：旧口径（!m.done 判占用）在有普通怪时恒返回 null', () => {
+    // 旧实现里 `done` 只在长按怪上赋值，普通怪没有这个字段 → `!m.done` 恒真
+    // → 只要场上有任何普通怪，两轨都判「占用」→ clearLane 只能返回 null。
+    const legacyMonsters: { lane: string; done?: boolean }[] = [
+      { lane: 'top' },
+      { lane: 'bottom' },
+    ];
+    const topBusy = legacyMonsters.some((m) => m.lane === 'top' && !m.done);
+    const botBusy = legacyMonsters.some((m) => m.lane === 'bottom' && !m.done);
+
+    expect(topBusy).toBe(true);
+    expect(botBusy).toBe(true);
+    // 两轨都被判占用 → 旧 clearLane 返回 null → 长按怪刷不出来
+    expect(topBusy && botBusy ? null : 'top').toBeNull();
+  });
+
   it('长按怪所在轨道被占用，另一条轨道可用', () => {
     const monsters = [holdMonster({ lane: 'top' })];
 
