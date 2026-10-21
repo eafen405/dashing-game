@@ -1,6 +1,6 @@
 # 03 — 保真门禁：golden trace 逐帧对照
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## 目标

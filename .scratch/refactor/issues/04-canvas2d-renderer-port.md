@@ -1,6 +1,6 @@
 # 04 — Canvas 2D 渲染器搬迁
 
-Status: ready-for-agent
+Status: claimed
 Blocked by: 02
 
 ## 目标
