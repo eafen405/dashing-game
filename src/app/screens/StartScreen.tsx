@@ -24,7 +24,7 @@ export interface StartScreenProps {
 /** 开始界面。 */
 export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): ReactElement {
   return (
-    <div className="overlay">
+    <div id="startScreen" className="overlay">
       <h2>双轨打怪</h2>
       <div className="legend">
         <div style={{ color: 'var(--p1)' }}>
@@ -56,10 +56,11 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         </span>
       </div>
 
-      <div className="diff-pick" data-no-strike="">
+      <div id="diffPick" className="diff-pick" data-no-strike="">
         <button
           type="button"
           className={diffLevel === 1 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="1"
           onClick={() => onDiffChange(1)}
         >
           <span className="stars">★</span>
@@ -68,6 +69,7 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         <button
           type="button"
           className={diffLevel === 2 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="2"
           onClick={() => onDiffChange(2)}
         >
           <span className="stars">★★</span>
