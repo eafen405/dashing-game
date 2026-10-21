@@ -9,9 +9,16 @@
  *
  * 旧代码在 `score > best` 时才写 localStorage（`source.html:724`）——
  * 写盘的动作在会话层（`src/app/best.ts`），这里只负责显示。
+ *
+ * ## 票 07：入场动效
+ *
+ * 面板入场用 **Motion** 驱动（淡入 + 上浮）——
+ * CSS 里给 `#gameOver` 关掉了 `opacity` 过渡（`styles.css` 的 `.gameover-enter`），
+ * 否则 CSS 过渡会和 Motion 的内联 `opacity` 打架（两套动画同时改一个属性）。
  */
 
 import type { ReactElement } from 'react';
+import { motion } from 'motion/react';
 
 /** 结算界面属性。 */
 export interface GameOverScreenProps {
@@ -39,7 +46,14 @@ export function GameOverScreen({
   onChooseDifficulty,
 }: GameOverScreenProps): ReactElement {
   return (
-    <div id="gameOver" className="overlay" data-no-strike="">
+    <motion.div
+      id="gameOver"
+      className="overlay gameover-enter"
+      data-no-strike=""
+      initial={{ opacity: 0, y: 28 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="gameover-big">GAME OVER</div>
       <div className="score-row">
         <div>
@@ -72,6 +86,6 @@ export function GameOverScreen({
           选择难度
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -7,13 +7,14 @@
  * ## 场景结构
  *
  * ```
- * app.stage
+ * app.stage                      ← 挂「全屏」滤镜（色散 / 冲击波）
  * └── root（根容器 —— 屏幕抖动的承载者，每帧只改 root.position）
  *     ├── background  星空 + 中线
  *     ├── rails       轨道底光带 / 主线 / 流动刻度
  *     ├── defense     角色身前的防线
- *     ├── entities    判定区 → 角色 → 锁链 → 怪物 → 刀光 → 环 → 粒子
- *     ├── glow        FEVER 全场氛围（票 07 在这层挂 bloom）
+ *     ├── entities    判定区 → 角色 → 锁链 → 怪物
+ *     ├── glow        判定区光 → FEVER 光环 → 平台光 → FEVER 氛围 → 刀光 → 环 → 粒子
+ *     │                 ↑ **bloom 挂在这一层**（票 07）
  *     └── floaters    飘分文字
  * ```
  *
@@ -25,8 +26,8 @@
  *   **不得每帧 `new Graphics()`**。
  * - **静态图层只在 resize 时重建**（星空数据、轨道渐变、防线渐变）。
  * - **每帧零分配**：样式对象、路径对象、容器、文本、粒子全部**复用**。
- * - **滤镜不得每帧重建实例**（本票不挂滤镜，但 `filterArea` / `boundsArea` 先立好，
- *   票 07 直接挂 bloom 即可）。
+ * - **滤镜不得每帧重建实例**：三个滤镜在 `mount()` 里造一次，
+ *   每帧只改参数（`enabled` / 分量偏移 / `time` / `center`）。
  *
  * **DOM 依赖延迟到 `mount()`**：view 的构造函数只碰 Pixi 对象（`Graphics` / `Container`），
  * 不碰 `document` —— 这样 `createPixiRenderer()` 在 Node 环境（测试）里也能安全调用。
@@ -38,6 +39,7 @@ import type { BattlefieldRenderer, FrameView } from '../types';
 import { BackgroundView } from './background';
 import { FrameContext } from './context';
 import { DefenseLineView } from './defense-line';
+import { ScreenFilterController } from './filters';
 import { FloaterView } from './floater';
 import { FrenzyView } from './frenzy';
 import { HitZoneView } from './hit-zone';
@@ -59,11 +61,27 @@ type LayerMap = { [K in LayerName]: Container };
 /** 屏幕抖动阈值（旧 `source.html:1462`：`shake > 0.2` 才抖）。 */
 const SHAKE_THRESHOLD = 0.2;
 
+/**
+ * 开发期开关：`?nobloom` 关掉 bloom —— 票 07 的 e2e A/B 对照用
+ * （「挂 bloom 前后，同一场景的亮度 / 非透明像素占比」）。
+ *
+ * **只在带这个查询串时生效** —— 正常游戏永远带 bloom。
+ */
+const NO_BLOOM =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('nobloom');
+
 export class PixiRenderer implements BattlefieldRenderer {
   private app: Application | null = null;
   private root: Container | null = null;
   private layers: LayerMap | null = null;
   private layout: Layout | null = null;
+
+  /**
+   * 全屏滤镜控制器 —— **`mount()` 里造一次，之后只改参数**。
+   *
+   * 滤镜实例重建 = 整条滤镜管线重建 = 每帧一次 GPU 资源申请 —— 硬约束禁止。
+   */
+  private filters: ScreenFilterController | null = null;
 
   /** 已应用的画布尺寸（CSS 像素）—— 与 `layout.width/height` 比对，避免重复 resize。 */
   private appliedWidth = 0;
@@ -144,16 +162,41 @@ export class PixiRenderer implements BattlefieldRenderer {
     layers.rails.addChild(this.rails.container);
     layers.defense.addChild(this.defenseLine.container);
     // `entities` 内部复现旧代码的遮挡关系：
-    // 判定区 → 角色 → 锁链 → 怪物 → 刀光 → 环 → 粒子
+    // 判定区 → 角色 → 锁链 → 怪物
     layers.entities.addChild(this.hitZone.container);
     layers.entities.addChild(this.player.container);
     layers.entities.addChild(this.twin.container);
     layers.entities.addChild(this.monsterGfx);
-    layers.entities.addChild(this.slash.container);
-    layers.entities.addChild(this.ring.container);
-    layers.entities.addChild(this.particle.container);
+
+    // `glow` 层：**所有「该发光的东西」**（票 07 —— bloom 挂在这一层）。
+    //
+    // 刀光 / 冲击环 / 粒子在旧版里本来就在怪物**之上**（`source.html:1466-1477`），
+    // 挪到 `glow` 层不改变遮挡关系；判定区光晕 / FEVER 光环 / 平台光
+    // 是半透明辉光，没有遮挡语义。
+    layers.glow.addChild(this.hitZone.haloGfx);
+    layers.glow.addChild(this.player.haloGfx);
+    layers.glow.addChild(this.player.platformGfx);
     layers.glow.addChild(this.frenzy.container);
+    layers.glow.addChild(this.slash.container);
+    layers.glow.addChild(this.ring.container);
+    layers.glow.addChild(this.particle.container);
+
     layers.floaters.addChild(this.floater.container);
+
+    // ── 滤镜（票 07）────────────────────────────────────────
+    //
+    // **实例只造一次**（`ScreenFilterController`），之后只改参数。
+    const filters = new ScreenFilterController();
+    this.filters = filters;
+
+    // bloom **只挂 `glow` 层** —— 别处挂了就会把不该发光的东西也提亮。
+    // （`?nobloom` 是开发期 A/B 对照用的开关，正常游戏永远带 bloom。）
+    if (!NO_BLOOM) layers.glow.filters = [filters.bloom];
+
+    // 色散 / 冲击波作用于**整个画面** → 挂 `stage`（不是 glow 层）。
+    // 两个滤镜默认 `enabled = false`，FEVER / 暴击时才开。
+    // `stage.filterArea` 在 `rebuildStaticLayers` 里随尺寸更新。
+    app.stage.filters = [filters.rgbSplit, filters.shockwave];
 
     // 视图的 DOM 依赖（文本、粒子纹理）在这里才创建 —— 构造函数保持无 DOM。
     this.background.prepare();
@@ -188,6 +231,12 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.layout = null;
     this.appliedWidth = 0;
     this.appliedHeight = 0;
+
+    // 滤镜实例在 `mount()` 里造 —— 这里**显式销毁**
+    // （`app.destroy` 只销毁场景图，不会销毁挂在容器上的滤镜资源）。
+    const filters = this.filters;
+    this.filters = null;
+    if (filters) filters.destroy();
 
     // 先彻底销毁 Pixi 应用（含 WebGL 上下文）——
     // 场景图里的 `Graphics` / `Text` / `ParticleContainer` 都在 `stage` 下面，
@@ -253,6 +302,14 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.particle.draw(this.fc);
     this.floater.draw(this.fc);
     this.frenzy.draw(this.fc);
+
+    // 全屏滤镜参数（实例不重建，只改参数）。
+    this.applyScreenFx(frame);
+  }
+
+  /** 把表现层的 `ScreenFx` 映射到滤镜参数上（实例不重建，只改参数）。 */
+  private applyScreenFx(frame: FrameView): void {
+    this.filters?.apply(frame.screenFx, frame.visualTime);
   }
 
   // ── 内部 ──────────────────────────────────────────────────
@@ -282,12 +339,17 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.background.resize(layout);
     this.rails.resize(layout);
     this.defenseLine.resize();
-    // 票 07 会在 `glow` 层挂 bloom —— 滤镜区域必须显式给出，
+    // 票 07：`glow` 层挂 bloom —— 滤镜区域必须显式给出，
     // 否则 Pixi 会用图层的自动包围盒（`ParticleContainer` 恒为空）。
     const layers = this.layers;
+    const app = this.app;
     if (layers) {
       layers.glow.filterArea = new Rectangle(0, 0, layout.width, layout.height);
       layers.entities.filterArea = new Rectangle(0, 0, layout.width, layout.height);
+    }
+    if (app) {
+      // 全屏滤镜（色散 / 冲击波）的区域 = 整个画面。
+      app.stage.filterArea = new Rectangle(0, 0, layout.width, layout.height);
     }
     // `ParticleContainer` 的 `bounds` 恒为空 —— 必须手动给 `boundsArea`，
     // 否则将来挂在它上面的滤镜会因为空包围盒被静默跳过。

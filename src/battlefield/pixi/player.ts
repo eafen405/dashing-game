@@ -69,8 +69,17 @@ export class PlayerView {
   readonly container = new Container();
 
   // ── 世界坐标部分 ─────────────────────────────────────────
-  private readonly haloGfx = new Graphics();
-  private readonly platformGfx = new Graphics();
+  /**
+   * FEVER 光环（票 07：挂到 `glow` 层，参与 bloom）。
+   *
+   * **不**挂在 `container` 下 —— 渲染器把它单独放进 `glow` 层，
+   * 这样它能被 bloom 提亮，而角色的实体部分仍留在 `entities` 层的原位。
+   */
+  readonly haloGfx = new Graphics();
+  /**
+   * 脚下平台光（票 07：挂到 `glow` 层，参与 bloom）—— 同上。
+   */
+  readonly platformGfx = new Graphics();
   private readonly legsGfx = new Graphics();
   private readonly hpGfx = new Graphics();
 
@@ -107,8 +116,8 @@ export class PlayerView {
   private readonly swingGradients = new Map<string, FillGradient>();
 
   constructor() {
-    this.container.addChild(this.haloGfx);
-    this.container.addChild(this.platformGfx);
+    // `haloGfx` / `platformGfx` **不**进 `container` ——
+    // 渲染器把它们放进 `glow` 层（票 07 的 bloom 层）。
     this.container.addChild(this.legsGfx);
     this.container.addChild(this.bodyRoot);
     this.bodyRoot.addChild(this.torsoGfx);

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { computeLayout } from '../../../game/layout';
 import type { HoldMonster, NormalMonster, TwinMonster } from '../../../game/types';
-import type { Effects, FrameView } from '../../types';
+import type { Effects, FrameView, ScreenFx } from '../../types';
 import { createCanvas2dRenderer } from '../index';
 import { FakeCanvas, FakeHost } from './fake-canvas';
 
@@ -86,6 +86,15 @@ function holdMonster(overrides: Partial<HoldMonster> = {}): HoldMonster {
 
 const NO_EFFECTS: Effects = { particles: [], slashes: [], rings: [], floaters: [] };
 
+/** 全屏特效的「空」状态（色散关、无冲击波）。 */
+const NO_SCREEN_FX: ScreenFx = {
+  rgbSplit: 0,
+  shockAge: 0,
+  shockLevel: 0,
+  shockX: 0,
+  shockY: 0,
+};
+
 function frame(overrides: Partial<FrameView> = {}): FrameView {
   return {
     layout: LAYOUT,
@@ -105,6 +114,7 @@ function frame(overrides: Partial<FrameView> = {}): FrameView {
     attackT: 0,
     attackLane: null,
     effects: NO_EFFECTS,
+    screenFx: NO_SCREEN_FX,
     shake: 0,
     playerFlash: 0,
     ...overrides,

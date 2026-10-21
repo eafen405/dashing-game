@@ -5,6 +5,7 @@
  * 颜色按轨道取（FEVER 时会变），所以走 `laneColorOf`。
  */
 
+import { GOLD } from '../../game/constants';
 import type { FrameContext } from './context';
 import { laneColorOf } from './lane-color';
 import { clamp, easeOutCubic, lerp } from './math';
@@ -16,6 +17,12 @@ export class SlashView {
     for (const sl of fc.effects.slashes) {
       const p = clamp(sl.t / sl.life, 0, 1);
       const color = laneColorOf(sl.lane, fc.frenzyActive);
+
+      // 0) 暴击余晖（票 07）—— 只有打击点的一道更宽、更淡的金色拖尾。
+      if (sl.kind === 'afterglow') {
+        this.drawAfterglow(ctx, sl.x, sl.y, p);
+        continue;
+      }
 
       // 1) 飞行斩：从剑尖飞向打击点的新月
       const flyP = clamp(p / 0.34, 0, 1);
@@ -92,5 +99,31 @@ export class SlashView {
         ctx.stroke();
       }
     }
+  }
+
+  /** 暴击余晖 —— 票 07（与 Pixi 版 `slash.ts` 的 `drawAfterglow` 同一口径）。 */
+  private drawAfterglow(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    p: number,
+  ): void {
+    const fade = 1 - p;
+    const len = 22 + p * 54;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.95 + p * 0.62);
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.2;
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 14 * 2.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, len, -1.05, 1.05);
+    ctx.stroke();
+    ctx.globalAlpha = 0.42 * fade;
+    ctx.lineWidth = 7 * 1.5;
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.restore();
   }
 }

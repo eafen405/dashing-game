@@ -42,6 +42,7 @@ function emptyFrame(overrides: Partial<FrameView> = {}): FrameView {
     effects: { particles: [], slashes: [], rings: [], floaters: [] },
     shake: 0,
     playerFlash: 0,
+    screenFx: { rgbSplit: 0, shockAge: 0, shockLevel: 0, shockX: 0, shockY: 0 },
     ...overrides,
   };
 }

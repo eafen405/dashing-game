@@ -30,7 +30,7 @@ describe('效果池 · 产生', () => {
   it('burst 按请求数量产生粒子', () => {
     const pool = new EffectsPool();
 
-    pool.burst(100, 200, '#ff0000', 7, 1);
+    pool.burst(100, 200, '#ff0000', 7, 1, 'spark');
 
     expect(pool.particles).toHaveLength(7);
     expect(pool.particles[0]?.x).toBe(100);
@@ -48,7 +48,7 @@ describe('效果池 · 产生', () => {
     stubRandom(0.5);
     const pool = new EffectsPool();
 
-    pool.burst(0, 0, '#fff', 1, 2);
+    pool.burst(0, 0, '#fff', 1, 2, 'spark');
 
     const p = first(pool.particles);
     const sp = 180 * 2; // rand(60,300) * power
@@ -61,7 +61,7 @@ describe('效果池 · 产生', () => {
   it('粒子数上限是 260（与旧实现一致）', () => {
     const pool = new EffectsPool();
 
-    pool.burst(0, 0, '#fff', 1000, 1);
+    pool.burst(0, 0, '#fff', 1000, 1, 'spark');
 
     expect(MAX_PARTICLES).toBe(260);
     expect(pool.particles).toHaveLength(MAX_PARTICLES);
@@ -69,9 +69,9 @@ describe('效果池 · 产生', () => {
 
   it('池满时再 burst 不会突破上限', () => {
     const pool = new EffectsPool();
-    pool.burst(0, 0, '#fff', MAX_PARTICLES, 1);
+    pool.burst(0, 0, '#fff', MAX_PARTICLES, 1, 'spark');
 
-    pool.burst(0, 0, '#fff', 50, 1);
+    pool.burst(0, 0, '#fff', 50, 1, 'spark');
 
     expect(pool.particles).toHaveLength(MAX_PARTICLES);
   });
@@ -95,7 +95,7 @@ describe('效果池 · 产生', () => {
 describe('效果池 · 推进', () => {
   it('粒子按旧公式推进：阻尼 0.08^dt + 重力 260*dt', () => {
     const pool = new EffectsPool();
-    pool.burst(0, 0, '#fff', 1, 1);
+    pool.burst(0, 0, '#fff', 1, 1, 'spark');
     const p = first(pool.particles);
     p.vx = 100;
     p.vy = 0;
@@ -142,7 +142,7 @@ describe('效果池 · 推进', () => {
 describe('效果池 · 回收', () => {
   it('粒子寿命耗尽后被回收', () => {
     const pool = new EffectsPool();
-    pool.burst(0, 0, '#fff', 3, 1);
+    pool.burst(0, 0, '#fff', 3, 1, 'spark');
     for (const p of pool.particles) p.life = 0.1;
 
     pool.step(0.2);
@@ -152,7 +152,7 @@ describe('效果池 · 回收', () => {
 
   it('回收用 swap-remove：中间到期也不会留下空洞', () => {
     const pool = new EffectsPool();
-    pool.burst(0, 0, '#fff', 3, 1);
+    pool.burst(0, 0, '#fff', 3, 1, 'spark');
     const ids = [0, 1, 2];
     pool.particles.forEach((p, i) => {
       p.life = 0.2;
@@ -172,13 +172,13 @@ describe('效果池 · 回收', () => {
 
   it('回收掉的对象被复用（不每次 new）', () => {
     const pool = new EffectsPool();
-    pool.burst(0, 0, '#fff', 1, 1);
+    pool.burst(0, 0, '#fff', 1, 1, 'spark');
     const firstParticle = first(pool.particles);
 
     pool.step(2);
     expect(pool.particles).toHaveLength(0);
 
-    pool.burst(5, 5, '#0f0', 1, 1);
+    pool.burst(5, 5, '#0f0', 1, 1, 'spark');
     expect(pool.particles[0]).toBe(firstParticle);
     expect(pool.particles[0]).toMatchObject({ x: 5, y: 5, color: '#0f0', t: 0 });
   });
