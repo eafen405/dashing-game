@@ -1,0 +1,2683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#080a14">
+<title>双轨打怪</title>
+<style>
+  :root{
+    --bg:#070a12;
+    --ink:#eef3ff;
+    --muted:#8d9ab8;
+    --p1:#4fd1ff;
+    --p2:#ff8a4f;
+    --danger:#ff4d6d;
+    --ok:#43e08c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0;padding:0;width:100%;height:100%;
+    background:var(--bg);color:var(--ink);
+    overflow:hidden;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    overscroll-behavior:none;
+    touch-action:none;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  }
+  #app{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;}
+
+  /* ============ 竖屏提醒 ============ */
+  #rotate{
+    position:fixed;inset:0;z-index:50;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;padding:24px;text-align:center;
+    background:radial-gradient(circle at 50% 30%,#16213e 0%,#070a12 70%);
+  }
+  #rotate.hide{display:none;}
+  .phone{
+    width:96px;height:160px;border:4px solid var(--ink);border-radius:16px;
+    position:relative;animation:rot 2.2s ease-in-out infinite;transform-origin:50% 50%;
+  }
+  .phone::before{
+    content:"";position:absolute;left:50%;top:8px;transform:translateX(-50%);
+    width:30px;height:4px;border-radius:2px;background:var(--ink);opacity:.7;
+  }
+  .phone::after{
+    content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:56px;height:56px;border-radius:50%;
+    border:2px dashed rgba(238,243,255,.35);
+  }
+  @keyframes rot{
+    0%,20%{transform:rotate(0deg);}
+    60%,100%{transform:rotate(-90deg);}
+  }
+  #rotate h1{font-size:24px;margin:0;letter-spacing:2px;}
+  #rotate p{margin:0;color:var(--muted);font-size:15px;line-height:1.7;}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:10px 18px;border-radius:999px;
+    background:rgba(79,209,255,.12);border:1px solid rgba(79,209,255,.35);
+    color:var(--p1);font-size:14px;
+  }
+
+  /* ============ 游戏界面 ============ */
+  #game{
+    position:fixed;inset:0;
+    display:flex;flex-direction:column;
+    background:
+      radial-gradient(ellipse at 15% 12%,rgba(79,209,255,.10),transparent 55%),
+      radial-gradient(ellipse at 85% 88%,rgba(255,138,79,.10),transparent 55%),
+      linear-gradient(180deg,#0a0f1e 0%,#070a12 55%,#0a0f1e 100%);
+  }
+
+  /* 顶部 HUD */
+  #hud{
+    flex:0 0 auto;
+    display:flex;align-items:center;gap:12px;
+    padding:calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
+    border-bottom:1px solid rgba(255,255,255,.06);
+    background:linear-gradient(180deg,rgba(10,15,30,.9),rgba(10,15,30,.4));
+  }
+  .hp-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:10px;max-width:360px;}
+  .hp-icon{font-size:17px;color:var(--danger);line-height:1;}
+  .hp-bar{
+    position:relative;flex:1;height:14px;border-radius:7px;
+    background:rgba(255,255,255,.08);overflow:hidden;
+    border:1px solid rgba(255,255,255,.10);
+  }
+  #hpFill{
+    position:absolute;inset:0;width:100%;transform-origin:0 50%;
+    background:linear-gradient(90deg,#ff4d6d,#ff8a4f);
+    transition:transform .18s ease-out;
+    border-radius:7px;
+  }
+  #hpFill.low{background:linear-gradient(90deg,#ff2d55,#ff4d6d);animation:lowPulse 1s infinite;}
+  @keyframes lowPulse{50%{opacity:.55;}}
+  #hpText{font-size:14px;font-variant-numeric:tabular-nums;min-width:74px;text-align:right;color:#ffd9e0;}
+  .hud-right{display:flex;align-items:center;gap:clamp(10px,1.8vw,22px);margin-left:auto;}
+  .stat{text-align:center;line-height:1.1;}
+  .stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums;}
+  .stat span{font-size:10px;color:var(--muted);letter-spacing:1px;}
+  #comboText,#scoreText{transition:color .25s ease,text-shadow .25s ease;}
+  #comboText.frenzy,#scoreText.frenzy{color:#ffd24a;text-shadow:0 0 14px rgba(255,210,74,.9);}
+  #comboText.frenzy{animation:frenzyPulse .8s ease-in-out infinite;}
+  #comboLabel{display:inline-block;min-width:66px;text-align:center;}
+  #comboLabel.fever{color:#ffd24a;text-shadow:0 0 10px rgba(255,210,74,.8);font-variant-numeric:tabular-nums;}
+  #critText{font-size:15px;color:#ffe6a3;letter-spacing:.5px;white-space:nowrap;}
+  @keyframes frenzyPulse{50%{transform:scale(1.16);}}
+  #btnPause,#btnFull{
+    width:38px;height:38px;border-radius:12px;border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);color:var(--ink);font-size:15px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  #btnPause:active,#btnFull:active{transform:scale(.94);}
+  #btnFull svg{display:block;}
+
+  /* 舞台 */
+  #stage{
+    position:relative;flex:1;min-height:0;
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Cpath d='M16 1v6M16 25v6M1 16h6M25 16h6'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair;
+    outline:none;
+  }
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  /* 静态氛围层交给合成器，避免每帧在 canvas 里重画全屏渐变 */
+  #tint,#vignette{position:absolute;inset:0;pointer-events:none;}
+  #tint{
+    background:
+      linear-gradient(180deg,rgba(79,209,255,.05),rgba(79,209,255,0)) top/100% 50% no-repeat,
+      linear-gradient(0deg,rgba(255,138,79,.05),rgba(255,138,79,0)) bottom/100% 50% no-repeat;
+  }
+  #vignette{z-index:1;}
+
+  /* 两条轨道的点击层（透明命中区 + 高亮边框） */
+  .lane{
+    position:absolute;left:0;right:0;
+    border:0;margin:0;padding:0;background:transparent;
+    z-index:2;
+  }
+  .lane .hint{
+    position:absolute;right:calc(16px + env(safe-area-inset-right));
+    font-size:11px;color:rgba(238,243,255,.30);letter-spacing:2px;
+    pointer-events:none;font-weight:600;
+  }
+  #laneTop .hint{top:8px;}
+  #laneBottom .hint{bottom:8px;}
+  #laneTop{top:0;height:50%;}
+  #laneBottom{top:50%;height:50%;}
+  #laneTop.hit::after{background:linear-gradient(90deg,rgba(79,209,255,0),rgba(79,209,255,.14));animation:flash .22s ease-out;}
+  #laneBottom.hit::after{background:linear-gradient(90deg,rgba(255,138,79,0),rgba(255,138,79,.14));animation:flash .22s ease-out;}
+  @keyframes flash{from{opacity:1}to{opacity:0}}
+
+  /* 开始 / 结束 遮罩 */
+  .overlay{
+    position:absolute;inset:0;z-index:6;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:6px;text-align:center;padding:20px;
+    background:radial-gradient(circle at 50% 45%,rgba(12,20,40,.72),rgba(5,8,16,.92));
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    transition:opacity .25s ease,visibility .25s;
+  }
+  .overlay.hide{opacity:0;visibility:hidden;pointer-events:none;}
+  .overlay h2{margin:0;font-size:clamp(22px,4.6vw,34px);letter-spacing:3px;}
+  .overlay .sub{color:var(--muted);font-size:clamp(12px,2.1vw,15px);line-height:1.8;max-width:44em;}
+  .legend{display:flex;gap:26px;margin:10px 0 2px;flex-wrap:wrap;justify-content:center;}
+  .legend div{display:flex;align-items:center;gap:8px;font-size:clamp(11px,2vw,14px);color:#cdd8f0;}
+  .dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 10px currentColor;background:currentColor;}
+  /* 难度选择 */
+  .diff-pick{display:flex;gap:12px;margin:12px 0 2px;flex-wrap:wrap;justify-content:center;}
+  .diff-btn{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 16px;border-radius:14px;cursor:pointer;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.05);color:#cdd8f0;
+    font-family:inherit;
+  }
+  .diff-btn .stars{font-size:15px;letter-spacing:1px;color:#8d9ab8;line-height:1;}
+  .diff-btn .dname{font-size:11px;letter-spacing:.5px;white-space:nowrap;}
+  .diff-btn.active{
+    border-color:rgba(79,209,255,.65);
+    background:linear-gradient(180deg,rgba(79,209,255,.20),rgba(79,209,255,.07));
+    color:#eaf8ff;box-shadow:0 0 16px rgba(79,209,255,.22);
+  }
+  .diff-btn.active .stars{color:#ffd24a;text-shadow:0 0 10px rgba(255,210,74,.75);}
+  .diff-btn:active{transform:scale(.96);}
+
+  .go-actions{display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap;justify-content:center;}
+  .go-actions #btnRestart{margin-top:0;}
+  #btnDiff{
+    padding:12px 24px;border-radius:999px;border:1px solid rgba(255,255,255,.22);
+    background:rgba(255,255,255,.06);color:#cdd8f0;font-size:14px;letter-spacing:2px;cursor:pointer;
+  }
+  #btnDiff:active{transform:scale(.96);}
+
+  .tap-hint{
+    margin-top:12px;font-size:clamp(14px,2.6vw,18px);font-weight:600;
+    color:#fff;padding:10px 26px;border-radius:999px;
+    background:linear-gradient(90deg,rgba(79,209,255,.22),rgba(255,138,79,.22));
+    border:1px solid rgba(255,255,255,.18);
+    animation:breathe 1.6s ease-in-out infinite;
+  }
+  /* 矮屏（手机横屏）压缩开始界面，保证难度选择与开始提示都在屏内 */
+  @media (max-height: 410px){
+    .overlay{gap:2px;padding:10px 16px 14px;}
+    .overlay h2{font-size:22px;letter-spacing:2px;}
+    .legend{margin:4px 0 0;gap:18px;}
+    .legend div{font-size:11px;}
+    .overlay .sub{font-size:11px;line-height:1.5;}
+    .diff-pick{margin:8px 0 0;gap:8px;}
+    .diff-btn{padding:6px 12px;border-radius:11px;}
+    .diff-btn .stars{font-size:13px;}
+    .diff-btn .dname{font-size:10px;}
+    .tap-hint{margin-top:7px;font-size:13px;padding:7px 20px;}
+  }
+  @keyframes breathe{50%{transform:scale(1.05);box-shadow:0 0 24px rgba(79,209,255,.35);}}
+
+  #gameOver .big{font-size:clamp(30px,6vw,46px);letter-spacing:4px;color:var(--danger);}
+  .score-row{display:flex;gap:clamp(18px,4vw,44px);margin:10px 0 4px;}
+  .score-row .k{font-size:11px;color:var(--muted);letter-spacing:1px;}
+  .score-row .v{font-size:clamp(20px,4vw,30px);font-variant-numeric:tabular-nums;font-weight:700;}
+  #btnRestart{
+    margin-top:14px;padding:12px 34px;border-radius:999px;border:1px solid rgba(79,209,255,.5);
+    background:rgba(79,209,255,.14);color:#dff4ff;font-size:16px;letter-spacing:2px;cursor:pointer;
+  }
+  #btnRestart:active{transform:scale(.96);}
+
+  #pause .card{
+    padding:22px 30px;border-radius:18px;border:1px solid rgba(255,255,255,.12);
+    background:rgba(12,18,34,.85);display:flex;flex-direction:column;gap:16px;align-items:center;
+  }
+  #pause h2{font-size:24px;letter-spacing:4px;}
+  #pause .row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;}
+  #pause button{
+    padding:10px 22px;border-radius:999px;font-size:14px;cursor:pointer;
+    border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:var(--ink);
+  }
+  #pause button.primary{border-color:rgba(79,209,255,.5);background:rgba(79,209,255,.16);color:#dff4ff;}
+  #pause button:active{transform:scale(.96);}
+
+  /* 顶部提示条（命中/受击文字） */
+  #toast{
+    position:absolute;left:56%;top:52%;transform:translate(-50%,-50%) scale(.9);
+    z-index:5;pointer-events:none;opacity:0;
+    font-size:clamp(16px,3.4vw,24px);font-weight:800;letter-spacing:3px;
+    white-space:nowrap;
+    text-shadow:0 0 18px currentColor;
+  }
+  #toast.show{animation:toastIn .8s ease-out forwards;}
+  @keyframes toastIn{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.7);}
+    25%{opacity:1;transform:translate(-50%,-50%) scale(1.05);}
+    70%{opacity:1;transform:translate(-50%,-80%) scale(1);}
+    100%{opacity:0;transform:translate(-50%,-108%) scale(1);}
+  }
+
+  /* FEVER 触发金色闪屏 */
+  #frenzy{
+    position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;
+    background:radial-gradient(circle at 18% 50%,rgba(255,210,74,.42),rgba(255,140,40,0) 62%);
+  }
+  #frenzy.show{animation:frenzyFlash .9s ease-out;}
+  @keyframes frenzyFlash{0%{opacity:1}100%{opacity:0}}
+
+  /* 受击红屏 */
+  #hurt{
+    position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at 12% 50%,rgba(255,40,80,.55),rgba(255,40,80,0) 60%);
+  }
+  #hurt.show{animation:hurtFlash .45s ease-out;}
+  @keyframes hurtFlash{0%{opacity:1}100%{opacity:0}}
+
+  /* 横屏判定：只有横屏才显示游戏 */
+  #game{display:none;}
+  body.landscape #game{display:flex;}
+  body.landscape #rotate{display:none;}
+  body:not(.landscape) #game{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 竖屏提醒 -->
+  <div id="rotate">
+    <div class="phone"></div>
+    <h1>请横屏游玩</h1>
+    <p>本游戏仅支持横屏手机端<br>请将手机旋转至横向</p>
+    <div class="pill">检测到竖屏 · 旋转后自动进入游戏</div>
+  </div>
+
+  <!-- 游戏 -->
+  <div id="game">
+    <div id="hud">
+      <div class="hp-wrap">
+        <span class="hp-icon">❤</span>
+        <div class="hp-bar"><div id="hpFill"></div></div>
+        <div id="hpText">250 / 250</div>
+      </div>
+      <div class="hud-right">
+        <div class="stat"><b id="scoreText">0</b><span>SCORE</span></div>
+        <div class="stat"><b id="comboText">0</b><span id="comboLabel">COMBO</span></div>
+        <div class="stat"><b id="critText">0 / 0</b><span>暴击 / 普攻</span></div>
+        <div class="stat"><b id="bestText">0</b><span>BEST</span></div>
+        <button id="btnFull" aria-label="全屏"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg></button>
+        <button id="btnPause" aria-label="暂停">❚❚</button>
+      </div>
+    </div>
+
+    <div id="stage">
+      <div id="tint"></div>
+      <canvas id="cv"></canvas>
+      <div id="vignette"></div>
+
+      <div class="lane" id="laneTop" aria-hidden="true"><span class="hint">上半屏 · 上轨</span></div>
+      <div class="lane" id="laneBottom" aria-hidden="true"><span class="hint">下半屏 · 下轨</span></div>
+
+      <div id="frenzy"></div>
+      <div id="hurt"></div>
+      <div id="toast"></div>
+
+      <div class="overlay" id="startScreen">
+        <h2>双轨打怪</h2>
+        <div class="legend">
+          <div style="color:var(--p1)"><i class="dot"></i>上半屏 → 上轨打击点</div>
+          <div style="color:var(--p2)"><i class="dot"></i>下半屏 → 下轨打击点</div>
+        </div>
+        <div class="sub">怪物从右侧沿上下轨袭来，进入左侧光门时点击对应半屏出刀。<br>漏掉一次，角色失去 20 点血量（初始 250）。<br><span style="color:#ffd24a">每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10 秒，期间得分 ×1.5。</span><br><span style="color:#ff5ecb">双生：锁链相连，同击 700（双暴 1000）；单破另一只自爆 -20。</span><br><span style="color:#a6ff5e">长按：等头部进判定框时点击起手，按住 3 秒贯穿，头 / 1s / 尾各 +200。<br>错过时机或中途松手：COMBO 清零，不扣血。</span></div>
+        <div class="diff-pick" id="diffPick">
+          <button type="button" class="diff-btn active" data-diff="1">
+            <span class="stars">★</span><span class="dname">1 星 · 标准节奏</span>
+          </button>
+          <button type="button" class="diff-btn" data-diff="2">
+            <span class="stars">★★</span><span class="dname">2 星 · 刷新 ×2 · 移速 ×1.5</span>
+          </button>
+        </div>
+        <div class="tap-hint">点击屏幕开始</div>
+      </div>
+
+      <div class="overlay hide" id="gameOver">
+        <div class="big">GAME OVER</div>
+        <div class="score-row">
+          <div><div class="k">SCORE</div><div class="v" id="goScore">0</div></div>
+          <div><div class="k">MAX COMBO</div><div class="v" id="goCombo">0</div></div>
+          <div><div class="k">KILLS</div><div class="v" id="goKills">0</div></div>
+        </div>
+        <div class="sub" id="goBest"></div>
+        <div class="go-actions">
+          <button id="btnRestart">再来一局</button>
+          <button id="btnDiff">选择难度</button>
+        </div>
+      </div>
+
+      <div class="overlay hide" id="pause">
+        <div class="card">
+          <h2>已暂停</h2>
+          <div class="row">
+            <button class="primary" id="btnResume">继续</button>
+            <button id="btnQuit">重开</button>
+            <button id="btnHome">回主页面</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =============== 常量 =============== */
+  const MAX_HP = 250;
+  const HIT_DAMAGE = 20;
+  const ATTACK_DUR = 0.44;   // 出招动作时长（秒）
+
+  const FEVER_COMBO  = 50;    // 每累计 50 连击触发一次 FEVER
+  const FEVER_TIME   = 10;    // FEVER 持续 10 秒
+  const FEVER_MULT   = 1.5;   // FEVER 期间得分 ×1.5
+  const BASE_GAIN    = 200;   // 外围命中（普攻）200 分
+  const CRIT_GAIN    = 300;   // 中心暴击区命中 300 分
+  const GOLD         = "#ffd24a";
+
+  // 双生敌人：上下轨各一只、被锁链连住，必须在同一时间窗内两轨各命中一次
+  const PAIR_GAIN      = 700;   // 同时击破 700 分
+  const PAIR_CRIT_GAIN = 1000;  // 两轨都打进暴击区 1000 分
+  const PAIR_WINDOW    = 0.18;  // 两轨命中的时间窗（秒）
+  const PAIR_COLOR     = "#ff5ecb";
+
+  // 长按敌人：头部进入判定圈时点击起手，再按住该轨 3 秒贯穿
+  const LONG_HOLD_TIME = 3;      // 需要连续按住的时间（秒）
+  const LONG_WAIT      = 6;      // 长按被暂停/切后台中断后，重新按住的宽限（秒）
+  const LONG_HEAD_GAIN = 200;    // 击中头部 +200
+  const LONG_1S_GAIN   = 200;    // 按住满 1 秒 +200
+  const LONG_TAIL_GAIN = 200;    // 贯穿到尾部 +200
+  const LONG_COLOR     = "#a6ff5e";
+  // FEVER 时两轨仍保留区分度：上轨亮金、下轨琥珀金
+  const FRENZY_LANE  = { top:"#ffd24a", bottom:"#ff9a2e" };
+
+  const SPEED_BASE = 165;    // 初始移速 px/s（900 基准宽）
+  const SPEED_MAX  = 300;    // 移速上限（到达后不再增加）
+  const SPEED_RAMP = 75;     // 用多少秒平滑升到上限
+
+  // 难度：1 星为当前标准；2 星刷新速度 ×2、移速与最终上限 ×1.5
+  const DIFFS = {
+    1: { spawnMul: 1, speedMul: 1 },
+    2: { spawnMul: 2, speedMul: 1.5 }
+  };
+  let diffLevel = 1;
+
+
+  const LANE = {
+    top:    { color:"#4fd1ff" },
+    bottom: { color:"#ff8a4f" }
+  };
+
+
+  /* =============== DOM =============== */
+  const body      = document.body;
+  const cv        = document.getElementById("cv");
+  const ctx       = cv.getContext("2d");
+  const vignette  = document.getElementById("vignette");
+  const stage     = document.getElementById("stage");
+  const laneTop   = document.getElementById("laneTop");
+  const laneBot   = document.getElementById("laneBottom");
+  const hpFill    = document.getElementById("hpFill");
+  const hpText    = document.getElementById("hpText");
+  const scoreText = document.getElementById("scoreText");
+  const comboText = document.getElementById("comboText");
+  const comboLabel = document.getElementById("comboLabel");
+  const critText  = document.getElementById("critText");
+  const bestText  = document.getElementById("bestText");
+  const hurt      = document.getElementById("hurt");
+  const frenzyEl  = document.getElementById("frenzy");
+  const toast     = document.getElementById("toast");
+  const startScreen = document.getElementById("startScreen");
+  const gameOver  = document.getElementById("gameOver");
+  const pauseEl   = document.getElementById("pause");
+  const goScore   = document.getElementById("goScore");
+  const goCombo   = document.getElementById("goCombo");
+  const goKills   = document.getElementById("goKills");
+  const goBest    = document.getElementById("goBest");
+
+  /* =============== 状态 =============== */
+  let W = 0, H = 0, DPR = 1;
+  let laneY = { top: 0, bottom: 0 };
+  let hitX = 0, hitW = 0, zoneHalf = 0, critHalf = 0;
+  let playerX = 0, playerR = 24;
+  let playerFlash = 0;
+
+  let state = "idle";          // idle | running | paused | over
+  let raf = 0, lastT = 0, now = 0, vt = 0;   // now: 游戏时间; vt: 视觉时间
+  let spawnTimer = 0;
+  let difficulty = 0;
+  let pausedByOrientation = false;
+
+  let hp = MAX_HP;
+  let score = 0, combo = 0, maxCombo = 0, kills = 0;
+  let critCount = 0, normalCount = 0;
+  let best = 0;
+  // HUD 脏值缓存：数值没变就不碰 DOM，避免每帧触发样式重算
+  let hudHp = null, hudScore = null, hudCombo = null, hudBest = null;
+  let hudCritCount = null, hudNormalCount = null, hudFever = null, hudComboLabel = null;
+  try { best = +(localStorage.getItem("dualrail_best") || 0) || 0; } catch(err){ best = 0; }
+
+  let monsters = [];
+  let particles = [];
+  let slashes = [];
+  let rings = [];
+  let shake = 0;
+
+  let frenzyActive = false;  // 当前是否处于 FEVER 状态
+  let frenzySparkT = 0;      // FEVER 粒子发射计时
+  let feverT = 0;            // FEVER 剩余秒数
+  let nextFeverAt = FEVER_COMBO;  // 下一次触发 FEVER 的连击数
+
+  let pairSeq = 0;           // 双生组编号
+  let pairCooldown = 0;      // 距下一组双生敌人的冷却（秒）
+  let pairHintShown = false; // 本局是否已提示过双生规则
+
+  let longCooldown = 0;      // 距下一个长按敌人的冷却（秒）
+  let longHintShown = false; // 本局是否已提示过长按规则
+  let holdMon = null;        // 正在被长按的长条怪
+  let holdId = null;         // 发起长按的指针/按键标识
+  let floaters = [];         // 飘分文字
+
+  // 出招状态
+  let attackT = 0;        // 剩余时间，>0 表示正在挥击
+  let attackLane = null;
+
+  const bgStars = [];
+
+  /* =============== 工具 =============== */
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function easeOutCubic(t){ t = clamp(t,0,1); return 1 - Math.pow(1-t,3); }
+  function easeInOutCubic(t){ t = clamp(t,0,1); return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+
+  /* =============== 横竖屏检测 =============== */
+  function updateOrientation(){
+    const mq = window.matchMedia("(orientation: landscape)");
+    const isLandscape = mq.matches ||
+      (window.innerWidth > window.innerHeight) ||
+      (screen.orientation && /landscape/i.test(screen.orientation.type || ""));
+
+    if (isLandscape){
+      body.classList.add("landscape");
+      if (pausedByOrientation && state === "paused"){
+        pausedByOrientation = false;
+        resumeGame();
+      }
+    } else {
+      body.classList.remove("landscape");
+      if (state === "running"){ pausedByOrientation = true; pauseGame(); }
+    }
+    // 布局稳定后再量一次，避免旋转瞬间取到 0 尺寸
+    requestAnimationFrame(resize);
+    setTimeout(resize, 70);
+    setTimeout(resize, 260);
+  }
+
+  if (screen.orientation && screen.orientation.addEventListener){
+    screen.orientation.addEventListener("change", updateOrientation);
+  }
+  window.addEventListener("orientationchange", updateOrientation);
+  window.addEventListener("resize", updateOrientation);
+  if (window.matchMedia){
+    const mq = window.matchMedia("(orientation: landscape)");
+    if (mq.addEventListener) mq.addEventListener("change", updateOrientation);
+    else if (mq.addListener) mq.addListener(updateOrientation);
+  }
+
+  /* =============== 尺寸 =============== */
+  function resize(){
+    const r = stage.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+
+    W = r.width; H = r.height;
+    // 移动端 3x 屏只按 2x 渲染，像素量减少约 36%，画面依旧清晰
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    if (vignette){
+      const rIn = Math.min(W,H)*0.32, rOut = Math.max(W,H)*0.72;
+      vignette.style.background = "radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 0px, rgba(0,0,0,0) " +
+        rIn.toFixed(1) + "px, rgba(0,0,0,.55) " + rOut.toFixed(1) + "px, rgba(0,0,0,.55) 100%)";
+    }
+
+    cv.width  = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+
+    laneY.top    = H * 0.28;
+    laneY.bottom = H * 0.72;
+
+    playerR = clamp(H * 0.115, 22, 46);
+    hitX = Math.max(clamp(W * 0.34, 150, 430), playerX + playerR*2.6 + 120);
+    hitW = clamp(W * 0.070, 58, 100);
+    // 暴击区半宽 = 外圈半宽的一半：判定落在中心区间的概率约 50%
+    zoneHalf = hitW * 0.5 + clamp(W * 0.030, 16, 44);
+    critHalf = zoneHalf * 0.50;  // 中心暴击区半宽（约五成暴击率）
+    playerX = Math.max(clamp(W * 0.085, 48, 120), playerR * 2.05 + 12);
+
+    // 旋转/尺寸变化后，让在场怪物重新贴合轨道
+    for (const m of monsters){
+      if (m.long){
+        m.y = laneY[m.lane];
+        m.len = clamp(W*0.26, 180, 300);
+        m.h = clamp(H*0.10, 26, 44);
+        m.w = m.len;
+        continue;
+      }
+      m.y = laneY[m.lane];
+      m.w = clamp(W*0.055, 40, 62);
+      m.h = clamp(H*0.17, 40, 78);
+    }
+
+    buildStars();
+  }
+
+  function buildStars(){
+    bgStars.length = 0;
+    const n = Math.round(clamp(W*H/26000, 30, 90));
+    for (let i=0;i<n;i++){
+      bgStars.push({
+        x: Math.random()*W,
+        y: Math.random()*H,
+        r: rand(0.5,1.6),
+        a: rand(0.08,0.35),
+        s: rand(2,10)
+      });
+    }
+  }
+
+  /* =============== HUD =============== */
+  function syncHUD(){
+    if (hp !== hudHp){
+      const ratio = clamp(hp/MAX_HP, 0, 1);
+      hpFill.style.transform = "scaleX(" + ratio + ")";
+      hpFill.classList.toggle("low", ratio <= 0.3);
+      hpText.textContent = Math.max(0,hp) + " / " + MAX_HP;
+      hudHp = hp;
+    }
+    if (score !== hudScore){
+      scoreText.textContent = score;
+      hudScore = score;
+    }
+    if (combo !== hudCombo){
+      comboText.textContent = combo;
+      hudCombo = combo;
+    }
+    const shownBest = Math.max(best, score);
+    if (shownBest !== hudBest){
+      bestText.textContent = shownBest;
+      hudBest = shownBest;
+    }
+    if (critCount !== hudCritCount || normalCount !== hudNormalCount){
+      critText.textContent = critCount + " / " + normalCount;
+      hudCritCount = critCount;
+      hudNormalCount = normalCount;
+    }
+
+    const hot = frenzyActive;
+    if (hot !== hudFever){
+      comboText.classList.toggle("frenzy", hot);
+      scoreText.classList.toggle("frenzy", hot);
+      comboLabel.classList.toggle("fever", hot);
+      hudFever = hot;
+    }
+    const label = hot ? ("FEVER " + Math.ceil(feverT) + "s") : "COMBO";
+    if (label !== hudComboLabel){
+      comboLabel.textContent = label;
+      hudComboLabel = label;
+    }
+  }
+
+  function showToast(text, color){
+    toast.textContent = text;
+    toast.style.color = color || "#fff";
+    toast.classList.remove("show");
+    void toast.offsetWidth;
+    toast.classList.add("show");
+  }
+
+  function flashHurt(){
+    hurt.classList.remove("show");
+    void hurt.offsetWidth;
+    hurt.classList.add("show");
+  }
+
+  /* =============== 游戏流程 =============== */
+  function resetGame(){
+    hp = MAX_HP;
+    score = 0; combo = 0; maxCombo = 0; kills = 0;
+    monsters.length = 0; particles.length = 0; slashes.length = 0; rings.length = 0;
+    attackT = 0; attackLane = null;
+    spawnTimer = 1.3;
+    difficulty = 0;
+    shake = 0;
+    playerFlash = 0;
+    frenzyActive = false;
+    frenzySparkT = 0;
+    feverT = 0;
+    nextFeverAt = FEVER_COMBO;
+    critCount = 0; normalCount = 0;
+    pairSeq = 0; pairCooldown = 4.5; pairHintShown = false;
+    longCooldown = 6.0; longHintShown = false;
+    holdMon = null; holdId = null;
+    floaters.length = 0;
+    syncHUD();
+  }
+
+  function startGame(){
+    resetGame();
+    pausedByOrientation = false;
+    state = "running";
+    startScreen.classList.add("hide");
+    gameOver.classList.add("hide");
+    pauseEl.classList.add("hide");
+    now = 0; lastT = 0;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function pauseGame(){
+    if (state !== "running") return;
+    cancelHold();
+    state = "paused";
+    pauseEl.classList.remove("hide");
+  }
+
+  function resumeGame(){
+    if (state !== "paused") return;
+    pausedByOrientation = false;
+    state = "running";
+    pauseEl.classList.add("hide");
+    lastT = 0;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function quitToHome(){
+    if (state !== "paused") return;
+    cancelHold();
+    resetGame();
+    state = "idle";
+    pausedByOrientation = false;
+    now = 0; lastT = 0;
+    pauseEl.classList.add("hide");
+    gameOver.classList.add("hide");
+    startScreen.classList.remove("hide");
+    frenzyEl.classList.remove("show");
+    hurt.classList.remove("show");
+    toast.classList.remove("show");
+  }
+
+  function gameOverNow(){
+    if (state === "over") return;
+    cancelHold();
+    state = "over";
+    gameOver.classList.remove("hide");
+    goScore.textContent = score;
+    goCombo.textContent = maxCombo;
+    goKills.textContent = kills;
+
+    if (score > best){
+      best = score;
+      try { localStorage.setItem("dualrail_best", String(best)); } catch(err){}
+    }
+    bestText.textContent = Math.max(best, score);
+    goBest.textContent = "历史最高分 " + best;
+  }
+
+  /* =============== 生成怪物 =============== */
+  function spawnInterval(){
+    const base = 1.28 - difficulty * 0.045;
+    const raw = clamp(base + rand(-0.12,0.16), 0.62, 1.45);
+    // 2 星：刷新频率翻倍（间隔减半）
+    return raw / DIFFS[diffLevel].spawnMul;
+  }
+
+  function speedNow(){
+    // 随时间平滑升速，到达上限后保持不变
+    const t = clamp(now / SPEED_RAMP, 0, 1);
+    const k = t*t*(3 - 2*t);            // smoothstep，起步缓、中段快、末段收敛
+    const mul = DIFFS[diffLevel].speedMul;
+    return (SPEED_BASE + (SPEED_MAX - SPEED_BASE) * k) * mul;
+  }
+
+  function spawnMonster(){
+    // 长按敌人：独占一条空轨，出现后该轨不再刷新其他怪
+    if (now > 8 && longCooldown <= 0 && !hasActiveLong() && !hasActivePair()){
+      const lane = clearLane();
+      if (lane && Math.random() < 0.28){
+        spawnLong(lane);
+        longCooldown = rand(14, 18);
+        return;
+      }
+    }
+
+    // 双生敌人：开局数秒后按概率成对出现；长按敌人存在时不会刷新双生
+    if (!hasActiveLong() && !hasActivePair() && now > 6 && pairCooldown <= 0 && Math.random() < 0.20){
+      spawnPair();
+      pairCooldown = rand(5.0, 8.0);
+      return;
+    }
+
+    let lane = Math.random() < 0.5 ? "top" : "bottom";
+    if (laneBlocked(lane)){
+      const other = lane === "top" ? "bottom" : "top";
+      if (laneBlocked(other)) return;   // 两条轨道都被长按敌人占用（通常不会同时出现）
+      lane = other;
+    }
+    const vw = Math.max(W, 1);
+    // 以 900 宽为基准换算速度，保证不同分辨率体验一致
+    const scale = vw / 900;
+    const sf = clamp(scale, 0.8, 1.9) * rand(0.97, 1.03);
+    const spd = speedNow() * sf;
+    const startX = W + 60;
+
+    const y = laneY[lane] + rand(-6, 6);
+
+    monsters.push({
+      lane: lane,
+      x: startX,
+      y: y,
+      vx: -spd,
+      sf: sf,   // 速度系数，随全局移速同步
+      w: clamp(W*0.055, 40, 62),
+      h: clamp(H*0.17, 40, 78),
+      phase: rand(0, Math.PI*2),
+      wob: rand(0.8, 1.6)
+    });
+  }
+
+  function hasActiveLong(){
+    return monsters.some(function(m){ return m.long && !m.done; });
+  }
+  function hasActivePair(){
+    return monsters.some(function(m){ return !!m.partner && !m.done; });
+  }
+  function laneBlocked(lane){
+    return monsters.some(function(m){ return m.long && !m.done && m.lane === lane; });
+  }
+  function clearLane(){
+    const topBusy = monsters.some(function(m){ return m.lane === "top" && !m.done; });
+    const botBusy = monsters.some(function(m){ return m.lane === "bottom" && !m.done; });
+    if (!topBusy && !botBusy) return Math.random() < 0.5 ? "top" : "bottom";
+    if (!topBusy) return "top";
+    if (!botBusy) return "bottom";
+    return null;
+  }
+
+  function spawnLong(lane){
+    const len = clamp(W*0.26, 180, 300);
+    const h = clamp(H*0.10, 26, 44);
+    monsters.push({
+      long: true,
+      lane: lane,
+      x: W + 30,
+      y: laneY[lane],
+      len: len,
+      h: h,
+      w: len,
+      phase: rand(0, Math.PI*2),
+      anchored: false, escaped: false, done: false,
+      holdT: 0, headAwarded: false, midAwarded: false, waitT: LONG_WAIT, holding: false
+    });
+    if (!longHintShown){
+      longHintShown = true;
+      showToast("长按敌人！头进判定框后点击", LONG_COLOR);
+    }
+  }
+
+  function spawnPair(){
+    const scale = Math.max(W, 1) / 900;
+    const sf = clamp(scale, 0.8, 1.9) * rand(0.97, 1.03);
+    const spd = speedNow() * sf;
+    const startX = W + 60;
+    const w = clamp(W*0.055, 40, 62);
+    const h = clamp(H*0.17, 40, 78);
+    const id = ++pairSeq;
+    const phase = rand(0, Math.PI*2);   // 同步浮动，锁链保持水平
+    const mk = function(lane){
+      return {
+        lane: lane, x: startX, y: laneY[lane],
+        vx: -spd, sf: sf, w: w, h: h,
+        phase: phase, wob: rand(0.8, 1.6),
+        pairId: id, partner: null,
+        pairPending: false, pairT: 0, pairCrit: false
+      };
+    };
+    const a = mk("top"), b = mk("bottom");
+    a.partner = b; b.partner = a;
+    monsters.push(a, b);
+    if (!pairHintShown){
+      pairHintShown = true;
+      showToast("双生敌人！上下轨同时击破 +700", PAIR_COLOR);
+    }
+  }
+
+  /* =============== 打击 =============== */
+  function strike(lane){
+    if (state !== "running") return;
+
+    const lx = lane === "top" ? laneTop : laneBot;
+    lx.classList.remove("hit");
+    void lx.offsetWidth;
+    lx.classList.add("hit");
+
+    // 出招动作：同一挥击期间连点不重置，换轨则重新出招
+    if (attackT <= ATTACK_DUR*0.42 || attackLane !== lane){
+      attackT = ATTACK_DUR;
+      attackLane = lane;
+    }
+
+    // 刀光：从角色身前划向打击点
+    const laneYv = laneY[lane];
+    slashes.push({
+      x: hitX, x0: playerX + playerR*1.05,
+      y: laneYv, t: 0, life: 0.30, lane: lane
+    });
+
+    // 双生补齐优先：另一轨已挂起，这一击要尽快接上
+    const tol = zoneHalf;
+    let pendingMate = null, pmDist = Infinity;
+    for (const m of monsters){
+      if (m.dead || m.long || !m.pairPending || !m.partner || m.partner.dead) continue;
+      if (m.partner.lane !== lane) continue;
+      const d = Math.abs(m.partner.x - hitX);
+      if (d <= tol && d < pmDist){ pmDist = d; pendingMate = m.partner; }
+    }
+    if (pendingMate){
+      completePair(pendingMate, pmDist <= critHalf);
+      return;
+    }
+
+    // 找出该轨道、位于打击判定区内的最近怪物
+    let target = null, bestDist = Infinity;
+    for (const m of monsters){
+      if (m.dead || m.long || m.lane !== lane) continue;
+      const d = Math.abs(m.x - hitX);
+      if (d <= tol && d < bestDist){
+        bestDist = d; target = m;
+      }
+    }
+
+    if (target){
+      if (target.partner && !target.dead){
+        if (target.pairPending){
+          // 这一只已挂起，重复点击不刷新时间窗
+          burst(hitX, laneYv, PAIR_COLOR, 8, 0.65);
+        } else {
+          // 第一击：挂起等待另一轨；窗口内补齐才算同时击破
+          target.pairPending = true;
+          target.pairT = PAIR_WINDOW;
+          target.pairCrit = bestDist <= critHalf;
+          burst(target.x, target.y, PAIR_COLOR, 16, 0.95);
+          rings.push({ x:target.x, y:target.y, t:0, life:0.26, r0:6, r1:36, color:PAIR_COLOR });
+          nudgeVibrate(18);
+        }
+      } else {
+        killMonster(target, bestDist <= critHalf);
+      }
+    } else {
+      // 空挥
+      burst(hitX, laneYv, LANE[lane].color, 7, 0.6);
+    }
+  }
+
+  function killMonster(m, crit, silent){
+    m.dead = true;
+    kills++;
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
+    if (crit) critCount++; else normalCount++;
+
+    // 每累计 50 连击进入 FEVER（持续 10 秒，可重复触发）
+    const triggered = !frenzyActive && combo >= nextFeverAt;
+    if (triggered){
+      feverT = FEVER_TIME;
+      frenzyActive = true;
+      nextFeverAt = combo + FEVER_COMBO;
+      enterFrenzy();
+    }
+
+    // 中心暴击区 300 分，外围普攻 200 分；FEVER 期间 ×1.5
+    const gain = Math.round((crit ? CRIT_GAIN : BASE_GAIN) * (frenzyActive ? FEVER_MULT : 1));
+    score += gain;
+
+    const critCol = frenzyActive ? "#ffffff" : GOLD;
+    const c = crit ? critCol : laneColorOf(m.lane);
+    burst(m.x, m.y, c, crit ? 36 : 26, crit ? 1.5 : 1.25);
+    burst(m.x, m.y, "#ffffff", crit ? 16 : 10, 0.9);
+    rings.push({ x:m.x, y:m.y, t:0, life: crit ? 0.50 : 0.40, r0:10, r1: crit ? 88 : (frenzyActive ? 74 : 58), color:c });
+    if (crit){
+      rings.push({ x:m.x, y:m.y, t:0, life:0.34, r0:6, r1:46, color:GOLD });
+    }
+    if (!triggered && !silent){
+      if (crit){
+        showToast("暴击" + (combo >= 5 ? " x" + combo : "") + "  +" + gain, critCol);
+      } else {
+        showToast(
+          frenzyActive
+            ? ("FEVER x" + combo + "  +" + gain)
+            : (combo >= 5 ? ("连击 x" + combo + "  +" + gain) : ("命中  +" + gain)),
+          c
+        );
+      }
+    }
+    shake = Math.min(shake + (crit ? 11 : (frenzyActive ? 7 : 5)), 17);
+    syncHUD();
+    // 击杀双生中的一只：解除与另一只的锁链，避免留下悬挂引用
+    if (m.partner){
+      const p = m.partner;
+      p.partner = null; p.pairId = 0;
+      p.pairPending = false; p.pairT = 0; p.pairCrit = false;
+      m.partner = null;
+    }
+    monsters = monsters.filter(x => x !== m);
+    return gain;
+  }
+
+  /* ---- 双生敌人结算 ---- */
+  function completePair(t, crit){
+    const p = t.partner;
+    if (!p || p.dead || !p.pairPending) return;
+    p.pairPending = false;
+    killPair(p, t, !!p.pairCrit && !!crit);
+  }
+
+  function killPair(a, b, critPair){
+    a.dead = true; b.dead = true;
+    a.partner = null; b.partner = null;
+    a.pairPending = false; b.pairPending = false;
+
+    kills += 2;
+    combo += 2;
+    maxCombo = Math.max(maxCombo, combo);
+    if (critPair) critCount += 2; else normalCount += 2;
+
+    const triggered = !frenzyActive && combo >= nextFeverAt;
+    if (triggered){
+      feverT = FEVER_TIME;
+      frenzyActive = true;
+      nextFeverAt = combo + FEVER_COMBO;
+      enterFrenzy();
+    }
+
+    const gain = Math.round((critPair ? PAIR_CRIT_GAIN : PAIR_GAIN) * (frenzyActive ? FEVER_MULT : 1));
+    score += gain;
+
+    const col = critPair ? (frenzyActive ? "#ffffff" : GOLD) : PAIR_COLOR;
+    for (const m of [a, b]){
+      burst(m.x, m.y, col, critPair ? 34 : 28, critPair ? 1.5 : 1.3);
+      burst(m.x, m.y, "#ffffff", 12, 0.9);
+      rings.push({ x:m.x, y:m.y, t:0, life:0.52, r0:10, r1: critPair ? 92 : 72, color:col });
+    }
+    rings.push({ x:(a.x+b.x)/2, y:(a.y+b.y)/2, t:0, life:0.50, r0:20, r1:150, color:PAIR_COLOR });
+
+    if (!triggered){
+      showToast((critPair ? "双生暴击" : "双生击破") + "  +" + gain, col);
+    }
+    shake = Math.min(shake + (critPair ? 16 : 13), 20);
+    syncHUD();
+    monsters = monsters.filter(x => x !== a && x !== b);
+    nudgeVibrate(critPair ? [0, 30, 40, 60] : 40);
+  }
+
+  // 时间窗内只打到一只：这一只按单只判定计分，另一只自爆并直接造成 20 伤害
+  function resolvePairSolo(m){
+    if (m.dead) return;
+    const p = m.partner;
+    const crit = !!m.pairCrit;
+    m.pairPending = false;
+    m.pairId = 0;
+    m.partner = null;
+    if (p){
+      p.partner = null; p.pairId = 0;
+      p.pairPending = false; p.pairT = 0;
+    }
+    const gain = killMonster(m, crit, true);
+    if (p && !p.dead) pairBlast(p, gain);
+  }
+
+  function pairBlast(p, gain){
+    p.dead = true;
+    monsters = monsters.filter(x => x !== p);
+    hp = Math.max(0, hp - HIT_DAMAGE);
+    playerFlash = 1;
+    shake = Math.max(shake, 13);
+    flashHurt();
+    burst(p.x, p.y, "#ff4d6d", 26, 1.25);
+    burst(p.x, p.y, PAIR_COLOR, 18, 1.0);
+    rings.push({ x:p.x, y:p.y, t:0, life:0.45, r0:10, r1:80, color:"#ff4d6d" });
+    showToast("单破 +" + gain + " · 另一只自爆 -" + HIT_DAMAGE, "#ff6b81");
+    syncHUD();
+    nudgeVibrate(60);
+    if (hp <= 0) gameOverNow();
+  }
+
+  /* ---- 长按敌人 ---- */
+  function pressLane(lane, id){
+    if (state !== "running") return;
+    const m = findLongInLane(lane);
+    if (m){
+      if (holdMon || m.escaped) return;
+      if (m.anchored){ startHold(m, id); return; }   // 暂停后重新起手
+      const headX = longHeadX(m);
+      if (headX < hitX - zoneHalf){ missLong(m); return; }
+      if (headX > hitX + zoneHalf){                  // 头还没进圈：不挥空刀
+        if (now - (m.tipT || -9) > 0.6){
+          m.tipT = now;
+          addFloater(headX, m.y - m.h*1.45, "太早", "#9fb0cf");
+        }
+        return;
+      }
+      startHold(m, id);
+      return;
+    }
+    strike(lane);
+  }
+
+  function findLongInLane(lane){
+    for (const m of monsters){
+      if (m.long && !m.done && m.lane === lane) return m;
+    }
+    return null;
+  }
+
+  function longHeadX(m){
+    return m.x + m.h*0.46;
+  }
+
+  function longAward(m, points, tag, atX, atY){
+    const gain = Math.round(points * (frenzyActive ? FEVER_MULT : 1));
+    score += gain;
+    addFloater(atX, atY != null ? atY : m.y - m.h*0.85, "+" + gain + (tag ? " " + tag : ""), frenzyActive ? "#ffffff" : LONG_COLOR);
+    burst(atX, m.y, LONG_COLOR, 10, 0.8);
+    rings.push({ x:atX, y:m.y, t:0, life:0.30, r0:5, r1:28, color:LONG_COLOR });
+    syncHUD();
+    return gain;
+  }
+
+  function startHold(m, id){
+    if (holdMon) return;
+    holdMon = m;
+    holdId = id;
+    m.holding = true;
+    m.anchored = true;
+
+    const lane = m.lane;
+    const lx = lane === "top" ? laneTop : laneBot;
+    lx.classList.remove("hit"); void lx.offsetWidth; lx.classList.add("hit");
+    attackT = ATTACK_DUR; attackLane = lane;
+    m.waitT = LONG_WAIT;
+    slashes.push({ x: longHeadX(m), x0: playerX + playerR*1.05, y: m.y, t:0, life:0.30, lane: lane });
+
+    if (!m.headAwarded){
+      m.headAwarded = true;
+      longAward(m, LONG_HEAD_GAIN, "头部", longHeadX(m));
+    }
+    showToast("长按中… 保持 " + LONG_HOLD_TIME + " 秒", LONG_COLOR);
+    nudgeVibrate(20);
+  }
+
+  function releaseHold(id){
+    if (!holdMon || holdId !== id) return;
+    failLong(holdMon);
+  }
+
+  function longPenalty(m, msg){
+    holdMon = null; holdId = null;
+    m.holding = false;
+    m.escaped = true;
+    m.anchored = false;
+    m.escSpeed = 980;
+    combo = 0;
+    frenzyActive = false;
+    feverT = 0;
+    nextFeverAt = FEVER_COMBO;
+    showToast(msg + " · COMBO 清零", "#ff6b81");
+    burst(longHeadX(m), m.y, "#ff4d6d", 22, 1.0);
+    shake = Math.max(shake, 8);
+    syncHUD();
+    nudgeVibrate(60);
+  }
+
+  function failLong(m){
+    if (!m || m.done || m.escaped) return;
+    longPenalty(m, "长按不足 " + LONG_HOLD_TIME + " 秒");
+  }
+
+  // 头已越过判定圈还没点击：漏过去，清空 COMBO，但不扣血
+  function missLong(m){
+    if (!m || m.done || m.escaped) return;
+    longPenalty(m, "漏掉了");
+  }
+
+  function completeLong(m){
+    if (!m || m.done) return;
+    m.done = true;
+    m.anchored = false;
+    m.holding = false;
+    holdMon = null; holdId = null;
+
+    kills++;
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
+    normalCount++;
+
+    const triggered = !frenzyActive && combo >= nextFeverAt;
+    if (triggered){
+      feverT = FEVER_TIME;
+      frenzyActive = true;
+      nextFeverAt = combo + FEVER_COMBO;
+      enterFrenzy();
+    }
+    longAward(m, LONG_TAIL_GAIN, "尾部", m.x + m.len - 10);
+    if (!triggered) showToast("长按贯穿！", LONG_COLOR);
+
+    // 沿整条身体爆开
+    for (let i = 0; i < 6; i++){
+      const px = m.x + m.len * (i/5);
+      burst(px, m.y, LONG_COLOR, 9, 0.95);
+      burst(px, m.y, "#ffffff", 4, 0.6);
+    }
+    rings.push({ x: m.x + m.len/2, y: m.y, t:0, life:0.46, r0:20, r1: Math.max(m.len*0.42, 70), color: LONG_COLOR });
+    shake = Math.min(shake + 12, 18);
+    monsters = monsters.filter(x => x !== m);
+    syncHUD();
+    nudgeVibrate([0, 40, 50, 60]);
+  }
+
+  function cancelHold(){
+    if (!holdMon) return;
+    const m = holdMon;
+    holdMon = null; holdId = null;
+    if (m && !m.done) m.holding = false;
+  }
+
+  function enterFrenzy(){
+    frenzyEl.classList.remove("show");
+    void frenzyEl.offsetWidth;
+    frenzyEl.classList.add("show");
+    showToast("FEVER！10 秒 ×1.5", GOLD);
+    nudgeVibrate([0, 40, 60, 90]);
+  }
+
+  function endFever(){
+    frenzyActive = false;
+    feverT = 0;
+    showToast("FEVER 结束", "#9fb0cf");
+    syncHUD();
+  }
+
+  function hurtPlayer(m){
+    hp = Math.max(0, hp - HIT_DAMAGE);
+    combo = 0;
+    frenzyActive = false;
+    feverT = 0;
+    nextFeverAt = FEVER_COMBO;
+    playerFlash = 1;
+    shake = 14;
+    flashHurt();
+    burst(m.x, m.y, "#ff4d6d", 22, 1.15);
+    rings.push({ x:playerX + playerR, y:H/2, t:0, life:0.45, r0:14, r1:70, color:"#ff4d6d" });
+    showToast("-" + HIT_DAMAGE, "#ff4d6d");
+    syncHUD();
+    nudgeVibrate(60);
+    monsters = monsters.filter(x => x !== m);
+
+    if (hp <= 0) gameOverNow();
+  }
+
+  function nudgeVibrate(ms){
+    if (navigator.vibrate) { try{ navigator.vibrate(ms); }catch(e){} }
+  }
+
+  function emitFrenzy(dt){
+    frenzySparkT -= dt;
+    if (frenzySparkT > 0 || particles.length >= 260) return;
+    frenzySparkT = rand(0.035, 0.08);
+    // 角色周身金色火花
+    const a = rand(0, Math.PI*2);
+    const rr = playerR * rand(1.2, 2.1);
+    particles.push({
+      x: playerX + Math.cos(a)*rr,
+      y: H/2 + Math.sin(a)*rr,
+      vx: -rand(40, 160), vy: rand(-70, 20),
+      r: rand(1.4, 3.2),
+      life: rand(0.3, 0.7),
+      t: 0,
+      color: Math.random() < 0.35 ? "#fff4c2" : GOLD
+    });
+  }
+
+  function burst(x,y,color,n,power){
+    // 粒子上限，避免长时间 FEVER 后一次爆炸叠出上百个圆弧
+    n = Math.min(n, 260 - particles.length);
+    if (n <= 0) return;
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2;
+      const sp = rand(60,300)*power;
+      particles.push({
+        x:x, y:y,
+        vx:Math.cos(a)*sp,
+        vy:Math.sin(a)*sp,
+        r:rand(1.2,3.6),
+        life:rand(0.25,0.65),
+        t:0,
+        color:color
+      });
+    }
+  }
+
+  /* =============== 主循环 =============== */
+  function loop(ts){
+    raf = requestAnimationFrame(loop);
+
+    if (!lastT) lastT = ts;
+    let dt = (ts - lastT)/1000;
+    lastT = ts;
+    dt = Math.min(dt, 0.05);
+    vt += dt;
+
+    if (state === "running"){
+      now += dt;
+      difficulty = Math.min(now * 0.075, 10);
+
+      // 生成
+      spawnTimer -= dt;
+      if (spawnTimer <= 0){
+        spawnMonster();
+        spawnTimer = spawnInterval();
+      }
+      if (pairCooldown > 0) pairCooldown -= dt;
+      if (longCooldown > 0) longCooldown -= dt;
+
+      // 更新怪物
+      const reachX = playerX + playerR*1.15 + 8;
+      const breached = [];
+      for (const m of monsters){
+        if (m.long){
+          if (m.escaped){
+            m.x -= (m.escSpeed || 980) * dt;
+            if (m.x + m.len < -60) m.done = true;
+            continue;
+          }
+          if (!m.anchored){
+            m.x -= speedNow() * 0.8 * dt;
+            // 头部越过判定圈仍未点击：判定漏怪
+            if (longHeadX(m) < hitX - zoneHalf){
+              missLong(m);
+              continue;
+            }
+          }
+          continue;
+        }
+        // 在场怪物跟随全局移速曲线，保证整体节奏一致（到上限即恒定）
+        m.vx = -speedNow() * m.sf;
+        m.x += m.vx * dt;
+        m.phase += dt * m.wob * 4;
+        if (m.x - m.w/2 <= reachX) breached.push(m);
+      }
+      // 逃逸的长条怪滑出屏幕后移除
+      monsters = monsters.filter(m => !(m.long && m.done));
+
+      // 长按敌人：连续长按计时；暂停中断后留出续按宽限（不造成伤害）
+      for (const m of monsters.slice()){
+        if (!m.long || m.done || m.escaped || !m.anchored) continue;
+        if (holdMon === m){
+          m.holdT = Math.min(m.holdT + dt, LONG_HOLD_TIME);
+          if (!m.midAwarded && m.holdT >= 1){
+            m.midAwarded = true;
+            longAward(m, LONG_1S_GAIN, "1 秒", m.x + m.len/3, m.y - m.h*1.45);
+            nudgeVibrate(15);
+          }
+          if (m.holdT >= LONG_HOLD_TIME){
+            completeLong(m);
+            break;
+          }
+        } else {
+          m.waitT -= dt;
+          if (m.waitT <= 0){
+            failLong(m);
+            break;
+          }
+        }
+      }
+
+      // 双生挂起计时：窗口内没等到另一轨，就按单只结算
+      const pairExpired = [];
+      for (const m of monsters){
+        if (m.dead || !m.pairPending) continue;
+        m.pairT -= dt;
+        if (m.pairT <= 0) pairExpired.push(m);
+      }
+      for (const m of pairExpired){
+        resolvePairSolo(m);
+        if (state !== "running") break;
+      }
+
+      for (const m of breached){
+        if (state !== "running") break;
+        if (m.dead) continue;
+        // 双生一同触线：只结算一次伤害，另一只随锁链自毁
+        const mate = (m.partner && !m.partner.dead) ? m.partner : null;
+        if (mate){
+          mate.dead = true;
+          mate.partner = null; m.partner = null;
+          monsters = monsters.filter(x => x !== mate);
+          burst(mate.x, mate.y, PAIR_COLOR, 20, 1.1);
+          rings.push({ x:mate.x, y:mate.y, t:0, life:0.40, r0:8, r1:64, color:PAIR_COLOR });
+        }
+        hurtPlayer(m);
+        if (state !== "running") break;
+      }
+
+      updateParticles(dt);
+      updateSlashes(dt);
+      updateRings(dt);
+      updateFloaters(dt);
+      if (frenzyActive){
+        feverT -= dt;
+        if (feverT <= 0) endFever();
+        else emitFrenzy(dt);
+      }
+      attackT = Math.max(0, attackT - dt);
+      playerFlash = Math.max(0, playerFlash - dt*2.4);
+      shake *= Math.pow(0.001, dt);
+      if (shake < 0.2) shake = 0;
+      syncHUD();
+    } else {
+      // idle / paused / over：只保留装饰性动画与粒子衰减
+      stepVisualOnly(dt);
+    }
+
+    draw();
+  }
+
+  function stepVisualOnly(dt){
+    playerFlash = Math.max(0, playerFlash - dt*2.4);
+    if (state !== "paused"){
+      attackT = Math.max(0, attackT - dt);
+    }
+    updateParticles(dt);
+    updateRings(dt);
+    updateSlashes(dt);
+    updateFloaters(dt);
+    shake *= Math.pow(0.001, dt);
+    if (shake < 0.2) shake = 0;
+  }
+
+  function updateParticles(dt){
+    for (let i = particles.length-1; i >= 0; i--){
+      const p = particles[i];
+      p.t += dt;
+      if (p.t >= p.life){ particles.splice(i,1); continue; }
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.vx *= Math.pow(0.08, dt);
+      p.vy *= Math.pow(0.08, dt);
+      p.vy += 260*dt;
+    }
+  }
+
+  function updateSlashes(dt){
+    for (let i = slashes.length-1; i >= 0; i--){
+      slashes[i].t += dt;
+      if (slashes[i].t >= slashes[i].life) slashes.splice(i,1);
+    }
+  }
+
+  function updateRings(dt){
+    for (let i = rings.length-1; i >= 0; i--){
+      rings[i].t += dt;
+      if (rings[i].t >= rings[i].life) rings.splice(i,1);
+    }
+  }
+
+  function addFloater(x, y, text, color){
+    floaters.push({ x:x, y:y, text:text, color:color, t:0, life:0.95, vy:-46 });
+  }
+
+  function updateFloaters(dt){
+    for (let i = floaters.length-1; i >= 0; i--){
+      const f = floaters[i];
+      f.t += dt;
+      if (f.t >= f.life){ floaters.splice(i,1); continue; }
+      f.y += f.vy * dt;
+      f.vy *= Math.pow(0.2, dt);
+    }
+  }
+
+  /* =============== 绘制 =============== */
+  function draw(){
+    if (!W || !H) return;
+
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,W,H);
+
+    // 抖动
+    if (shake > 0.2){
+      ctx.translate(rand(-shake,shake)*0.5, rand(-shake,shake)*0.5);
+    }
+
+    drawBackground();
+    drawRails();
+    drawHitZones();
+    drawDefenseLine();
+    drawPlayer();
+    drawPairLinks();
+    drawMonsters();
+    drawSlashes();
+    drawRings();
+    drawParticles();
+    drawFloaters();
+    drawFrenzyOverlay();
+  }
+
+  function drawBackground(){
+    // 星空
+    for (const s of bgStars){
+      const x = (s.x - vt*s.s) % (W + 40);
+      const px = x < -20 ? x + W + 40 : x;
+      ctx.globalAlpha = s.a;
+      ctx.fillStyle = "#bcd4ff";
+      ctx.beginPath();
+      ctx.arc(px, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // 中线
+    const mid = H/2;
+    const g = ctx.createLinearGradient(0,0,W,0);
+    g.addColorStop(0,"rgba(255,255,255,0)");
+    g.addColorStop(0.5,"rgba(255,255,255,.10)");
+    g.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, mid);
+    ctx.lineTo(W, mid);
+    ctx.stroke();
+  }
+
+  function laneColorOf(key){
+    return frenzyActive ? FRENZY_LANE[key] : LANE[key].color;
+  }
+
+  function drawRails(){
+    for (const key of ["top","bottom"]){
+      const y = laneY[key];
+      const color = laneColorOf(key);
+
+      // 轨道底光带
+      const band = ctx.createLinearGradient(0, y-26, 0, y+26);
+      band.addColorStop(0, "rgba(255,255,255,0)");
+      band.addColorStop(0.5, hexA(color, 0.055));
+      band.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = band;
+      ctx.fillRect(0, y-26, W, 52);
+
+      // 轨道主线
+      const lg = ctx.createLinearGradient(0,0,W,0);
+      lg.addColorStop(0, hexA(color,0.05));
+      lg.addColorStop(0.25, hexA(color,0.32));
+      lg.addColorStop(1, hexA(color,0.10));
+      ctx.strokeStyle = lg;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+
+      // 流动刻度
+      const gap = 46;
+      const offset = (vt * 120) % gap;
+      ctx.strokeStyle = hexA(color, 0.22);
+      ctx.lineWidth = 1;
+      for (let x = W - offset; x > -gap; x -= gap){
+        const edge = clamp(x/W, 0, 1);
+        ctx.globalAlpha = 0.15 + edge*0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y-7);
+        ctx.lineTo(x, y+7);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawDefenseLine(){
+    const x = playerX + playerR*1.15 + 8;
+    const g = ctx.createLinearGradient(x, H/2-40, x, H/2+40);
+    g.addColorStop(0,"rgba(255,255,255,0)");
+    g.addColorStop(0.5,"rgba(255,255,255,.18)");
+    g.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, H/2-40);
+    ctx.lineTo(x, H/2+40);
+    ctx.stroke();
+  }
+
+  function drawHitZones(){
+    const pulse = 0.5 + 0.5*Math.sin(vt*5);
+
+    for (const key of ["top","bottom"]){
+      const y = laneY[key];
+      const color = laneColorOf(key);
+      const R = zoneHalf;                 // 外圈半径 = 普攻判定范围
+      const r = critHalf;                 // 内圈半径 = 暴击判定范围
+      const critCol = frenzyActive ? "#ffffff" : GOLD;
+
+      // 外圈光晕
+      const gg = ctx.createRadialGradient(hitX, y, r*0.35, hitX, y, R*1.5);
+      gg.addColorStop(0, hexA(color, 0.16 + pulse*0.09));
+      gg.addColorStop(0.55, hexA(color, 0.07 + pulse*0.05));
+      gg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.arc(hitX, y, R*1.5, 0, Math.PI*2);
+      ctx.fill();
+
+      // 外圈：普攻判定
+      ctx.fillStyle = hexA(color, 0.06 + pulse*0.035);
+      ctx.beginPath();
+      ctx.arc(hitX, y, R, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(hitX, y, R, 0, Math.PI*2);
+      ctx.strokeStyle = hexA(color, 0.13 + pulse*0.05);
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      ctx.strokeStyle = hexA(color, 0.72 + pulse*0.26);
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 内圈：暴击判定
+      ctx.fillStyle = hexA(critCol, 0.17 + pulse*0.09);
+      ctx.beginPath();
+      ctx.arc(hitX, y, r, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(hitX, y, r, 0, Math.PI*2);
+      ctx.strokeStyle = hexA(critCol, 0.13 + pulse*0.05);
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      ctx.strokeStyle = hexA(critCol, 0.78 + pulse*0.22);
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 两环之间的区域标注
+      ctx.font = "600 10px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = hexA(critCol, 0.9);
+      ctx.fillText("暴击", hitX, y - r - 9);
+      ctx.fillStyle = hexA(color, 0.8);
+      ctx.fillText("普攻", hitX, y + r + 10);
+
+      // 中心点
+      ctx.fillStyle = hexA(color, 0.95);
+      ctx.beginPath();
+      ctx.arc(hitX, y, 3.4, 0, Math.PI*2);
+      ctx.fill();
+
+      // 标签（放在两轨之外，避免重叠）；长按敌人占用该轨时隐藏，避免干扰起手提示
+      const longHere = monsters.some(function(m){ return m.long && !m.done && m.lane === key; });
+      const labelY = clamp(key === "top" ? y - R - 16 : y + R + 18, 12, H - 12);
+      if (!longHere){
+        ctx.font = "600 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+        ctx.fillStyle = hexA(color, 0.66);
+        ctx.fillText(key === "top" ? "打击点 · 点击上半屏" : "打击点 · 点击下半屏", hitX, labelY);
+      }
+
+      // 方向箭头
+      ctx.strokeStyle = hexA(color, 0.28);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(hitX + R + 30, y);
+      ctx.lineTo(hitX + R + 12, y);
+      ctx.moveTo(hitX + R + 19, y - 5);
+      ctx.lineTo(hitX + R + 12, y);
+      ctx.lineTo(hitX + R + 19, y + 5);
+      ctx.stroke();
+    }
+  }
+
+  function drawPlayer(){
+    const y = H/2;
+    const s = playerR;
+    const flash = playerFlash;
+
+    /* ---------- 出招时间线：蓄力 → 挥击 → 收招 ---------- */
+    const active = attackT > 0 && !!attackLane;
+    const T = active ? clamp(1 - attackT/ATTACK_DUR, 0, 1) : 0;
+    const dir = attackLane === "top" ? -1 : 1;        // -1 上轨 / +1 下轨
+
+    const idleA = 0.18;
+    const windA = -dir * 0.85;                        // 蓄力：向反方向抬
+    const hitA  = dir * 1.05;                         // 挥出：斜指对应轨道
+
+    let armA = idleA, swing = 0;
+    if (active){
+      if (T < 0.20){
+        armA = lerp(idleA, windA, easeOutCubic(T/0.20));
+      } else if (T < 0.44){
+        const k = easeOutCubic((T-0.20)/0.24);
+        armA = lerp(windA, hitA, k);
+        swing = k;
+      } else {
+        const k = easeInOutCubic((T-0.44)/0.56);
+        armA = lerp(hitA, idleA, k);
+        swing = 1 - k;
+      }
+    }
+
+    const lunge   = dir * s * 0.42 * swing;           // 上半身整体冲向轨道
+    const bodyRot = dir * 0.20 * swing;               // 躯干前倾
+    const laneColor = frenzyActive ? FRENZY_LANE[dir < 0 ? "top" : "bottom"] : (dir < 0 ? LANE.top.color : LANE.bottom.color);
+    const bob = Math.sin(vt*2.2)*s*0.03;
+
+    /* ---------- FEVER 光环 ---------- */
+    if (frenzyActive){
+      const pulse = 0.5 + 0.5*Math.sin(vt*6);
+      ctx.save();
+      ctx.translate(playerX, y);
+      // 外层金色呼吸光环
+      const ag = ctx.createRadialGradient(0,0,s*0.9, 0,0,s*(2.3 + pulse*0.35));
+      ag.addColorStop(0, "rgba(255,210,74,0)");
+      ag.addColorStop(0.55, "rgba(255,210,74," + (0.10 + pulse*0.08) + ")");
+      ag.addColorStop(1, "rgba(255,140,40,0)");
+      ctx.fillStyle = ag;
+      ctx.beginPath();
+      ctx.arc(0,0,s*(2.3 + pulse*0.35),0,Math.PI*2);
+      ctx.fill();
+      // 金色电弧环：宽底描边代替 shadowBlur
+      for (let i=0;i<3;i++){
+        const rr = s*(1.55 + i*0.28 + pulse*0.06);
+        const a0 = vt*(1.6 + i*0.5) + i*2.1;
+        ctx.beginPath();
+        ctx.arc(0,0,rr, a0, a0 + Math.PI*1.05);
+        ctx.strokeStyle = "rgba(255,190,60,.16)";
+        ctx.lineWidth = 9;
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(255,226,120," + (0.35 + pulse*0.35) + ")";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    /* ---------- 脚下平台光 ---------- */
+    const g = ctx.createRadialGradient(playerX, y+s*1.35, 2, playerX, y+s*1.35, s*2.0);
+    g.addColorStop(0,"rgba(96,200,255,.22)");
+    g.addColorStop(1,"rgba(96,200,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(playerX, y+s*1.35, s*1.95, s*0.42, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    /* ---------- 双腿（脚掌钉在原地，随冲刺屈伸） ---------- */
+    drawLegs(s, y, lunge, dir);
+
+    /* ---------- 上半身 ---------- */
+    ctx.save();
+    ctx.translate(playerX, y + bob + lunge);
+    ctx.rotate(bodyRot);
+    ctx.scale(1, 1 - 0.06*swing);
+    drawTorso(s, swing);
+    drawHead(s);
+    drawSwordArm(s, armA, swing, dir, laneColor, windA);
+    if (flash > 0){
+      ctx.fillStyle = "rgba(255,60,90," + (flash*0.42) + ")";
+      roundRectPath(-s*0.9, -s*1.2, s*2.1, s*2.3, s*0.4);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    /* ---------- 生命环 ---------- */
+    const frac = hp/MAX_HP;
+    ctx.save();
+    ctx.translate(playerX, y);
+    ctx.strokeStyle = "rgba(255,255,255,.07)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0,0,s*1.95,0,Math.PI*2);
+    ctx.stroke();
+
+    const hpCol = frac > 0.55 ? "rgba(67,224,140,.75)" : (frac > 0.28 ? "rgba(255,182,72,.85)" : "rgba(255,77,109,.95)");
+    ctx.strokeStyle = hpCol;
+    ctx.beginPath();
+    ctx.arc(0,0,s*1.95,-Math.PI/2, -Math.PI/2 + Math.PI*2*frac);
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLegs(s, y, lunge, dir){
+    const hipY = y + lunge*0.5;
+    const footY = y + s*0.96;
+    const kneeY = (hipY + footY)*0.5;
+    const spread = s*0.26;
+    const lean = dir * s*0.06 * Math.abs(lunge)/(s*0.26);
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#17364d";
+    ctx.lineWidth = s*0.24;
+    for (const side of [-1, 1]){
+      const front = side > 0;
+      const footX = playerX + side*spread + (front ? lean : lean*0.5);
+      const kneeX = playerX + side*spread*0.85 + (front ? lean*0.7 : lean*0.3);
+      ctx.beginPath();
+      ctx.moveTo(playerX + side*spread*0.7, hipY);
+      ctx.quadraticCurveTo(kneeX, kneeY, footX, footY);
+      ctx.stroke();
+    }
+    // 脚掌
+    ctx.strokeStyle = "rgba(120,238,255,.55)";
+    ctx.lineWidth = s*0.10;
+    for (const side of [-1, 1]){
+      const front = side > 0;
+      const footX = playerX + side*spread + (front ? lean : lean*0.5);
+      ctx.beginPath();
+      ctx.moveTo(footX - s*0.10, footY);
+      ctx.lineTo(footX + s*0.14, footY);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawTorso(s, swing){
+    const bodyGrad = ctx.createLinearGradient(-s*0.6, -s*0.5, s*0.6, s*0.5);
+    bodyGrad.addColorStop(0, "#2b5a7a");
+    bodyGrad.addColorStop(0.5, "#16313f");
+    bodyGrad.addColorStop(1, "#0d1e2b");
+    ctx.fillStyle = bodyGrad;
+    roundRectPath(-s*0.62, -s*0.52, s*1.24, s*0.95, s*0.24);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(90,210,255,.18)";
+    ctx.lineWidth = 7;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(110,225,255,.75)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(120,230,255,.35)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-s*0.34, s*0.16);
+    ctx.lineTo(s*0.30, s*0.16);
+    ctx.stroke();
+
+    const core = clamp(0.45 + 0.35*Math.sin(vt*3.4) + 0.3*swing, 0, 1);
+    ctx.fillStyle = "rgba(95,225,255," + (core*0.22) + ")";
+    ctx.beginPath();
+    ctx.arc(-s*0.08, -s*0.12, s*0.22, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(95,225,255," + core + ")";
+    ctx.beginPath();
+    ctx.arc(-s*0.08, -s*0.12, s*0.14, 0, Math.PI*2);
+    ctx.fill();
+
+    // 双肩
+    ctx.fillStyle = "#1d435c";
+    ctx.strokeStyle = "rgba(110,225,255,.6)";
+    ctx.lineWidth = 1.8;
+    roundRectPath(-s*0.82, -s*0.58, s*0.34, s*0.36, s*0.1); ctx.fill(); ctx.stroke();
+    roundRectPath(s*0.48, -s*0.58, s*0.34, s*0.36, s*0.1); ctx.fill(); ctx.stroke();
+  }
+
+  function drawHead(s){
+    ctx.fillStyle = "#102232";
+    ctx.strokeStyle = "rgba(130,235,255,.8)";
+    ctx.lineWidth = 2;
+    roundRectPath(-s*0.30, -s*1.10, s*0.62, s*0.56, s*0.16);
+    ctx.fill(); ctx.stroke();
+
+    const eyeA = 0.75 + 0.25*Math.sin(vt*4.2);
+    ctx.fillStyle = (hp/MAX_HP <= 0.3 ? "rgba(255,77,109," : "rgba(120,240,255,") + eyeA + ")";
+    ctx.globalAlpha = 0.3;
+    roundRectPath(-s*0.20, -s*0.98, s*0.48, s*0.24, s*0.09);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    roundRectPath(-s*0.16, -s*0.94, s*0.40, s*0.16, s*0.06);
+    ctx.fill();
+  }
+
+  function drawSwordArm(s, armA, swing, dir, laneColor, windA){
+    const sx = s*0.38, sy = -s*0.20;
+
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    /* 挥击扇形：柔和光幕 + 亮边 */
+    if (swing > 0.04){
+      const a0 = Math.min(windA, armA);
+      const a1 = Math.max(windA, armA);
+      if (a1 - a0 > 0.02){
+        const grad = ctx.createRadialGradient(0,0, s*0.5, 0,0, s*2.15);
+        grad.addColorStop(0, hexA(laneColor, 0));
+        grad.addColorStop(0.55, hexA(laneColor, 0.16*swing));
+        grad.addColorStop(1, hexA(laneColor, 0));
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.arc(0, 0, s*2.15, a0, a1);
+        ctx.closePath();
+        ctx.fill();
+
+        // 两道残刃
+        for (const t of [0.35, 0.7]){
+          const ga = lerp(a0, a1, t);
+          ctx.save();
+          ctx.rotate(ga);
+          ctx.globalAlpha = 0.22 * swing;
+          ctx.strokeStyle = "#dffaff";
+          ctx.lineWidth = 2;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(s*0.55, 0);
+          ctx.lineTo(s*1.55, 0);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+
+        // 弧形亮边
+        ctx.strokeStyle = hexA(laneColor, 0.55*swing);
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(0, 0, s*1.98, a0, a1);
+        ctx.stroke();
+      }
+    }
+
+    ctx.rotate(armA);
+
+    // 上臂
+    ctx.strokeStyle = "#1b3c52";
+    ctx.lineWidth = s*0.24;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(s*0.50, 0);
+    ctx.stroke();
+
+    // 护手
+    ctx.fillStyle = "#2b6c8c";
+    ctx.strokeStyle = "rgba(120,235,255,.7)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(s*0.54, 0, s*0.16, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 能量刃（前半段实、后半段渐隐）
+    const bladeA = clamp(0.55 + 0.18*Math.sin(vt*3) + 0.4*swing, 0, 1);
+    const bx = s*0.58;
+    const bx1 = s*(1.30 + 0.62*swing);
+    const bg = ctx.createLinearGradient(bx, 0, bx1, 0);
+    bg.addColorStop(0, "rgba(235,253,255," + bladeA + ")");
+    bg.addColorStop(0.55, "rgba(150,238,255," + (bladeA*0.75) + ")");
+    bg.addColorStop(1, "rgba(120,230,255,0)");
+    ctx.strokeStyle = "rgba(120,230,255,.18)";
+    ctx.lineWidth = s*(0.30 + 0.12*swing);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(bx, 0);
+    ctx.lineTo(bx1, 0);
+    ctx.stroke();
+    ctx.strokeStyle = bg;
+    ctx.lineWidth = s*(0.12 + 0.08*swing);
+    ctx.stroke();
+
+    // 枪尖闪光
+    if (swing > 0.55){
+      const f = clamp((swing - 0.55)/0.45, 0, 1);
+      ctx.globalAlpha = f;
+      ctx.fillStyle = hexA(laneColor, 0.35);
+      starPath(bx1 - s*0.05, 0, s*(0.22 + 0.20*f), s*(0.08 + 0.07*f));
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      starPath(bx1 - s*0.05, 0, s*(0.12 + 0.13*f), s*(0.04 + 0.04*f));
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  function starPath(cx, cy, outer, inner){
+    ctx.beginPath();
+    for (let i=0;i<8;i++){
+      const a = (Math.PI/4)*i - Math.PI/2;
+      const r = i%2 === 0 ? outer : inner;
+      const px = cx + Math.cos(a)*r;
+      const py = cy + Math.sin(a)*r;
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+  }
+
+  function roundRectPath(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawPairLinks(){
+    // 每组双生只画一次：锁链 + 端点节点 + 中线标签
+    for (let i = 0; i < monsters.length; i++){
+      const m = monsters[i];
+      const p = m.partner;
+      if (!p || m.dead || p.dead) continue;
+      if (monsters.indexOf(p) < i) continue;
+
+      const ay = m.y + Math.sin(m.phase)*4;
+      const by = p.y + Math.sin(p.phase)*4;
+      const active = !!(m.pairPending || p.pairPending);
+      const pulse = 0.5 + 0.5*Math.sin(vt*(active ? 20 : 4.5));
+      const alpha = active ? 0.75 + 0.25*pulse : 0.40 + 0.22*pulse;
+
+      ctx.save();
+      ctx.lineCap = "round";
+      // 外发光
+      ctx.strokeStyle = hexA(PAIR_COLOR, alpha*0.30);
+      ctx.lineWidth = active ? 12 : 8;
+      ctx.beginPath();
+      ctx.moveTo(m.x, ay);
+      ctx.lineTo(p.x, by);
+      ctx.stroke();
+
+      // 锁链主线（流动虚线）
+      ctx.strokeStyle = hexA(PAIR_COLOR, alpha);
+      ctx.lineWidth = active ? 2.8 : 1.9;
+      ctx.setLineDash([9, 8]);
+      ctx.lineDashOffset = -vt*46;
+      ctx.beginPath();
+      ctx.moveTo(m.x, ay);
+      ctx.lineTo(p.x, by);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 两端节点
+      const nodes = [[m.x, ay], [p.x, by]];
+      for (const nd of nodes){
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(nd[0], nd[1], active ? 3.4 : 2.6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = hexA(PAIR_COLOR, 0.9);
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(nd[0], nd[1], active ? 8 : 6, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // 中线标签
+      const mx = (m.x + p.x)/2, my = (ay + by)/2;
+      const label = active ? "补齐另一轨" : "双生";
+      ctx.font = "600 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const tw = ctx.measureText(label).width;
+      const bw = tw + 16;
+      ctx.fillStyle = "rgba(12,16,32,.86)";
+      roundRectPath(mx - bw/2, my - 9, bw, 18, 9);
+      ctx.fill();
+      ctx.strokeStyle = hexA(PAIR_COLOR, active ? 0.95 : 0.62);
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = active ? "#ffffff" : hexA(PAIR_COLOR, 0.95);
+      ctx.fillText(label, mx, my + 0.5);
+      ctx.restore();
+    }
+  }
+
+  function drawMonsters(){
+    for (const m of monsters){
+      if (m.long) drawLongMonster(m);
+      else drawMonster(m);
+    }
+  }
+
+  function drawLongMonster(m){
+    const c = laneColorOf(m.lane);
+    const x = m.x, y = m.y;
+    const len = m.len, h = m.h;
+    const prog = clamp(m.holdT / LONG_HOLD_TIME, 0, 1);
+    const esc = m.escaped;
+    const headX = longHeadX(m);
+    const inWindow = !m.anchored && !esc && Math.abs(headX - hitX) <= zoneHalf;
+
+    ctx.save();
+    ctx.globalAlpha = esc ? 0.55 : 1;
+
+    // 外发光（宽描边代替 shadowBlur）
+    const bodyGlow = (m.anchored || inWindow) ? 0.26 : 0.14;
+
+    // 主体（长条胶囊）
+    const bg = ctx.createLinearGradient(0, y - h/2, 0, y + h/2);
+    bg.addColorStop(0, hexA(c, 0.85));
+    bg.addColorStop(0.45, "#0b1424");
+    bg.addColorStop(1, hexA(c, 0.35));
+    ctx.fillStyle = bg;
+    roundRectPath(x, y - h/2, len, h, h/2);
+    ctx.fill();
+    ctx.strokeStyle = hexA(c, bodyGlow);
+    ctx.lineWidth = 10;
+    ctx.stroke();
+    ctx.strokeStyle = esc ? "#ff4d6d" : hexA(c, 0.9);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 外壳高光
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + h*0.55, y - h*0.28);
+    ctx.lineTo(x + len - h*0.4, y - h*0.28);
+    ctx.stroke();
+
+    // 节段
+    const segs = 7;
+    for (let i=1;i<segs;i++){
+      const sx = x + len*i/segs;
+      ctx.strokeStyle = hexA(c, 0.32);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sx, y - h*0.30);
+      ctx.lineTo(sx, y + h*0.30);
+      ctx.stroke();
+    }
+
+    // 头部核心（左端）
+    const headCol = esc ? "#ff4d6d" : (inWindow ? "#ffffff" : LONG_COLOR);
+    ctx.fillStyle = hexA(headCol, 0.28);
+    ctx.beginPath();
+    ctx.arc(headX, y, h*0.34, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = headCol;
+    ctx.beginPath();
+    ctx.arc(headX, y, h*0.20, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#071018";
+    ctx.beginPath();
+    ctx.arc(headX, y, h*0.10, 0, Math.PI*2);
+    ctx.fill();
+
+    // 头进圈：脉冲提示环
+    if (inWindow){
+      const pl = 0.5 + 0.5*Math.sin(vt*18);
+      ctx.strokeStyle = hexA(LONG_COLOR, 0.20);
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.arc(headX, y, h*0.85 + pl*4, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255," + (0.45 + 0.45*pl).toFixed(2) + ")";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+    }
+
+    // 尾刺（右端）
+    ctx.fillStyle = hexA(c, 0.85);
+    ctx.beginPath();
+    ctx.moveTo(x + len - 2, y - h*0.40);
+    ctx.lineTo(x + len + h*0.5, y);
+    ctx.lineTo(x + len - 2, y + h*0.40);
+    ctx.closePath();
+    ctx.fill();
+
+    if (m.anchored && !esc){
+      // 长按进度槽
+      const gx = x + h*0.35;
+      const gw = len - h*0.7;
+      const gy = y + h*0.30;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(0,0,0,.55)";
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + gw, gy); ctx.stroke();
+      if (prog > 0){
+        const pg = ctx.createLinearGradient(gx, 0, gx + gw, 0);
+        pg.addColorStop(0, LONG_COLOR);
+        pg.addColorStop(1, c);
+        ctx.strokeStyle = pg;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + gw*prog, gy); ctx.stroke();
+      }
+      // 头 / 1 秒 / 尾 三个奖励刻度
+      for (const t of [0, 1/3, 1]){
+        ctx.strokeStyle = t <= prog + 0.001 ? "#ffffff" : hexA(LONG_COLOR, 0.55);
+        ctx.lineWidth = t === 0 ? 2.4 : 2;
+        ctx.beginPath(); ctx.moveTo(gx + gw*t, gy - 6); ctx.lineTo(gx + gw*t, gy + 6); ctx.stroke();
+      }
+
+      // 切割线 + 火花
+      if (m.holding && prog < 1){
+        const cutX = gx + gw*prog;
+        ctx.strokeStyle = hexA(LONG_COLOR, 0.24);
+        ctx.lineWidth = 9;
+        ctx.beginPath(); ctx.moveTo(cutX, y - h*0.62); ctx.lineTo(cutX, y + h*0.62); ctx.stroke();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+        ctx.fillStyle = LONG_COLOR;
+        for (let i=0;i<4;i++){
+          const a = vt*7 + i*Math.PI/2;
+          ctx.beginPath();
+          ctx.arc(cutX + Math.cos(a)*9, y + Math.sin(a)*7, 1.7, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // 提示标签
+      const label = m.holding
+        ? ("长按 " + m.holdT.toFixed(1) + " / " + LONG_HOLD_TIME + "s")
+        : ("继续按住 " + m.holdT.toFixed(1) + " / " + LONG_HOLD_TIME + "s");
+      ctx.font = "700 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const tw = ctx.measureText(label).width;
+      const cx = x + len/2;
+      const cy = y - h/2 - 18;
+      ctx.fillStyle = "rgba(8,12,24,.86)";
+      roundRectPath(cx - tw/2 - 8, cy - 9, tw + 16, 18, 9);
+      ctx.fill();
+      ctx.strokeStyle = hexA(LONG_COLOR, 0.8);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = m.holding ? "#ffffff" : LONG_COLOR;
+      ctx.fillText(label, cx, cy + 0.5);
+
+      // 头 / 尾 标记（画在条内，避开判定圈文字）
+      ctx.font = "700 8px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.fillStyle = hexA(LONG_COLOR, 0.72);
+      ctx.textAlign = "center";
+      ctx.fillText("头", x + h*1.08, y - h*0.24);
+      ctx.fillText("尾", x + len - h*0.52, y - h*0.24);
+    } else if (!esc && x < W - 40){
+      // 接近 / 可点击提示
+      const label = inWindow ? "点击起手！" : "头进圈后点击";
+      const cx = Math.min(x + 70, W - 60);
+      const cy = y - h/2 - 18;
+      ctx.font = "700 11px 'PingFang SC','Microsoft YaHei',sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = inWindow ? "rgba(18,30,10,.92)" : "rgba(8,12,24,.8)";
+      roundRectPath(cx - tw/2 - 8, cy - 9, tw + 16, 18, 9);
+      ctx.fill();
+      ctx.strokeStyle = hexA(LONG_COLOR, inWindow ? 0.95 : 0.55);
+      ctx.lineWidth = inWindow ? 1.6 : 1;
+      ctx.stroke();
+      ctx.fillStyle = inWindow ? "#ffffff" : hexA(LONG_COLOR, 0.9);
+      ctx.fillText(label, cx, cy + 0.5);
+    }
+
+    ctx.restore();
+  }
+
+  function drawMonster(m){
+    const c = laneColorOf(m.lane);
+    const bob = Math.sin(m.phase)*4;
+    const x = m.x, y = m.y + bob;
+    const w = m.w, h = m.h;
+
+    // 预警：接近判定区时闪烁
+    const distToHit = m.x - hitX;
+    const inZone = Math.abs(distToHit) <= zoneHalf;
+    const missed = distToHit < -zoneHalf;
+    if (missed){
+      // 越过打击点：警示光环
+      ctx.strokeStyle = "rgba(255,77,109," + (0.18 + 0.16*Math.sin(vt*12)) + ")";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(x, y, w*0.82, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    if (inZone){
+      ctx.fillStyle = hexA(c, 0.10 + 0.06*Math.sin(vt*22));
+      ctx.beginPath();
+      ctx.ellipse(x, y, w*0.85, h*0.62, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // 进入中心暴击区：金圈提示
+    if (Math.abs(distToHit) <= critHalf){
+      const cc = frenzyActive ? "#ffffff" : GOLD;
+      ctx.strokeStyle = hexA(cc, 0.55 + 0.25*Math.sin(vt*30));
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(w*0.9, 26), 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    // 双生成员：洋红光环；挂起时显示等待窗口
+    if (m.partner){
+      ctx.strokeStyle = hexA(PAIR_COLOR, 0.45 + 0.25*Math.sin(vt*8 + m.phase));
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(x, y, w*0.95, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    if (m.pairPending){
+      const frac = clamp(m.pairT / PAIR_WINDOW, 0, 1);
+      ctx.strokeStyle = "rgba(255,255,255,.9)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, w*1.05, -Math.PI/2, -Math.PI/2 + Math.PI*2*frac);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 拖尾
+    const tg = ctx.createLinearGradient(w*0.5, 0, w*2.4, 0);
+    tg.addColorStop(0, hexA(c, 0.30));
+    tg.addColorStop(1, hexA(c, 0));
+    ctx.fillStyle = tg;
+    ctx.beginPath();
+    ctx.moveTo(0, -h*0.25);
+    ctx.lineTo(w*2.4, 0);
+    ctx.lineTo(0, h*0.25);
+    ctx.closePath();
+    ctx.fill();
+
+    // 身体（菱形晶体）
+    ctx.fillStyle = "#101a2e";
+    ctx.beginPath();
+    ctx.moveTo(-w*0.62, 0);
+    ctx.lineTo(-w*0.1, -h*0.5);
+    ctx.lineTo(w*0.62, 0);
+    ctx.lineTo(-w*0.1, h*0.5);
+    ctx.closePath();
+    ctx.fill();
+    const bodyC = missed ? "#ff4d6d" : c;
+    ctx.strokeStyle = hexA(bodyC, inZone ? 0.30 : 0.16);
+    ctx.lineWidth = inZone ? 12 : 8;
+    ctx.stroke();
+    ctx.strokeStyle = bodyC;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // 内芯
+    const inner = 0.35 + 0.25*Math.sin(vt*6 + m.phase);
+    ctx.fillStyle = hexA(c, inner);
+    ctx.beginPath();
+    ctx.moveTo(-w*0.30, 0);
+    ctx.lineTo(-w*0.05, -h*0.24);
+    ctx.lineTo(w*0.30, 0);
+    ctx.lineTo(-w*0.05, h*0.24);
+    ctx.closePath();
+    ctx.fill();
+
+    // 眼睛
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(-w*0.16, -h*0.05, 2.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-w*0.16, h*0.10, 2.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+  }
+
+  function drawSlashes(){
+    for (const sl of slashes){
+      const p = clamp(sl.t / sl.life, 0, 1);
+      const color = laneColorOf(sl.lane);
+      const fade = 1 - p;
+
+      // 1) 飞行斩：从剑尖飞向打击点的新月
+      const flyP = clamp(p / 0.34, 0, 1);
+      if (flyP < 1){
+        const fx = lerp(sl.x0, sl.x, easeOutCubic(flyP));
+        const scale = 0.55 + 0.45*flyP;
+        const a = 0.55 + 0.45*(1-flyP);
+        ctx.save();
+        ctx.translate(fx, sl.y);
+        ctx.rotate(-1.15);
+        ctx.lineCap = "round";
+        ctx.globalAlpha = a*0.32;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 12*scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, 20*scale, -1.0, 1.0);
+        ctx.stroke();
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 4.5*scale;
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.6*scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, 26*scale, -0.95, 0.95);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 2) 打击点新月刀光
+      const cp = clamp((p - 0.10) / 0.62, 0, 1);
+      if (cp > 0){
+        const ang = -0.95 + cp*0.62;
+        const len = 22 + cp*54;
+        ctx.save();
+        ctx.translate(sl.x, sl.y);
+        ctx.rotate(ang);
+        ctx.lineCap = "round";
+
+        ctx.globalAlpha = (1 - cp)*0.30;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 14 - cp*6;
+        ctx.beginPath();
+        ctx.arc(0, 0, len, -1.05, 1.05);
+        ctx.stroke();
+
+        ctx.globalAlpha = 1 - cp;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 7 - cp*4;
+        ctx.stroke();
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3.4 - cp*1.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, len + 9, -0.95, 0.95);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+        ctx.restore();
+      }
+
+      // 3) 打击点竖向光柱
+      const vp = clamp(p / 0.55, 0, 1);
+      if (vp > 0){
+        const hgt = 46 * Math.sin(vp*Math.PI*0.9);
+        const vg = ctx.createLinearGradient(sl.x, sl.y-hgt, sl.x, sl.y+hgt);
+        vg.addColorStop(0, hexA(color, 0));
+        vg.addColorStop(0.5, hexA(color, 0.45*(1-vp*0.6)));
+        vg.addColorStop(1, hexA(color, 0));
+        ctx.strokeStyle = vg;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sl.x, sl.y-hgt);
+        ctx.lineTo(sl.x, sl.y+hgt);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawRings(){
+    for (const r of rings){
+      const p = clamp(r.t / r.life, 0, 1);
+      const rad = lerp(r.r0, r.r1, easeOutCubic(p));
+      const a = 1 - p;
+      ctx.strokeStyle = r.color;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, Math.PI*2);
+      ctx.globalAlpha = a*0.24;
+      ctx.lineWidth = 10*a + 3;
+      ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 3.2*a + 0.6;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawParticles(){
+    for (const p of particles){
+      const a = 1 - p.t/p.life;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r*a + 0.4, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFloaters(){
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "700 14px 'PingFang SC','Microsoft YaHei',sans-serif";
+    for (const f of floaters){
+      const p = clamp(f.t / f.life, 0, 1);
+      ctx.globalAlpha = 1 - p*p;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(4,8,16,.85)";
+      ctx.strokeText(f.text, f.x, f.y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.restore();
+  }
+
+  /* FEVER 时的全场金色氛围（叠在场景之上、暗角之下） */
+  function drawFrenzyOverlay(){
+    if (!frenzyActive) return;
+    const pulse = 0.5 + 0.5*Math.sin(vt*4.2);
+
+    // 整体暖金洗色
+    ctx.fillStyle = "rgba(255,170,40," + (0.05 + pulse*0.035) + ")";
+    ctx.fillRect(0,0,W,H);
+
+    // 两轨金色能量带
+    for (const key of ["top","bottom"]){
+      const y = laneY[key];
+      const g = ctx.createLinearGradient(0, y-34, 0, y+34);
+      g.addColorStop(0, "rgba(255,210,74,0)");
+      g.addColorStop(0.5, "rgba(255,210,74," + (0.10 + pulse*0.07) + ")");
+      g.addColorStop(1, "rgba(255,210,74,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y-34, W, 68);
+    }
+
+    // 边缘金色描边呼吸
+    ctx.strokeStyle = "rgba(255,210,74," + (0.08 + pulse*0.07) + ")";
+    ctx.lineWidth = 16;
+    ctx.strokeRect(3, 3, W-6, H-6);
+    ctx.strokeStyle = "rgba(255,210,74," + (0.22 + pulse*0.20) + ")";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, W-6, H-6);
+  }
+
+  function hexA(hex, a){
+    const n = parseInt(hex.slice(1),16);
+    const r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+    return "rgba("+r+","+g+","+b+","+a+")";
+  }
+
+  /* =============== 输入 =============== */
+  function inStartScreen(){
+    return state === "idle" && !startScreen.classList.contains("hide");
+  }
+
+  function beginFromTap(){
+    startScreen.classList.add("hide");
+    tryImmersive();
+    startGame();
+  }
+
+  let immersiveTried = false;
+  function tryImmersive(){
+    if (immersiveTried) return;
+    immersiveTried = true;
+    const el = document.documentElement;
+    try{
+      if (!document.fullscreenElement && el.requestFullscreen){
+        el.requestFullscreen({navigationUI:"hide"}).then(function(){
+          if (screen.orientation && screen.orientation.lock){
+            screen.orientation.lock("landscape").catch(function(){});
+          }
+        }).catch(function(){});
+      }
+    }catch(err){}
+  }
+
+  // 整屏点击（开始界面也能接收）
+  stage.addEventListener("pointerdown", function(e){
+    if (e.target.closest("#btnPause") || e.target.closest("#btnFull") || e.target.closest("#pause") ||
+        e.target.closest("#gameOver") || e.target.closest("#btnRestart") || e.target.closest("#diffPick")) return;
+
+    if (inStartScreen()){
+      e.preventDefault();
+      beginFromTap();
+      return;
+    }
+
+    if (state !== "running") return;
+
+    const rect = stage.getBoundingClientRect();
+    const y = (e.clientY - rect.top);
+    if (y < rect.height/2) pressLane("top", "p" + e.pointerId);
+    else pressLane("bottom", "p" + e.pointerId);
+  }, {passive:false});
+
+  // 长按敌人：松开或取消即判定中断
+  window.addEventListener("pointerup", function(e){
+    releaseHold("p" + e.pointerId);
+  });
+  window.addEventListener("pointercancel", function(e){
+    releaseHold("p" + e.pointerId);
+  });
+  window.addEventListener("blur", function(){
+    cancelHold();
+  });
+
+  // 键盘（桌面调试）
+  window.addEventListener("keydown", function(e){
+    if (e.repeat) return;
+    if (e.code === "ArrowUp" || e.code === "KeyW"){
+      if (inStartScreen()) beginFromTap(); else pressLane("top", "key-top");
+    } else if (e.code === "ArrowDown" || e.code === "KeyS"){
+      if (inStartScreen()) beginFromTap(); else pressLane("bottom", "key-bottom");
+    } else if (e.code === "KeyP"){
+      if (state === "running") pauseGame(); else if (state === "paused") resumeGame();
+    } else if (e.code === "Enter" || e.code === "Space"){
+      if (inStartScreen()) beginFromTap();
+      else if (state === "over") startGame();
+    }
+  });
+
+  window.addEventListener("keyup", function(e){
+    if (e.code === "ArrowUp" || e.code === "KeyW") releaseHold("key-top");
+    else if (e.code === "ArrowDown" || e.code === "KeyS") releaseHold("key-bottom");
+  });
+
+  function toggleFullscreen(){
+    const el = document.documentElement;
+    try{
+      if (!document.fullscreenElement){
+        (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+        if (screen.orientation && screen.orientation.lock){
+          screen.orientation.lock("landscape").catch(function(){});
+        }
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+      }
+    }catch(err){}
+  }
+  if (!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)){
+    document.getElementById("btnFull").style.display = "none";
+  }
+  document.getElementById("btnFull").addEventListener("click", function(e){
+    e.stopPropagation();
+    toggleFullscreen();
+  });
+
+  document.getElementById("btnPause").addEventListener("click", function(e){
+    e.stopPropagation();
+    pauseGame();
+  });
+  document.getElementById("btnResume").addEventListener("click", function(e){
+    e.stopPropagation();
+    resumeGame();
+  });
+  document.getElementById("btnQuit").addEventListener("click", function(e){
+    e.stopPropagation();
+    pauseEl.classList.add("hide");
+    startScreen.classList.add("hide");
+    startGame();
+  });
+  document.getElementById("btnHome").addEventListener("click", function(e){
+    e.stopPropagation();
+    quitToHome();
+  });
+  document.getElementById("btnRestart").addEventListener("click", function(e){
+    e.stopPropagation();
+    startGame();
+  });
+
+  // 难度选择
+  const diffPick = document.getElementById("diffPick");
+  diffPick.addEventListener("click", function(e){
+    const btn = e.target.closest(".diff-btn");
+    if (!btn) return;
+    e.stopPropagation();
+    diffLevel = (+btn.dataset.diff === 2) ? 2 : 1;
+    const items = diffPick.querySelectorAll(".diff-btn");
+    for (let i = 0; i < items.length; i++){
+      items[i].classList.toggle("active", items[i] === btn);
+    }
+  });
+
+  // 结算界面返回难度选择
+  document.getElementById("btnDiff").addEventListener("click", function(e){
+    e.stopPropagation();
+    state = "idle";
+    resetGame();
+    gameOver.classList.add("hide");
+    startScreen.classList.remove("hide");
+  });
+
+  document.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+
+  // 阻止移动端滚动/缩放
+  document.addEventListener("touchmove", function(e){ e.preventDefault(); }, {passive:false});
+  document.addEventListener("gesturestart", function(e){ e.preventDefault(); });
+
+  // 切后台自动暂停
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden && state === "running") pauseGame();
+  });
+
+  /* =============== 启动 =============== */
+  syncHUD();
+  updateOrientation();
+  resize();
+  requestAnimationFrame(function(){ resize(); });
+  window.addEventListener("load", resize);
+
+  // 竖屏->横屏后，保持开始界面，等待一次点击
+  // 保证开始界面在最上层
+  startScreen.classList.remove("hide");
+  gameOver.classList.add("hide");
+  pauseEl.classList.add("hide");
+  state = "idle";
+
+  // 常驻渲染循环（空闲时也保持背景动画）
+  resize();
+  lastT = 0;
+  raf = requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
