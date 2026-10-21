@@ -88,7 +88,8 @@ ${body}
     makeTraceFrame: makeTraceFrame,
     traceFrameFromState: traceFrameFromState,
     nextEvents: nextEvents,
-    createScriptState: createScriptState
+    createScriptState: createScriptState,
+    shouldRecordPhase: shouldRecordPhase
   };
 })()`;
   }
@@ -125,6 +126,8 @@ ${body}
   const __fixedDt = 1 / 60;                 // 0.016666666666666666
   const __tsBase = 1000;                    // 非零、单调递增的时间戳起点（避开 !lastT 的 falsy-zero 陷阱）
   const __noDraw = (__q.get("nodraw") === "1");
+  /* 剧本模式：idle = 零输入（一个键都不按）→ 必然漏怪 → 走到 game over */
+  const __scriptMode = (__q.get("script") === "idle") ? "idle" : "active";
   const __trace = [];
   let __frame = 0;
   let __rulesRng = null;
@@ -132,6 +135,7 @@ ${body}
   let __rulesDraws = 0;
   let __scriptState = null;
   let __prevSnapshot = null;
+  let __overRecorded = false;
 
   /* mulberry32 —— 必须与 src/game/rng.ts 的 createRng 逐字等价 */
   function __mulberry32(a){
@@ -149,7 +153,7 @@ ${body}
 
   __rulesRng = __mulberry32(__seed);
   __visRng   = __mulberry32((__seed ^ 0x9e3779b9) >>> 0);
-  __scriptState = window.__traceScript.createScriptState();
+  __scriptState = window.__traceScript.createScriptState(__scriptMode);
   diffLevel  = __diff;                      /* diffLevel 是模块级变量，不在 resetGame 里重置 */
 
   if (__fixedStep){
@@ -163,7 +167,22 @@ ${body}
   }
 
   function __recordFrame(){
-    if (state !== "running") return;
+    /* [HARNESS] 终态帧也要记。
+     *
+     * state 变成 "over" 的那一帧（hp = 0）是「血量归零 → 结算 → 进入 over 态」
+     * 唯一的快照证据 —— 分数结算、连击清零、FEVER 中断、phase 转换全都在这一帧上。
+     * 旧写法 "if (state !== running) return;" 会把它丢掉，于是 game over 路径
+     * 完全没有保真保护（门禁「一致地错」而照绿）。
+     *
+     * 判定与新回放器**共用** window.__traceScript.shouldRecordPhase() ——
+     * 两边必须同时停在同一帧上。__stepFrames 在 state !== "running" 时停，
+     * 所以终态帧只会被调用一次；__overRecorded 只是兜底。
+     */
+    if (!window.__traceScript.shouldRecordPhase(state)) return;
+    if (state === "over"){
+      if (__overRecorded) return;
+      __overRecorded = true;
+    }
     const ms = [];
     for (const m of monsters){
       /* 旧实现里「离场」与「从数组移除」是同一次调用里完成的，

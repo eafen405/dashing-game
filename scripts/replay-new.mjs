@@ -34,13 +34,15 @@ const game = await import('../src/game/index.ts');
 /**
  * 回放一局，返回逐帧快照。
  *
- * @param {{mode?: string, seed?: number, diff?: number, frames?: number}} options
+ * @param {{mode?: string, seed?: number, diff?: number, frames?: number, scriptMode?: 'active'|'idle'}} options
  */
 export function replayTrace(options = {}) {
   const mode = options.mode ?? 'A';
   const seed = Number(options.seed ?? 20240101) >>> 0;
   const diff = Number(options.diff ?? 1);
   const frames = Number(options.frames ?? FRAMES);
+  // 剧本模式：`idle` = 零输入（一个键都不按）→ 必然漏怪 → 走到 game over。
+  const scriptMode = options.scriptMode === 'idle' ? 'idle' : 'active';
 
   // 模式 B′：让 `clearLane()` 回到旧实现的错误口径（生产路径不可达的开关）。
   const legacyClearLane = mode === 'Bprime';
@@ -61,7 +63,7 @@ export function replayTrace(options = {}) {
     },
   };
   let state = game.createGameState({ diffLevel: diff, seed, layout, legacyClearLane });
-  let script = game.createScriptState();
+  let script = game.createScriptState(scriptMode);
   let prevSnapshot = null;
 
   const trace = [];
@@ -87,10 +89,13 @@ export function replayTrace(options = {}) {
 
     // 3) 记录快照（过滤 `removed` 的怪 —— 与旧版「当场移除」对称）
     //
-    //    旧版 `__recordFrame()` 开头是 `if (state !== "running") return;` ——
-    //    也就是说**血量归零的那一帧不记录**。这里必须镜像，否则新侧会多出
-    //    一帧（`phase: "over"`、`hp: 0`）→ 帧数差 1。
-    if (state.phase !== 'running') break;
+    //    **终态帧也要记**：`phase` 变成 `over` 的那一帧（hp = 0）是
+    //    「血量归零 → 结算 → 进入 over 态」**唯一**的快照证据 —— 分数结算、
+    //    连击清零、FEVER 中断、`phase` 转换全都在这一帧上。漏掉它，
+    //    game over 路径就完全没有保真保护（门禁会「一致地错」而照绿）。
+    //    旧版 `__recordFrame()` 同步改成记这一帧（见 patch-legacy.mjs）——
+    //    两边共用 `shouldRecordPhase()`，必须同时停在同一帧上。
+    if (!game.shouldRecordPhase(state.phase)) break;
     const snapshot = game.traceFrameFromState(state, frame, DT, script, rulesDraws);
     trace.push(snapshot);
     prevSnapshot = snapshot;
