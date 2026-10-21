@@ -26,7 +26,13 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DIST = resolve(process.cwd(), 'dist', 'index.html');
-const SHOTS = '/home/eafen405/refactor-notes/shots/04b';
+/**
+ * 截图目录 —— 默认写在仓库内（`dist/` 已被 gitignore），
+ * 需要放到别处时用 `E2E_SHOTS_DIR` 覆盖。
+ */
+const SHOTS = process.env.E2E_SHOTS_DIR
+  ? resolve(process.env.E2E_SHOTS_DIR)
+  : resolve(process.cwd(), 'dist', 'e2e-shots', '04b');
 const CHROME = join(
   process.env.HOME ?? '',
   '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome',

@@ -34,11 +34,15 @@ export function ComboBadge({
   return (
     <>
       <div className="stat">
-        <b className={frenzyActive ? 'stat-value frenzy' : 'stat-value'}>{combo}</b>
-        <span className={frenzyActive ? 'combo-label fever' : 'combo-label'}>{comboLabel}</span>
+        <b id="comboText" className={frenzyActive ? 'combo-value frenzy' : 'combo-value'}>
+          {combo}
+        </b>
+        <span id="comboLabel" className={frenzyActive ? 'combo-label fever' : 'combo-label'}>
+          {comboLabel}
+        </span>
       </div>
       <div className="stat">
-        <b className="crit-text">
+        <b id="critText" className="crit-text">
           {critCount} / {normalCount}
         </b>
         <span>暴击 / 普攻</span>

@@ -88,7 +88,7 @@ describe('规则层 lint 边界', () => {
     const messages = await lintAt(
       'src/game/__probe__.ts',
       [
-        "export function f(): number {",
+        'export function f(): number {',
         "  globalThis.document.title = 'x';",
         '  return globalThis.localStorage.length;',
         '}',
