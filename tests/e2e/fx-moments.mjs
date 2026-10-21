@@ -53,29 +53,6 @@ const OUT = process.env.E2E_SHOTS_DIR
 /** 对比用的视口。 */
 const VIEWPORT = { width: 1280, height: 720 };
 
-/** 在同一个 rAF 批次里读画布像素（避开 WebGL 的空缓冲坑）。 */
-const READ_PIXELS = () =>
-  new Promise((resolve) => {
-    globalThis.requestAnimationFrame(() => {
-      const canvas = globalThis.document.querySelector('.canvas-host canvas');
-      if (!(canvas instanceof globalThis.HTMLCanvasElement)) {
-        resolve(null);
-        return;
-      }
-      const scratch = globalThis.document.createElement('canvas');
-      scratch.width = canvas.width;
-      scratch.height = canvas.height;
-      const sctx = scratch.getContext('2d');
-      if (!sctx) {
-        resolve(null);
-        return;
-      }
-      sctx.drawImage(canvas, 0, 0);
-      const { data } = sctx.getImageData(0, 0, scratch.width, scratch.height);
-      resolve({ data: Array.from(data), width: scratch.width, height: scratch.height });
-    });
-  });
-
 /**
  * 自动打怪（一段，在页面里跑）。
  *
