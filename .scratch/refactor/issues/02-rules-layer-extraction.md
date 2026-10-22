@@ -33,6 +33,7 @@ Blocked by: 01
 - **状态不可变**：每次产出新对象，不改传入的 state。
 - **`done` / `dead` 两个标志的混乱必须解决**：旧代码里 `done` 只在长按怪上赋值（`source.html:824,1160,1305`），`dead` 只在普通怪/双生上赋值（`930,991,1045,1368`），两套语义交叉导致 `clearLane()` 与 `hasActivePair()` 判断不一致。新代码用**单一语义**：`removed`（已离场）。这是本次重构要修的第二个 bug。
 - **`clearLane()` 的 bug 要修**：判定"轨道是否被占用"时，只应把**长按怪**算作占用。修后长按怪刷新频率从约每 25 秒回到约每 20 秒。
+  **（票 11 证明这是误判并已撤回 —— 旧判定本是逐轨的空轨判断，本来就自洽。生产路径今天与旧版一致。）**
 
 ## 验收
 
@@ -67,6 +68,7 @@ Blocked by: 01
 
 - **Bug 1** `clearLane()`：`src/game/rules/spawn.ts` —— 轨道占用**只算长按怪**。
   实测（300 秒 × 5 种子 × 三档玩家命中率）：长按怪刷新从 12-15 只 → 14-17 只。
+  **（票 11 已把这个改动从生产路径撤回 —— 现在的生产语义与旧版一致，见下 Comments。）**
 - **Bug 2** `done` / `dead` → 单一 `removed` 标志。
   关键语义保留：长按怪 `escaped` 但**未滑出屏幕**时 `removed` 仍为 `false`
   —— 它依然占用轨道、依然吞掉该轨输入。
@@ -83,6 +85,8 @@ Blocked by: 01
 ### 行为差异记账
 
 - **D1** `clearLane()` 轨道占用只算长按怪 → 长按怪刷新变频繁。
+  **（票 11 已把这个改动从生产路径撤回 —— 现在生产语义与旧版一致，D1 不再是玩家能察觉到的差异。
+  修法只作为 golden trace 的对照变体 `GameState.legacyClearLane` 留着。见下 Comments。）**
 - **D2** `computeLayout()` 按 `playerR → playerX → hitX` 正确顺序重算。
 - **D3** `done` / `dead` → 单一 `removed`。
 - **D4** `hasActivePair()` 改用 `removed` 口径。
