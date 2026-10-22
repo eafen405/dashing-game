@@ -4,7 +4,7 @@
  *
  * 用法（先 build）：
  *   npm run build
- *   E2E_SHOTS_DIR=/home/eafen405/refactor-notes/shots/07 node tests/e2e/fx-moments.mjs
+ *   E2E_SHOTS_DIR=dist/e2e-shots/07 node tests/e2e/fx-moments.mjs
  *
  * ## 怎么「稳定复现」这三个瞬间
  *

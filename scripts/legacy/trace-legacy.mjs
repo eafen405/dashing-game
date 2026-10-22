@@ -8,7 +8,7 @@
  *   --frames 7200 --out traces/legacy-A-20240101-d1.jsonl [--nodraw]
  * ```
  *
- * 关键约束（`legacy-patch-spec.md` §8.6）：
+ * 关键约束（`scripts/legacy/legacy-patch-spec.md` §8.6）：
  * - viewport 必须在 `goto` **之前**设好（横屏，避免竖屏自动暂停 —— T26）。
  * - 每条轨迹用一个**全新 context**（`localStorage` 干净 —— T20）。
  * - **不用** `page.mouse.*` 注入输入（会触发 DOM 事件重复点击 —— T9）；

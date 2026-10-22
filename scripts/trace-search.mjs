@@ -7,7 +7,7 @@
  * node scripts/trace-search.mjs [--from 20240101] [--count 60] [--diff 1|2|all]
  * ```
  *
- * 为什么需要它（`legacy-patch-spec.md` §6.5）：
+ * 为什么需要它（`scripts/legacy/legacy-patch-spec.md` §6.5）：
  * FEVER 需要连续 50 连击，而长按怪会独占一轨 → 该轨普通怪必然触线漏怪 →
  * 连击被打断。哪些种子能攒够连击**取决于随机数**，只能实测。
  *

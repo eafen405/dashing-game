@@ -14,7 +14,7 @@
  *   - `1` —— 存在分叉（门禁失败）
  *   - `2` —— 用法 / IO 错误
  *
- * 比对规则（`legacy-patch-spec.md` §7.1）：
+ * 比对规则（`scripts/legacy/legacy-patch-spec.md` §7.1）：
  * - **离散字段**（`hp` / `score` / `combo` / `kills` / `frenzyActive` /
  *   `phase` / 怪物的 `kind` / `lane` / `state` / 怪物数量与顺序 / `script`）
  *   → **逐位相等**，不做任何容差。

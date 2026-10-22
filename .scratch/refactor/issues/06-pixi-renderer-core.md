@@ -107,7 +107,7 @@ scripts/fps-check.mjs      FPS / 帧时挂件读数
 - **`file://` 下画面正常**：非透明像素占比 canvas2d **29.98%** / Pixi **29.92%**（idle 阶段）
   → **不是黑屏**（黑屏 = 0%）
 - 逐像素平均差异率：idle **1.39%** / play **4.70%** / fever **4.79%**
-- 并排截图：`/home/eafen405/refactor-notes/shots/06/{canvas2d,pixi}-{idle,play,fx,fever}.png`
+- 并排截图（本机工作产物，**不入库**）：`shots/06/{canvas2d,pixi}-{idle,play,fx,fever}.png`
 - **golden trace 门禁 `npm run trace` 仍然全绿**（渲染层改动不影响规则层 —— 这正是分层的收益）
 
 ### 已知限制

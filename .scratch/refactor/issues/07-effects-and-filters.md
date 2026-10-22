@@ -64,7 +64,8 @@ Blocked by: 06
 - `ParticleContainer` 的 `bounds` 恒空 → 若 glow 层只有它，滤镜区域为空，
   `FilterSystem` 会静默跳过整个滤镜 → 必须设 `boundsArea` + 图层 `filterArea`。
 
-完整核实报告见 `/home/eafen405/refactor-notes/pixi-fx-spec.md`（仓库外，交付时随工作流产出）。
+完整核实报告 `pixi-fx-spec.md` 是**本机工作产物，不在仓库里**；
+仓库内可查的证据是本票下面逐条的结论与 `src/presentation/` / `src/battlefield/pixi/filters.ts` 的实现。
 
 
 ## Answer

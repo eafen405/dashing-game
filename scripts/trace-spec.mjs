@@ -3,7 +3,7 @@
  * CI 门禁全部从这里取参数，保证「同一种子 / 同一难度 / 同一帧数」。
  */
 
-/** 固定 viewport（900×600，见 `legacy-patch-spec.md` §5.3）。 */
+/** 固定 viewport（900×600，见 `scripts/legacy/legacy-patch-spec.md` §5.3）。 */
 export const VIEWPORT = { width: 900, height: 600 };
 
 /** 每帧时长 —— 固定 double `1/60`，**不从时间戳反算**（T1 / T3）。 */

@@ -310,7 +310,7 @@ export function shouldRecordPhase(phase: string): boolean {
  * **「在场」谓词**：新规则层把被移除的怪保留到下一次 tick 开头才回收
  * （`removed === true`），旧版是当场从数组里删掉 → 旧版天然没有滞留，
  * 新版必须在这里过滤掉 `removed` 的怪，两边才对称
- * （见 `legacy-patch-spec.md` §4.4 / T14）。
+ * （见 `scripts/legacy/legacy-patch-spec.md` §4.4 / T14）。
  */
 export function traceFrameFromState(
   state: GameState,

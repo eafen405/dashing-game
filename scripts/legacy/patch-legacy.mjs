@@ -1,7 +1,7 @@
 /**
  * 生成旧版 harness —— 读 `source.html`（**只读**）→ 写 `legacy-harness-<mode>.html`。
  *
- * 补丁方案来自 `/home/eafen405/refactor-notes/legacy-patch-spec.md`（11 条补丁，
+ * 补丁方案来自 `scripts/legacy/legacy-patch-spec.md`（11 条补丁，
  * 锚点原文已实测 `count === 1`）。本脚本是该方案的**可执行实现**：
  *
  * | 补丁 | 目的 |
@@ -433,7 +433,7 @@ ${body}
    * ------------------------------------------------------------------ */
 
   /**
-   * 规则随机白名单：**15 处调用点**（`legacy-patch-spec.md` §7.4）。
+   * 规则随机白名单：**15 处调用点**（`scripts/legacy/legacy-patch-spec.md` §7.4）。
    *
    * 断言方式：把文件里所有 `rand(...)` / `Math.random()` 调用**按多重集**取出，
    * 与期望值逐项比对 —— 漏改一处（多出 / 少掉）立刻失败，
