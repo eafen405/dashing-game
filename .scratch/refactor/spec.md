@@ -1,8 +1,9 @@
 # 双轨打怪 重构规格
 
-> **交接状态（2026-10-22）**：票 01–17 的功能全部完成，但 `cf3051b` 的 CI 是红的，
-> 且成果尚未合并到 `main`。剩余工作是收口票 **18–22**：修 CI 帧率断言 → 视觉验收进 CI →
-> 修过期脚本 → 合 `main` → 真机签字。进度、验证基线与已知陷阱见 [handoff.md](handoff.md)。
+> **交接状态（2026-10-22）**：票 01–21 的工作全部完成 —— 票 18–20 的门禁收口已合进
+> `feat/refactor-v2`，票 21 的 CHANGELOG / README 收口也已完成，成果**已备好待合并到 `main`**
+> （开 PR / 合并由编排者执行）。剩余工作只有票 **22**：真机签字（60fps / 长按手感 /
+> 浏览器兼容）—— 这一票必须人做。进度、验证基线与已知陷阱见 [handoff.md](handoff.md)。
 
 ## 背景
 
@@ -56,7 +57,7 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
      ▲ 事件
 表现层         particles / slashes / rings / floaters / shake，可变      60fps
      ▲ FrameView
-战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现      60fps
+战场层         BattlefieldRenderer 接口，PixiJS v8 唯一实现                  60fps
 ```
 
 ## 目录结构
@@ -67,7 +68,7 @@ src/
 ├── app/            App · GameSession · screens/ · hud/
 ├── game/           规则层：constants · types · state · rng · layout · reducer · rules/
 ├── presentation/   表现层：effects · shake · hudStore
-├── battlefield/    types（接口）· palette · canvas2d/ · pixi/{views,filters,layers}
+├── battlefield/    types（接口）· palette · pixi/{views,filters,layers}
 ├── input/          pointer · keyboard · orientation
 └── styles/
 ```
