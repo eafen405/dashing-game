@@ -18,6 +18,7 @@
 
 export * from './constants';
 export * from './effects';
+export * from './kinds';
 export * from './layout';
 export * from './reducer';
 export * from './rng';

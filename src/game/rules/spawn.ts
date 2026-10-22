@@ -25,6 +25,7 @@
 
 import { LONG_COLOR, LONG_ESCAPE_SPEED, LONG_WAIT, PAIR_COLOR } from '../constants';
 import type { Effect } from '../effects';
+import { isHoldMonster, isTwinMonster } from '../kinds';
 import { clamp } from '../math';
 import type { Rng } from '../rng';
 import type { GameState, HoldMonster, Lane, Monster, NormalMonster, TwinMonster } from '../types';
@@ -40,7 +41,7 @@ import { speedNow } from './difficulty';
  * 新语义：用统一的 `removed` 标志（旧实现用的是长按怪专属的 `done`）。
  */
 export function hasActiveLong(monsters: readonly Monster[]): boolean {
-  return monsters.some((m) => m.kind === 'hold' && !m.removed);
+  return monsters.some((m) => isHoldMonster(m) && !m.removed);
 }
 
 /**
@@ -53,7 +54,7 @@ export function hasActiveLong(monsters: readonly Monster[]): boolean {
 export function hasActivePair(monsters: readonly Monster[]): boolean {
   return monsters.some(
     (m) =>
-      m.kind === 'twin' &&
+      isTwinMonster(m) &&
       !m.removed &&
       m.partnerId !== null &&
       monsters.some((p) => p.id === m.partnerId && !p.removed),
@@ -64,7 +65,7 @@ export function hasActivePair(monsters: readonly Monster[]): boolean {
  * 该轨道是否被**长按怪**占用 —— `source.html:800-802`。
  */
 export function laneBlocked(monsters: readonly Monster[], lane: Lane): boolean {
-  return monsters.some((m) => m.kind === 'hold' && !m.removed && m.lane === lane);
+  return monsters.some((m) => isHoldMonster(m) && !m.removed && m.lane === lane);
 }
 
 /**
@@ -105,7 +106,7 @@ export function clearLane(monsters: readonly Monster[], rng: Rng, onlyLong = fal
  */
 export function findLongInLane(monsters: readonly Monster[], lane: Lane): HoldMonster | null {
   for (const m of monsters) {
-    if (m.kind === 'hold' && !m.removed && m.lane === lane) return m;
+    if (isHoldMonster(m) && !m.removed && m.lane === lane) return m;
   }
   return null;
 }

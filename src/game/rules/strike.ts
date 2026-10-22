@@ -14,6 +14,7 @@
 
 import { ATTACK_DUR, LANE, PAIR_COLOR, PAIR_WINDOW, TOP_AIR_TIME } from '../constants';
 import type { Effect } from '../effects';
+import { isHoldMonster, isTwinMonster } from '../kinds';
 import type { GameState, Lane, Monster } from '../types';
 import { findLongInLane } from './spawn';
 import { completePair, findMonster, killMonster, longHeadX, missLong, startHold } from './resolve';
@@ -66,7 +67,7 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
   let pendingMate: Monster | null = null;
   let pmDist = Infinity;
   for (const m of s.monsters) {
-    if (m.kind !== 'twin' || m.removed || !m.pairPending || m.partnerId === null) continue;
+    if (!isTwinMonster(m) || m.removed || !m.pairPending || m.partnerId === null) continue;
     const partner = findMonster(s.monsters, m.partnerId);
     if (!partner || partner.removed) continue;
     if (partner.lane !== lane) continue;
@@ -85,7 +86,7 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
   let target: Monster | null = null;
   let bestDist = Infinity;
   for (const m of s.monsters) {
-    if (m.removed || m.kind === 'hold' || m.lane !== lane) continue;
+    if (m.removed || isHoldMonster(m) || m.lane !== lane) continue;
     const d = Math.abs(m.x - layout.hitX);
     if (d <= tol && d < bestDist) {
       bestDist = d;
