@@ -46,12 +46,18 @@
  *   1. `publishes > 0` —— 循环没冻；
  *   2. `publishes >= frames * 0.9` —— **每帧发布一次**（结构：两条 rAF 链同频）；
  *   3. `publishes >= 30` —— 「没冻」的保险丝（30 秒 ≈ 1fps，任何环境都够得着）。
+ *
+ * 场景 B 的**出刀次数**同理：判「这台机器能交付的上限」的相对比例，
+ * 不钉绝对次数（钉死的次数也是帧率断言）。
  */
 
 import { assert, launchBrowser, openApp, readPhase, shot, strike } from './lib/harness.mjs';
 
 /** 每个场景的测量窗口（秒）。 */
 const WINDOW_SECONDS = 30;
+
+/** 场景 B 的出刀间隔（毫秒）—— 每隔这么久点一次。 */
+const STRIKE_INTERVAL_MS = 120;
 
 /**
  * 「每帧发布一次」的容差 —— **结构判据**，与机器速度无关。
@@ -70,6 +76,22 @@ const PUBLISH_PER_FRAME_RATIO = 0.9;
  * 它只负责「循环是不是冻住了」，**不判「跑多快」**。
  */
 const MIN_PUBLISHES = 30;
+
+/**
+ * 「连续出刀」至少要打到**这台机器能交付的上限**的多少比例，才算真的在出刀。
+ *
+ * 上限 = `min(窗口时长 / 出刀间隔, 窗口内渲染的帧数)`：
+ * 出刀一次要占用一次输入往返（点击 + 取舞台矩形），机器越慢能打出的次数越少，
+ * 所以判据必须跟着「这台机器能交付多少」缩放，**不能钉一个绝对次数**
+ * （钉死的次数就是又一条帧率断言 —— 票 18 拆掉的那条 `publishes > 600`）。
+ *
+ * 实测（30 秒窗口）：
+ *   3200×1800 视口 ≈8.3fps → 252 帧 / 32 次（12.7%）· 4× 降速 ≈5.1fps → 157 帧 / 22 次（14%）
+ *   满载 ≈16.8fps → 526 帧 / 57 次（23%）· 全速 ≈36fps → 1097 帧 / 97 次（39%）
+ * 取 5% 作下限：最差的一档（12.7%）也还有 2.5 倍余量，CI（≈13.7fps）在 18% 上下。
+ * 旧的 `clicks > 40` 在前两档（32 次 / 22 次）都会红 —— 那就是又一条帧率断言。
+ */
+const MIN_STRIKE_RATIO = 0.05;
 
 const browser = await launchBrowser();
 const { page, pageErrors } = await openApp(browser);
@@ -204,8 +226,16 @@ try {
   );
 
   // ── 场景 B：连续操作 30 秒 ───────────────────────────────
-  const b = await measure('B · 连续出刀 30 秒（每 ~120ms 一次）', 120);
-  assert(b.clicks > 40, `连续出刀 ${b.clicks} 次`);
+  const b = await measure('B · 连续出刀 30 秒（每 ~120ms 一次）', STRIKE_INTERVAL_MS);
+  // 「连续出刀」要真的在出刀：一次都没打成（出刀原语坏了）要红；
+  // 打成了但远低于这台机器能交付的上限（循环悄悄停了）也要红。
+  // **判据是相对量** —— 上限随机器速度缩放，慢机器不会平白变红。
+  const strikeCeiling = Math.min((b.elapsed * 1000) / STRIKE_INTERVAL_MS, b.frames);
+  assert(b.clicks > 0, `连续出刀 ${b.clicks} 次（要 > 0：出刀原语坏了就红）`);
+  assert(
+    b.clicks >= strikeCeiling * MIN_STRIKE_RATIO,
+    `连续出刀 ${b.clicks} 次 ≥ 本机上限 ${strikeCeiling.toFixed(0)} 次（时长/间隔 与 帧数 取小）的 ${MIN_STRIKE_RATIO * 100}%`,
+  );
   assertLoopAlive('连续出刀 30 秒', b);
   assert(
     b.stats.domMutations < b.frames * 0.2,
