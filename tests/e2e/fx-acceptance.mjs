@@ -15,17 +15,20 @@
  *    `fx-fever-readability.mjs` 逐像素度量）；
  * 4. 双生同破两轨同时出粉色冲击环 + 冲击波 + 下砸。
  *
- * ## 为什么必须 HEADED=1
+ * ## 无头直接跑（不需要 xvfb）
  *
- * 无头 Chromium 在这台机器上拿不到 WebGL，Pixi 回退 Canvas2D，bloom / 色散 /
- * 冲击波会被跳过 —— 截图不能当视觉验收。用：
+ * `scripts/browser.mjs` 的 `CHROMIUM_ARGS` 带 `--enable-unsafe-swiftshader`，
+ * Chromium 实际跑在 `--use-angle=swiftshader-webgl` 上 ——
+ * **无头就拿得到 WebGL**，Pixi 不会回退 Canvas2D，bloom / 色散 / 冲击波
+ * 全部在画面上，截图能当视觉验收。
+ * （以前写的「无头拿不到 WebGL，必须 `HEADED=1 xvfb-run`」已经过期，见票 20。）
  *
- *   HEADED=1 xvfb-run -a node tests/e2e/fx-acceptance.mjs
+ * 用法：先 `npm run build`，再 `node tests/e2e/fx-acceptance.mjs`
+ * —— CI 里跑的是 `npm run test:visual`（把本脚本和另外几个特效脚本一起当门禁）。
  *
- * 截图机是 SwiftShader 软件渲染，FPS 只有 11–13；FPS 挂件不是产品 UI，
- * 截图前会被隐藏。真机 60fps 仍需用户实机确认（票 08/09 的共同遗留项）。
- *
- * 用法：先 `npm run build`。
+ * SwiftShader 是**软件光栅**，FPS 挂件只有 11–13 —— 那**不是**产品性能指标，
+ * 不能当 60fps 证据（ADR-0004）。FPS 挂件不是产品 UI，截图前会被隐藏。
+ * 真机 60fps 仍需用户实机确认（票 08/09 的共同遗留项）。
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -280,7 +283,7 @@ try {
     <figure><figcaption>④ 双生同破：两轨粉色冲击环 + 双轨木屑 + 冲击波 + 下砸，震动 16</figcaption><img src="${dataUrl(join(OUT, 'new-twin.png'))}"></figure>
   </div>
   <p class="note">判定区中心到角色的“拖影”已按实机手感改为木棒挥击残影 + 接触点余晖（不再有飞行刀光/剑气）。<br>
-  截图机为 Xvfb + SwiftShader 软件渲染，FPS 挂件 11–13 不代表真机，故已隐藏；实机 60fps 仍需用户确认。</p>
+  截图机为无头 Chromium + SwiftShader 软件光栅（真实 WebGL 路径），FPS 挂件 11–13 不代表真机，故已隐藏；实机 60fps 仍需用户确认。</p>
 </div></body></html>`;
   const htmlPath = join(OUT, 'acceptance-09.html');
   writeFileSync(htmlPath, html);

@@ -79,6 +79,7 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 | `npm test` | 单元测试（Vitest） |
 | `npm run test:watch` | 单元测试 watch 模式 |
 | `npm run test:e2e` | 端到端检查（Playwright 驱动 `file://` 产物）**需先 `npm run build`** |
+| `npm run test:visual` | 特效视觉验收（特效脚本 + 验收拼图）**需先 `npm run build`** |
 | `npm run trace` | 黄金轨迹保真门禁：旧版 harness × 新规则层逐帧比对 |
 | `npm run typecheck` | TypeScript 类型检查（`tsc --noEmit`） |
 | `npm run lint` | ESLint 检查 |
@@ -92,7 +93,14 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 `npm run trace` 是**行为正确性**门禁，不是性能测量：旧版 `source.html` 的 harness 与新规则层
 喂同一种子、同一份事件流，逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
 
-CI 跑的就是这条流水线：typecheck → lint → test → build → verify → e2e → trace。
+`npm run test:visual` 是**特效视觉验收**门禁（票 20）：6 个脚本定点注入特效并量像素
+（bloom 开/关的亮度与面积、FEVER 判定区描边连续性、冲击波中心、2×2 验收拼图、真实对局并排、
+键盘长按怪）。判据都是**相对 / 结构性**的，不绑机器速度；截图落在 `dist/e2e-shots/`，
+CI 会把它作为 artifact 上传（`dist/` 被 gitignore，不留档就看不见）。
+
+CI 跑的就是这条流水线：typecheck → lint → test → build → verify → e2e → visual → trace。
+其中 `visual` 在 CI 里是**独立一个 job**（与主流水线并行）—— 视觉脚本在软件光栅下慢，
+单独一个 job 才不会挤掉主流水线的 30 分钟预算。
 
 ## 技术架构
 

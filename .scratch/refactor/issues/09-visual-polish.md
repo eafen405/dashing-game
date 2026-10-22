@@ -37,6 +37,13 @@ Blocked by: 08
 2026-10-21 完成。四条验收项逐条对照如下；证据图在
 `dist/e2e-shots/09/acceptance-09.png`（2×2 拼图，`fx-acceptance.mjs` 可复现）。
 
+> **证据留存（票 20 补）**：`dist/` 被 gitignore，验收拼图跑完就蒸发。
+> 现在这 5 个特效脚本接进了 CI（`npm run test:visual`，CI 里是独立一个 `visual` job，失败即红），
+> 跑完把 `dist/e2e-shots/` 作为 **artifact `visual-acceptance-shots`** 上传
+> （`if: always()`，红了也留证据）。
+> 在 CI run 的 **Artifacts** 区域下载它，拼图在 **`09/acceptance-09.png`**
+> （拼图源文件 `dist/e2e-shots/09/acceptance-09.html` 一并留存）。
+
 ### 四条验收项
 
 | # | 验收项 | 结果 | 证据 |
@@ -62,8 +69,10 @@ Blocked by: 08
    WebGL `preserveDrawingBuffer: false` 下 `drawImage(canvas)` 读回不可靠（票 08 同款坑），
    改为 `page.screenshot({ clip })` + 页面内 2D canvas 解码；判据仍是描边连续性 / 红蓝差 / 彩色边面积。
 3. **真实 WebGL 截图通道**（`scripts/browser.mjs`）。
-   无头 Chromium 在这台机器上拿不到 WebGL，Pixi 回退 Canvas2D，bloom / 色散 / 冲击波全部跳过。
-   加 `HEADED=1` 开关，配合 `xvfb-run` 用 SwiftShader 拿真实 WebGL，特效截图才有效。
+   `CHROMIUM_ARGS` 带 `--enable-unsafe-swiftshader`，Chromium 实际跑在
+   `--use-angle=swiftshader-webgl` 上 —— **无头就拿得到 WebGL**，Pixi 不回退 Canvas2D，
+   bloom / 色散 / 冲击波全部生效，特效截图有效。
+   （本条原先写的「无头拿不到 WebGL，要 `HEADED=1` + `xvfb-run`」已过期，票 20 更正。）
 4. **可复现验收图脚本**（`tests/e2e/fx-acceptance.mjs`）。
    通过 `?debug` 的 `__FX_DEBUG__.apply()` 定点注入四组效果，固定 2×2 拼图；
    和 `fx-moments.mjs`（真实对局、等 toast）互补。
@@ -84,14 +93,18 @@ Blocked by: 08
 
 | 检查 | 结果 |
 | --- | --- |
-| `fx-acceptance.mjs`（HEADED，WebGL） | ✅ 四格图 + 页面无异常 |
-| `fx-fever-readability.mjs`（HEADED） | ✅ 描边 100% → 100%，红蓝差 +66 |
-| `bloom-ab.mjs`（HEADED） | ✅ 点亮像素 4.398% → 4.913%，平均亮度 +3.1% |
-| `fx-moments.mjs`（HEADED，真实对局补充） | ◐ 暴击并排图成功；旧版该局未在 900 轮内触发 FEVER，按脚本设计跳过并排；新版 FEVER 图采到。不作为本票硬判据，硬判据是上面的定点注入图 |
+| `fx-acceptance.mjs`（SwiftShader WebGL） | ✅ 四格图 + 页面无异常 |
+| `fx-fever-readability.mjs`（SwiftShader WebGL） | ✅ 描边 100% → 100%，红蓝差 +66 |
+| `bloom-ab.mjs`（SwiftShader WebGL） | ✅ 点亮像素 4.398% → 4.913%，平均亮度 +3.1% |
+| `fx-moments.mjs`（SwiftShader WebGL，真实对局补充） | ◐ 暴击并排图成功；旧版该局未在 900 轮内触发 FEVER，按脚本设计跳过并排；新版 FEVER 图采到。不作为本票硬判据，硬判据是上面的定点注入图 |
 | `npm run build && npm test && npm run trace && npm run test:e2e` | ✅（票 10 最终验收复跑） |
+
+（票 20 更正：这 4 个脚本现在**无头**就能跑 —— `--enable-unsafe-swiftshader` 让 SwiftShader
+提供了真实 WebGL，`HEADED=1 xvfb-run` 那套不再需要。它们已接进 CI 的 `npm run test:visual`。）
 
 ### FPS 说明
 
-`xvfb-run` 下的 SwiftShader 是纯软件光栅，FPS 挂件只有 11–13，**不能作为 60fps 的证据**；
+SwiftShader 是纯软件光栅（**无头也一样** —— 票 20 更正），
+FPS 挂件只有 11–13，**不能作为 60fps 的证据**；
 它只证明"代码在真实 WebGL 路径下能跑、滤镜没有异常"。验收图里已隐藏该调试挂件。
 真机 60fps 与观感仍需用户用 `dist/index.html` 实测确认，和票 08 的遗留项合并验收。

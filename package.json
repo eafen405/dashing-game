@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "node tests/e2e/check-playable.mjs && node tests/e2e/flow-8-steps.mjs && node tests/e2e/input-desktop.mjs && node tests/e2e/portrait-progress.mjs && node tests/e2e/hud-stats.mjs && node tests/e2e/compare-legacy.mjs",
+    "test:visual": "node tests/e2e/fx-acceptance.mjs && node tests/e2e/bloom-ab.mjs && node tests/e2e/fx-fever-readability.mjs && node tests/e2e/filter-center-probe.mjs && node tests/e2e/fx-moments.mjs && node tests/e2e/hold-monster-keyboard.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "node scripts/verify-single-file.mjs",

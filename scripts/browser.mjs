@@ -30,10 +30,17 @@ export function chromiumCandidates() {
  * @throws {Error} 所有候选都失败时抛出最后一个错误。
  */
 export async function launchChromium(chromium) {
-  // **默认无头**。需要真实 WebGL（截图 / bloom / 滤镜目检）时用：
-  //   HEADED=1 xvfb-run -a node tests/e2e/...
-  // 无头 Chromium 在这台机器上拿不到 WebGL，Pixi 会回退到 Canvas2D ——
-  // 功能测试仍然过，但 bloom 会被跳过，截图不能当视觉验收。
+  // **默认无头，而且无头就拿得到 WebGL**。
+  //
+  // `CHROMIUM_ARGS` 带 `--enable-unsafe-swiftshader`，Chromium 实际跑在
+  // `--use-angle=swiftshader-webgl` 上 —— Pixi 走的是**真实 WebGL 路径**，
+  // 不会回退 Canvas2D，bloom / 色散 / 冲击波全部生效。
+  // （以前写的「无头拿不到 WebGL，要 `HEADED=1 xvfb-run`」已经过期，见票 20。）
+  //
+  // SwiftShader 是**软件光栅**：FPS 挂件只有 11–13 —— 那**不是**产品性能指标，
+  // 不能当 60fps 证据（ADR-0004）。视觉脚本的判据不看 fps，所以进 CI 没有这个问题。
+  //
+  // `HEADED=1` 仍然保留：只有本地想**人眼看窗口**时才需要（还得有显示服务）。
   const headless = process.env.HEADED !== '1';
   let lastError = null;
   for (const executablePath of chromiumCandidates()) {
