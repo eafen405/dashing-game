@@ -180,6 +180,8 @@ git show d2958e2:source.html
 ## 约定文档
 
 - 领域词汇：[GLOSSARY.md](GLOSSARY.md) —— 轨道 / 判定区 / 出刀 / 漏怪 / 失误 / 双生 / 长按怪 …
-- 架构决策：[docs/adr/](docs/adr/)
+- 架构决策：[docs/adr/](docs/adr/) —— 逐条记在 `docs/adr/0001` … `0005`：
+  单文件产物（0001）· PixiJS 渲染（0002）· 规则层 / 表现层分离（0003）·
+  性能以结构保证（0004）· 端到端测试推迟到收口阶段补上（0005）
 - Issue 采用本地 markdown 管理（`.scratch/<feature>/`），约定见
   [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)

@@ -23,7 +23,10 @@ Canvas 2D 绘制全部战斗内容，DOM 负责 HUD 与覆盖层。零外部资�
 - 不做音效（已裁决推迟）。
 - 不改玩法规则、数值、手感（1:1 复刻，差异显式记账）。
 - 不做 3D 化。
-- 不引入端到端测试（第二阶段再议）。
+- ~~不引入端到端测试（第二阶段再议）。~~ **已反转** —— 端到端测试在**收口阶段**补上
+  （票 05 / 18 / 19 / 20）。规格里的「视觉与交互验收标准」原本只能靠人眼；
+  收口时把它们改写成**可判定的脚本**（`tests/e2e/*.mjs`，13 个），接进 CI 当门禁。
+  ADR-0004 要求 CI 用**结构性判据**，ADR-0005 记录这次「非目标反转」的取舍与后果。
 
 ## 已完成的验证（Phase 0 Spike）
 
@@ -47,6 +50,7 @@ Firefox / Safari 未在本机验证（Playwright 缓存里只有 Chromium），�
 | 战场渲染 | PixiJS v8 承载，React 只管 DOM UI，不用 `@pixi/react` | ADR-0002 |
 | 状态分层 | 规则层纯函数不可变 + 表现层可变，两层分离 | ADR-0003 |
 | 性能策略 | 以结构保证，不做基准测试循环 | ADR-0004 |
+| 端到端测试 | 规格阶段推迟、收口阶段补上并接进 CI（**非目标已反转**） | ADR-0005 |
 
 ## 分层
 
@@ -64,13 +68,46 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
 
 ```
 src/
-├── main.tsx
-├── app/            App · GameSession · screens/ · hud/
-├── game/           规则层：constants · types · state · rng · layout · reducer · rules/
-├── presentation/   表现层：effects · shake · hudStore
-├── battlefield/    types（接口）· palette · pixi/{views,filters,layers}
-├── input/          pointer · keyboard · orientation
-└── styles/
+├── main.tsx                入口：挂 React 根 + 引 styles.css
+├── App.tsx                 根组件：创建 Pixi 渲染器实例
+├── styles.css              全局样式（唯一被引入的样式表）
+├── app/                    React DOM 层
+│   ├── App.tsx             屏幕状态机 + 会话装配
+│   ├── GameSession.ts      会话层：驱动 60fps 帧循环
+│   ├── presentation.ts     表现层端口（会话层 → 表现层的接缝）
+│   ├── screenMachine.ts    屏幕状态机
+│   ├── fullscreen.ts       全屏切换
+│   ├── best.ts             跨局最高分（localStorage）
+│   ├── diagnostics.ts      调试诊断
+│   ├── hud/                HUD：hudStore · Hud · HealthBar · ScorePanel · ComboBadge · BestStat
+│   └── screens/            StartScreen · PauseScreen · GameOverScreen · RotatePrompt
+├── game/                   规则层（纯函数 · 无 DOM / Pixi / React）
+│   ├── constants.ts        常量与轨道配色
+│   ├── types.ts            状态与怪物类型
+│   ├── state.ts            初始状态
+│   ├── rng.ts              带种子 PRNG
+│   ├── layout.ts           战场几何
+│   ├── math.ts             clamp 等
+│   ├── effects.ts          效果事件类型 + 爆散签名词表
+│   ├── kinds.ts            怪物类别判定谓词
+│   ├── reducer.ts          reduce(state, event, rng)
+│   ├── trace.ts            黄金轨迹的共享格式与事件剧本
+│   └── rules/              difficulty · fever · resolve · spawn · strike · tick
+├── presentation/           表现层（可变 · 不进 React 渲染路径）
+│   ├── effects.ts          粒子 / 刀光 / 冲击环 / 飘字
+│   ├── fx.ts               效果签名 → 视觉档位
+│   ├── shake.ts            屏幕震动
+│   └── state.ts            PresentationState
+├── battlefield/            战场层
+│   ├── types.ts            BattlefieldRenderer 接口 + FrameView
+│   └── pixi/               PixiJS v8 实现：PixiRenderer · palette · layers · filters
+│                           · background · ground · rails · defense-line · hit-zone · player
+│                           · monster · twin · hold-monster · particle · slash · ring · floater
+│                           · text · gfx · gradient · textures · context · math
+├── input/                  输入层
+│   ├── pointer.ts · keyboard.ts · orientation.ts
+│   └── mapping.ts · types.ts
+└── (每个目录都带自己的 __tests__/)
 ```
 
 ## 迁移阶段
@@ -106,7 +143,10 @@ src/
 
 - `source.html:1989` 怪物绘制循环内的 `monsters.indexOf`（O(n²)）
 - `source.html:1633` 每帧每轨的 `monsters.some` 扫描
-- `source.html:978` 等 7 处用 `filter` 重建 `monsters` 数组
+- `source.html:978` 等 7 处用 `filter` 重建 `monsters` 数组 —— **渲染路径上的重建已全部消除**；
+  规则层保留**每 tick 一处**回收（`game/rules/tick.ts`），这是**有意为之**、不是没改完的残留：
+  已离场怪物在新侧滞留到下一 tick 开头才回收（旧侧当场 `filter`），
+  记在「不可观察的差异」第 1 条
 - `source.html:1276` 每帧调用 `syncHUD()`（改为事件驱动订阅）
 
 ## 已知行为差异
@@ -154,3 +194,4 @@ src/
 - `docs/adr/0002-pixijs-renderer-with-react-dom-ui.md`
 - `docs/adr/0003-rules-immutable-presentation-mutable.md`
 - `docs/adr/0004-performance-by-construction-not-by-benchmark.md`
+- `docs/adr/0005-e2e-tests-added-during-closeout.md`

@@ -86,10 +86,14 @@ _Avoid_: 最好成绩, 最佳纪录, best score, high score
 | 判定框 | 判定区 | 开始界面的长按说明（`app/screens/StartScreen.tsx`）、刷怪提示（`game/rules/spawn.ts`） | **是** |
 | 光门 | 判定区 | 开始界面的玩法说明（`app/screens/StartScreen.tsx`） | **是** |
 | 长按敌人 | 长按怪 | 刷怪提示（`game/rules/spawn.ts`） | **是** |
+| 双生敌人 | 双生 | 刷怪提示（`game/rules/spawn.ts`） | **是** |
+| COMBO | 连击 | 连击清零提示（`game/rules/resolve.ts`）、HUD 连击标签（`app/hud/hudStore.ts`） | **是** |
+| 漏掉了 | 漏怪 | 长按怪漏过的惩罚提示（`game/rules/resolve.ts`） | **是** |
 | 判定圈 | 判定区 | 规则层与渲染层的注释 | 否（内部注释） |
 | 出招 | 出刀 | 规则层类型与注释（`ATTACK_DUR`、`attackT`） | 否（内部标识符与注释） |
 | frenzy | FEVER | 内部标识符（`frenzyActive`、`FRENZY_LANE`、`frenzy.ts`） | 否（内部标识符） |
 | player | 角色 | 内部标识符（`playerX`、`playerR`、`player.ts`） | 否（内部标识符） |
+| lane | 轨道 | 内部标识符与类型（`game/types.ts` 的 `Lane`、`game/layout.ts` 的 `laneY`、`game/types.ts` 的 `attackLane` / `playerLane`、`game/rules/spawn.ts` 的 `laneBlocked` / `clearLane`、效果事件 `lane-flash`） | 否（内部标识符） |
 
-前四条是**玩家可见**的文案偏差，属于待清理项；后四条只出现在内部标识符与注释里，
+前七条是**玩家可见**的文案偏差，属于待清理项；后五条只出现在内部标识符与注释里，
 不影响玩家，但会污染检索。清理它们会改动产品代码，需另开票处理。
