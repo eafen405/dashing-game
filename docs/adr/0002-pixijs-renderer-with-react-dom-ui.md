@@ -14,4 +14,4 @@
 
 **后果**：战场渲染必须抽象成可替换的接口，以便迁移期同时保留 Canvas 2D 与 Pixi 两套实现做 A/B 对照。
 
-**现状**（2026-10）：PixiJS v8 渲染器已实现（`src/battlefield/pixi/`），与 Canvas 2D 版（`src/battlefield/canvas2d/`）同构，两套并存以便 A/B 对照。**默认仍是 Canvas 2D**，Pixi 版需用 `?renderer=pixi` 显式切换 —— 默认切换与 Canvas 2D 版的清退是后续票 08 的事。本决策的另两条约束已落地：未引入 `@pixi/react`（战场场景图由代码直接驱动），React 只负责 DOM 界面（`src/app/`）。
+**现状**（2026-10）：PixiJS v8 渲染器是**唯一渲染路径**（`src/battlefield/pixi/`）。票 08 完成了默认切换并清退了 Canvas 2D 实现（`src/battlefield/canvas2d/` 已删除，`?renderer=` 分支已移除）；`BattlefieldRenderer` 接口保留，作为未来更换渲染器的抽象边界。本决策的另两条约束也已落地：未引入 `@pixi/react`（战场场景图由代码直接驱动），React 只负责 DOM 界面（`src/app/`）。DPR 上限保持 2 —— 放宽到 3 的收益未经移动端实机验证，而 bloom 是像素成本大户，按 ADR-0004 不做未经验证的改动。

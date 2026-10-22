@@ -10,8 +10,16 @@ import { describe, expect, it } from 'vitest';
 import { LAYER_COUNT, LAYER_ORDER } from '../layers';
 
 describe('战场图层顺序', () => {
-  it('自底向上是 background → rails → defense → entities → glow → floaters', () => {
-    expect(LAYER_ORDER).toEqual(['background', 'rails', 'defense', 'entities', 'glow', 'floaters']);
+  it('自底向上是 background → ground → rails → defense → entities → glow → floaters', () => {
+    expect(LAYER_ORDER).toEqual([
+      'background',
+      'ground',
+      'rails',
+      'defense',
+      'entities',
+      'glow',
+      'floaters',
+    ]);
   });
 
   it('图层数量与顺序表一致', () => {

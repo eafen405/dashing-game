@@ -80,7 +80,7 @@ _Avoid_: 最好成绩, 最佳纪录, best score, high score
 
 | 实际用词 | 应为 | 出现位置 | 是否玩家可见 |
 | --- | --- | --- | --- |
-| 打击点 | 判定区 | 战场标签（`battlefield/canvas2d/hit-zone.ts`、`battlefield/pixi/hit-zone.ts`）、开始界面图例（`app/screens/StartScreen.tsx`） | **是** |
+| 打击点 | 判定区 | 战场标签（`battlefield/pixi/hit-zone.ts`）、开始界面图例（`app/screens/StartScreen.tsx`） | **是** |
 | 判定框 | 判定区 | 开始界面的长按说明（`app/screens/StartScreen.tsx`）、刷怪提示（`game/rules/spawn.ts`） | **是** |
 | 光门 | 判定区 | 开始界面的玩法说明（`app/screens/StartScreen.tsx`） | **是** |
 | 长按敌人 | 长按怪 | 刷怪提示（`game/rules/spawn.ts`） | **是** |

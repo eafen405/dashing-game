@@ -27,36 +27,29 @@ const OUT = process.env.E2E_SHOTS_DIR
   ? resolve(process.env.E2E_SHOTS_DIR)
   : resolve(process.cwd(), 'dist', 'e2e-shots', '07');
 
-/** 在同一个 rAF 批次里读画布像素。 */
-const READ_PIXELS = () =>
-  new Promise((resolve) => {
-    globalThis.requestAnimationFrame(() => {
-      const canvas = globalThis.document.querySelector('.canvas-host canvas');
-      if (!(canvas instanceof globalThis.HTMLCanvasElement)) {
-        resolve(null);
-        return;
-      }
-      const scratch = globalThis.document.createElement('canvas');
-      scratch.width = canvas.width;
-      scratch.height = canvas.height;
-      const sctx = scratch.getContext('2d');
-      if (!sctx) {
-        resolve(null);
-        return;
-      }
-      sctx.drawImage(canvas, 0, 0);
-      const { data } = sctx.getImageData(0, 0, scratch.width, scratch.height);
-      resolve({ data: Array.from(data), width: scratch.width, height: scratch.height });
-    });
-  });
-
 /**
- * 判定区描边连续性 + 色散幅度。
+ * 从**真实截图**里量判定区 —— 不读 WebGL 画布。
  *
- * @param layout 判定区几何（`hitX` / `laneY` / `zoneHalf`）。
+ * `preserveDrawingBuffer: false` 时 `drawImage(canvas)` 的读回不可靠
+ * （票 08 修过同一个坑）。这里先 `page.screenshot({ clip })` 截下画布区域，
+ * 再把 PNG 以 data URL 喂回页面解码、逐像素统计 —— 量到的就是玩家看到的画面。
+ *
+ * @param dataUrl 画布区域的 PNG（data URL，不会污染 2D 画布）。
+ * @param layout 判定区几何（CSS 像素）。
  */
-function measureZone(stats, layout) {
-  const { data, width, height } = stats;
+const MEASURE_PNG = async ([dataUrl, layout]) => {
+  const img = new globalThis.Image();
+  img.src = dataUrl;
+  await img.decode();
+  const scratch = globalThis.document.createElement('canvas');
+  scratch.width = img.naturalWidth;
+  scratch.height = img.naturalHeight;
+  const sctx = scratch.getContext('2d', { willReadFrequently: true });
+  if (!sctx) return null;
+  sctx.drawImage(img, 0, 0);
+  const { data } = sctx.getImageData(0, 0, scratch.width, scratch.height);
+  const width = scratch.width;
+  const height = scratch.height;
   const dpr = width / layout.width;
   const cx = layout.hitX * dpr;
   const cy = layout.laneY.top * dpr;
@@ -73,7 +66,6 @@ function measureZone(stats, layout) {
       const py = Math.round(cy + Math.sin(a) * (r + rad));
       if (px < 0 || py < 0 || px >= width || py >= height) continue;
       const idx = (py * width + px) * 4;
-      // 判定区描边是霓虹色（很亮）；背景是深色。
       if (Math.max(data[idx], data[idx + 1], data[idx + 2]) >= 90) hit = true;
     }
     if (hit) found++;
@@ -90,7 +82,6 @@ function measureZone(stats, layout) {
   for (let y = y0; y <= y1; y++) {
     for (let x = r0; x <= r1; x++) {
       const idx = (y * width + x) * 4;
-      if (data[idx + 3] === 0) continue;
       total++;
       const fringe = Math.abs(data[idx] - data[idx + 2]);
       if (fringe > maxFringe) maxFringe = fringe;
@@ -103,6 +94,24 @@ function measureZone(stats, layout) {
     maxFringe,
     fringeRatio: total > 0 ? fringeCount / total : 0,
   };
+};
+
+/** 截画布区域并统计判定区指标。 */
+async function measureZone(page, layout) {
+  const box = await page.locator('.canvas-host canvas').boundingBox();
+  if (!box || box.width < 2 || box.height < 2) throw new Error('找不到画布区域');
+  const png = await page.screenshot({
+    clip: {
+      x: Math.round(box.x),
+      y: Math.round(box.y),
+      width: Math.round(box.width),
+      height: Math.round(box.height),
+    },
+  });
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
+  const metrics = await page.evaluate(MEASURE_PNG, [dataUrl, layout]);
+  if (!metrics) throw new Error('截图解码失败');
+  return metrics;
 }
 
 const browser = await launchBrowser();
@@ -110,7 +119,7 @@ const browser = await launchBrowser();
 try {
   const { page } = await openApp(browser, {
     viewport: { width: 1280, height: 720 },
-    query: '?renderer=pixi&debug',
+    query: '?debug',
   });
   await page.locator('#startScreen h2').click();
   await page.waitForTimeout(600);
@@ -118,7 +127,7 @@ try {
   const layout = await page.evaluate(() => globalThis.__FX_DEBUG__.layout());
 
   // ── 基线：没有 FEVER ─────────────────────────────────────
-  const before = measureZone(await page.evaluate(READ_PIXELS), layout);
+  const before = await measureZone(page, layout);
   console.log('── 基线（无 FEVER）──');
   console.log(
     `  判定区描边连续性 ${(before.outlineKeep * 100).toFixed(1)}% · 最大红蓝差 ${before.maxFringe} · 彩色边像素占比 ${(before.fringeRatio * 100).toFixed(2)}%`,
@@ -127,7 +136,7 @@ try {
   // ── FEVER 期间 ─────────────────────────────────────────
   await page.evaluate(() => globalThis.__FX_DEBUG__.fever(true));
   await page.waitForTimeout(700); // 等色散爬到满强度（0.35 秒）
-  const after = measureZone(await page.evaluate(READ_PIXELS), layout);
+  const after = await measureZone(page, layout);
   console.log('── FEVER（色散满强度）──');
   console.log(
     `  判定区描边连续性 ${(after.outlineKeep * 100).toFixed(1)}% · 最大红蓝差 ${after.maxFringe} · 彩色边像素占比 ${(after.fringeRatio * 100).toFixed(2)}%`,

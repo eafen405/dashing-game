@@ -86,11 +86,7 @@ export function laneBlocked(monsters: readonly Monster[], lane: Lane): boolean {
  * @param onlyLong `true` 时回到票 02 的 D1 修法（**只有长按怪**算占用）。
  *   这是票 03 golden trace 模式 A 的对照开关，生产路径不可达（见 `types.ts`）。
  */
-export function clearLane(
-  monsters: readonly Monster[],
-  rng: Rng,
-  onlyLong = false,
-): Lane | null {
+export function clearLane(monsters: readonly Monster[], rng: Rng, onlyLong = false): Lane | null {
   const laneBusy = (lane: Lane): boolean =>
     monsters.some((m) => m.lane === lane && !m.removed && (!onlyLong || m.kind === 'hold'));
   const topBusy = laneBusy('top');

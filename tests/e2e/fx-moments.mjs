@@ -274,7 +274,7 @@ try {
   // 新版：harness 的 `openApp` 自带 toast 观察器。
   const { page: modern, pageErrors: modernErrors } = await openApp(browser, {
     viewport: VIEWPORT,
-    query: '?renderer=pixi&debug',
+    query: '?debug',
   });
   const legacyErrors = [];
   legacy.on('pageerror', (e) => legacyErrors.push(String(e)));
@@ -329,6 +329,30 @@ try {
   };
 
   /**
+   * 旧版的判定区中心与新版的**不是同一个 x**。
+   *
+   * 新版把判定框挪到了木棍打击范围（`hitX ≈ 250`），旧版仍在 `W*0.34`（≈ 430）。
+   * 自动打怪必须按**各自的**判定区中心点击/判暴击，否则旧版永远打不出暴击，
+   * 会在攒到 FEVER 前就 game over。
+   */
+  const legacyLayout = (() => {
+    const w = legacyCanvas.w;
+    const h = legacyCanvas.h;
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+    const playerR = clamp(h * 0.115, 22, 46);
+    const playerX = Math.max(clamp(w * 0.085, 48, 120), playerR * 2.05 + 12);
+    const hitX = Math.max(clamp(w * 0.34, 150, 430), playerX + playerR * 2.6 + 120);
+    const hitW = clamp(w * 0.07, 58, 100);
+    const zoneHalf = hitW * 0.5 + clamp(w * 0.03, 16, 44);
+    return {
+      hitX,
+      laneYs: [h * 0.28, h * 0.72],
+      zoneHalf,
+      critHalf: zoneHalf * 0.5,
+    };
+  })();
+
+  /**
    * 打到某个 toast 出现为止，然后截图。
    *
    * 两个页面**各自**在各自出现该瞬间时截图 —— 两边的进度不完全同步
@@ -351,6 +375,10 @@ try {
         tasks.push(
           legacy.evaluate(AUTO_PLAY, {
             ...playArgs,
+            hitX: legacyLayout.hitX,
+            laneYs: legacyLayout.laneYs,
+            zoneHalf: legacyLayout.zoneHalf,
+            critHalf: legacyLayout.critHalf,
             canvasSel: '#cv',
             stageSel: '#stage',
           }),

@@ -76,17 +76,47 @@ export function attachPointerInput(options: PointerInputOptions): () => void {
     sink.release(pointerInputId(event.pointerId));
   };
 
+  /**
+   * 压掉手机浏览器的长按菜单。
+   *
+   * 长按是核心操作（长条怪要按住 2 秒），但 UC / 360 / 小米这类浏览器
+   * 会在长按时弹出「标记广告」/ 选词菜单，把手指抢走、长按直接中断。
+   * 在 `touchstart` 里阻止默认行为可以抑制 WebView 自带的长按手势；
+   * 按钮和弹层要保留正常点击，所以只接管游戏舞台。
+   */
+  const onTouchStart = (event: TouchEvent): void => {
+    const target = event.target as Element | null;
+    if (target?.closest('button, a, input, select, textarea, .overlay')) return;
+    event.preventDefault();
+  };
+
+  /** 长按菜单的另一个触发口（部分浏览器只认 `contextmenu`）。 */
+  const onContextMenu = (event: Event): void => {
+    event.preventDefault();
+  };
+
+  /** 阻止下拉刷新 / 页面滚动（`touch-action: none` 的兜底）。 */
+  const onTouchMove = (event: TouchEvent): void => {
+    event.preventDefault();
+  };
+
   const onBlur = (): void => {
     sink.cancelHold();
   };
 
   stage.addEventListener('pointerdown', onPointerDown, { passive: false });
+  stage.addEventListener('touchstart', onTouchStart, { passive: false });
+  stage.addEventListener('touchmove', onTouchMove, { passive: false });
+  stage.addEventListener('contextmenu', onContextMenu);
   win.addEventListener('pointerup', onPointerUp);
   win.addEventListener('pointercancel', onPointerUp);
   win.addEventListener('blur', onBlur);
 
   return () => {
     stage.removeEventListener('pointerdown', onPointerDown);
+    stage.removeEventListener('touchstart', onTouchStart);
+    stage.removeEventListener('touchmove', onTouchMove);
+    stage.removeEventListener('contextmenu', onContextMenu);
     win.removeEventListener('pointerup', onPointerUp);
     win.removeEventListener('pointercancel', onPointerUp);
     win.removeEventListener('blur', onBlur);

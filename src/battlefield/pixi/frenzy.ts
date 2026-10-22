@@ -4,8 +4,16 @@
  * 注释原文：「FEVER 时的全场金色氛围（叠在场景之上、暗角之下）」——
  * 所以它必须**最后**画（暗角是 DOM 层的事）。
  *
- * Pixi 版把它放在 `glow` 层（`entities` 之上、`floaters` 之下）——
- * 票 07 会在同一层挂 bloom。
+ * ## 票 09：洗色与 bloom 分层
+ *
+ * 全场洗色是一个**铺满屏幕**的亮色矩形。如果它跟着 `glow` 层一起过 bloom，
+ * 整个画面都会变成一团发光的黄雾（亮度提取不看 alpha，只看颜色通道），
+ * FEVER 期间反而看不清判定区和怪物。
+ *
+ * 所以拆成两个容器：
+ *
+ * - `washContainer` —— 洗色，挂 `floaters` 层（**不参与 bloom**，叠在辉光之上）；
+ * - `container` —— 两轨能量带 + 边缘呼吸，挂 `glow` 层（参与 bloom）。
  */
 
 import { Container, Graphics, GraphicsPath } from 'pixi.js';
@@ -21,15 +29,19 @@ const BAND_REF_PULSE = 0.5;
 const BAND_REF_ALPHA = 0.1 + BAND_REF_PULSE * 0.07;
 
 export class FrenzyView {
-  /** 容器（挂到 `glow` 层）。 */
+  /** 能量带 + 边缘呼吸（挂到 `glow` 层 —— 参与 bloom）。 */
   readonly container = new Container();
+  /** 全场洗色（挂到 `floaters` 层 —— **不参与 bloom**）。 */
+  readonly washContainer = new Container();
 
   private readonly gfx = new Graphics();
+  private readonly washGfx = new Graphics();
   private bandGradient: FillGradient | null = null;
   private readonly edgePath = new GraphicsPath();
 
   constructor() {
     this.container.addChild(this.gfx);
+    this.washContainer.addChild(this.washGfx);
   }
 
   prepare(): void {
@@ -49,16 +61,18 @@ export class FrenzyView {
 
   draw(fc: FrameContext): void {
     const g = this.gfx;
+    const wash = this.washGfx;
     g.clear();
+    wash.clear();
     if (!fc.frenzyActive) return;
     const { width, height, laneY } = fc.layout;
     const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 4.2);
 
-    // 整体暖金洗色。
-    setFill(g, `rgba(255,170,40,${0.05 + pulse * 0.035})`);
-    g.beginPath();
-    g.rect(0, 0, width, height);
-    g.fill();
+    // 整体暖金洗色（不参与 bloom —— 见文件头）。
+    setFill(wash, `rgba(255,170,40,${0.05 + pulse * 0.035})`);
+    wash.beginPath();
+    wash.rect(0, 0, width, height);
+    wash.fill();
 
     // 两轨金色能量带。
     const gradient = this.bandGradient;

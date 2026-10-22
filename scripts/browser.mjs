@@ -30,10 +30,15 @@ export function chromiumCandidates() {
  * @throws {Error} 所有候选都失败时抛出最后一个错误。
  */
 export async function launchChromium(chromium) {
+  // **默认无头**。需要真实 WebGL（截图 / bloom / 滤镜目检）时用：
+  //   HEADED=1 xvfb-run -a node tests/e2e/...
+  // 无头 Chromium 在这台机器上拿不到 WebGL，Pixi 会回退到 Canvas2D ——
+  // 功能测试仍然过，但 bloom 会被跳过，截图不能当视觉验收。
+  const headless = process.env.HEADED !== '1';
   let lastError = null;
   for (const executablePath of chromiumCandidates()) {
     try {
-      return await chromium.launch({ executablePath, args: CHROMIUM_ARGS });
+      return await chromium.launch({ executablePath, args: CHROMIUM_ARGS, headless });
     } catch (err) {
       lastError = err;
     }

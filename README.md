@@ -28,8 +28,7 @@ npm run dev
 ```
 
 Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新。
-用 `?renderer=pixi` 可以切到 PixiJS 战场渲染器（默认仍是 Canvas 2D，见
-[技术架构](#技术架构)）。
+战场由 PixiJS v8 渲染（唯一渲染路径，见[技术架构](#技术架构)）。
 
 ### 操作
 
@@ -57,7 +56,7 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 - **双生**：一对锁链相连、分别占据上下两轨的怪物。需要在同一个时间窗（**0.18 秒**）内两轨
   先后各击中一次：成功 **700 分**（两轨都打进暴击区 **1000 分**）；只破一只的话，另一只会自爆
   并扣 **20 血**。
-- **长按怪**：一种细长的怪物。头部进入判定区后按住对应半屏**起手**，持续按住 **3 秒**贯穿，
+- **长按怪**：一种细长的怪物。头部进入判定区后按住对应半屏**起手**，持续按住 **2 秒**贯穿，
   头部 / 按住满 1 秒 / 尾部各 **+200** 分。放弃或按住不足即告失败：**连击**清零、FEVER 中断，
   **不扣血**。
 
@@ -87,7 +86,8 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 
 `npm run verify` 分两步：先用静态检查确认产物自包含（无外部 `src`/`href`、无裸 `import`），
 再用 Playwright + Chromium 以 `file://` 打开产物，验证画布真的画出了东西、`localStorage`
-可读写、且没有发起任何外部网络请求。
+可读写、且没有发起任何外部网络请求。产物体积超过 **1,200 KB**（gzip **380 KB**）时
+会打印告警（不阻断构建），提示检查 Pixi / React 是否被整包引入。
 
 `npm run trace` 是**行为正确性**门禁，不是性能测量：旧版 `source.html` 的 harness 与新规则层
 喂同一种子、同一份事件流，逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
@@ -105,7 +105,7 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
      ▲ 事件
 表现层         particles / slashes / rings / floaters / shake，可变      60fps
      ▲ FrameView
-战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现      60fps
+战场层         BattlefieldRenderer 接口，PixiJS v8 唯一实现                 60fps
 ```
 
 - **规则层**（`src/game/`）：血量、分数、连击、FEVER、怪物生命周期与移动、生成与结算。
@@ -113,7 +113,7 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
 - **表现层**（`src/presentation/`）：粒子、刀光残影、冲击环、飘字、屏幕震动。
   可变对象逐帧原地更新，不进入 React 渲染路径。
 - **战场层**（`src/battlefield/`）：把战斗内容画出来的部分，抽象成 `BattlefieldRenderer` 接口。
-  目前有两套实现：Canvas 2D（**默认**）与 PixiJS v8（`?renderer=pixi`），两套同构、可做 A/B 对照。
+  唯一实现是 PixiJS v8（`src/battlefield/pixi/`），默认带 bloom / 色散 / 冲击波后处理。
 - **React DOM 层**（`src/app/`）：HUD、开始界面、暂停、结算、竖屏提示。
   只订阅规则层派生出的 HUD 快照，且只在相关数值变化时才通知 —— 不做 60fps 的 React 协调。
 
@@ -132,7 +132,7 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
 │   ├── app/             # 会话层与 React DOM 界面（HUD / 菜单 / 结算）
 │   ├── game/            # 规则层：纯函数，不碰 DOM 也不碰渲染器
 │   ├── presentation/    # 表现层：粒子 / 刀光 / 冲击环 / 飘字 / 震动
-│   ├── battlefield/     # 战场层：BattlefieldRenderer 接口（canvas2d / pixi）
+│   ├── battlefield/     # 战场层：BattlefieldRenderer 接口 + PixiJS v8 实现
 │   ├── input/           # 输入映射：指针 / 键盘 / 屏幕方向
 │   └── styles.css
 ├── tests/

@@ -19,10 +19,23 @@
  *      绝不静默跳过（票 01 要求：浏览器缺失必须让 CI 变红并留下可见痕迹）
  */
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gzipSync } from 'node:zlib';
+
+import { launchChromium } from './browser.mjs';
 
 const DIST = resolve(process.cwd(), 'dist', 'index.html');
+
+/**
+ * 产物体积告警线 —— **只告警，不失败**。
+ *
+ * 票 10 的要求是「上限告警」：单文件承诺不等于可以无限膨胀，但体积也随功能
+ * 正当增长，所以不设硬门禁。当前基线约 1,068 KB / gzip 318 KB；
+ * 留约 12% / 19% 余量，越过就提示回头检查是不是 Pixi / React 被整包引入。
+ */
+const SIZE_WARN_KB = 1200;
+const GZIP_WARN_KB = 380;
 
 const args = process.argv.slice(2);
 
@@ -64,6 +77,20 @@ function staticCheck() {
 
   const html = readFileSync(DIST, 'utf8');
   const size = statSync(DIST).size;
+  const gzipSize = gzipSync(html).length;
+
+  // 体积告警（票 10）：单文件从 729 KB 长到 1 MB+ 是 Pixi 的代价，但继续膨胀
+  // 往往意味着 tree-shaking 失效，先提示再看。
+  if (size > SIZE_WARN_KB * 1024) {
+    warn.push(
+      `产物体积 ${(size / 1024).toFixed(1)} KB 超过告警线 ${SIZE_WARN_KB} KB（gzip ${(gzipSize / 1024).toFixed(1)} KB）—— 先检查 pixi.js / react-dom 是否被整包引入`,
+    );
+  }
+  if (gzipSize > GZIP_WARN_KB * 1024) {
+    warn.push(
+      `产物 gzip ${(gzipSize / 1024).toFixed(1)} KB 超过告警线 ${GZIP_WARN_KB} KB —— 同上，先查 tree-shaking`,
+    );
+  }
 
   // 外部资源引用：<script src="..."> / <link href="..."> / <img src="...">
   const externalRefs = [
@@ -93,7 +120,7 @@ function staticCheck() {
   if (inlineScripts === 0) fail.push('产物里没有任何脚本，产物可能没构建成功');
 
   console.log(
-    `产物 ${(size / 1024).toFixed(1)} KB，内联脚本 ${inlineScripts} 个，` +
+    `产物 ${(size / 1024).toFixed(1)} KB（gzip ${(gzipSize / 1024).toFixed(1)} KB），内联脚本 ${inlineScripts} 个，` +
       `外链资源 ${nonDataRefs.length} 个，裸 import ${bareImports.length} 处`,
   );
 
@@ -107,26 +134,12 @@ async function browserCheck() {
 
   const { chromium } = await import('playwright');
 
-  // 浏览器回退链：Playwright 自带 → 本机缓存 → 系统 chromium
-  const candidates = [
-    undefined,
-    join(process.env.HOME ?? '', '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome'),
-    '/usr/bin/chromium-browser',
-    '/snap/bin/chromium',
-  ];
-
   let browser = null;
   let launchError = null;
-  for (const executablePath of candidates) {
-    try {
-      browser = await chromium.launch({
-        executablePath,
-        args: ['--enable-unsafe-swiftshader', '--no-sandbox'],
-      });
-      break;
-    } catch (err) {
-      launchError = err;
-    }
+  try {
+    browser = await launchChromium(chromium);
+  } catch (err) {
+    launchError = err;
   }
   if (!browser) {
     return { unavailable: true, reason: launchError, fail, warn };
@@ -154,26 +167,11 @@ async function browserCheck() {
 
     const result = await page.evaluate(() => {
       const canvas = globalThis.document.querySelector('.canvas-host canvas');
-      let drawn = false;
       let canvasWidth = 0;
       let canvasHeight = 0;
       if (canvas instanceof globalThis.HTMLCanvasElement) {
         canvasWidth = canvas.width;
         canvasHeight = canvas.height;
-        const scratch = globalThis.document.createElement('canvas');
-        scratch.width = canvas.width;
-        scratch.height = canvas.height;
-        const sctx = scratch.getContext('2d');
-        if (sctx) {
-          sctx.drawImage(canvas, 0, 0);
-          const { data } = sctx.getImageData(0, 0, scratch.width, scratch.height);
-          for (let i = 3; i < data.length; i += 4) {
-            if ((data[i] ?? 0) > 0) {
-              drawn = true;
-              break;
-            }
-          }
-        }
       }
 
       let localStorageOk = false;
@@ -186,15 +184,86 @@ async function browserCheck() {
         // localStorage 不可用（Safari file://）—— 保持 false
       }
 
-      return { drawn, canvasWidth, canvasHeight, localStorage: localStorageOk, errors: [] };
+      return { canvasWidth, canvasHeight, localStorage: localStorageOk };
     });
+
+    /**
+     * 画面确实画出来了 —— **用截图差分，不读 WebGL 缓冲区**。
+     *
+     * WebGL 画布默认 `preserveDrawingBuffer: false`，`drawImage(canvas)` /
+     * `getImageData` 读到的是空 buffer（票 08 要修的假阴性）。这里改成：
+     * 先截画布区域，再把画布隐藏后截同一区域，比较像素差异。
+     * 两帧之间只有画布内容被移除 —— 有差异就证明渲染器真的画了东西，
+     * 对 Canvas 2D / WebGL 都成立。
+     */
+    const canvasBox = await page.locator('.canvas-host canvas').boundingBox();
+    if (!canvasBox || canvasBox.width < 2 || canvasBox.height < 2) {
+      fail.push('找不到有效的画布区域');
+    } else {
+      const clip = {
+        x: Math.round(canvasBox.x),
+        y: Math.round(canvasBox.y),
+        width: Math.round(canvasBox.width),
+        height: Math.round(canvasBox.height),
+      };
+      const withCanvas = await page.screenshot({ clip });
+      await page.evaluate(() => {
+        const canvas = globalThis.document.querySelector('.canvas-host canvas');
+        if (canvas instanceof globalThis.HTMLElement) canvas.style.visibility = 'hidden';
+      });
+      await page.waitForTimeout(120);
+      const withoutCanvas = await page.screenshot({ clip });
+      await page.evaluate(() => {
+        const canvas = globalThis.document.querySelector('.canvas-host canvas');
+        if (canvas instanceof globalThis.HTMLElement) canvas.style.visibility = '';
+      });
+
+      const diffPixels = await page.evaluate(
+        async ([a, b]) => {
+          const load = async (base64) => {
+            const img = new globalThis.Image();
+            img.src = 'data:image/png;base64,' + base64;
+            await img.decode();
+            return img;
+          };
+          const [imgA, imgB] = await Promise.all([load(a), load(b)]);
+          if (imgA.width !== imgB.width || imgA.height !== imgB.height) return -1;
+          const cv = globalThis.document.createElement('canvas');
+          cv.width = imgA.width;
+          cv.height = imgA.height;
+          const ctx = cv.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return -1;
+          ctx.drawImage(imgA, 0, 0);
+          const da = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          ctx.clearRect(0, 0, cv.width, cv.height);
+          ctx.drawImage(imgB, 0, 0);
+          const db = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          let diff = 0;
+          for (let i = 0; i < da.length; i += 4) {
+            if (
+              Math.abs((da[i] ?? 0) - (db[i] ?? 0)) > 2 ||
+              Math.abs((da[i + 1] ?? 0) - (db[i + 1] ?? 0)) > 2 ||
+              Math.abs((da[i + 2] ?? 0) - (db[i + 2] ?? 0)) > 2
+            ) {
+              diff++;
+            }
+          }
+          return diff;
+        },
+        [withCanvas.toString('base64'), withoutCanvas.toString('base64')],
+      );
+
+      const drawn = diffPixels > 100;
+      if (!drawn) fail.push('画布读取不到已绘制内容');
+      console.log(`画布区域 ${clip.width}×${clip.height}，与隐藏画布后的差异 ${diffPixels} 像素`);
+      result.drawn = drawn;
+    }
 
     // file:// 打开时不应有任何非 file:// 的请求
     const remote = requests.filter((u) => !u.startsWith('file://') && !u.startsWith('data:'));
     if (remote.length > 0) fail.push(`产物发起了外部请求：${remote.join(', ')}`);
 
     if (!result.localStorage) fail.push('localStorage 不可读写');
-    if (!result.drawn) fail.push('画布读取不到已绘制内容');
     if (pageErrors.length > 0) fail.push(`页面异常：${pageErrors.join(' | ')}`);
     if (consoleErrors.length > 0) warn.push(`控制台错误：${consoleErrors.join(' | ')}`);
 
@@ -207,8 +276,6 @@ async function browserCheck() {
     const shot = resolve(process.cwd(), 'dist', 'verify-screenshot.png');
     await page.screenshot({ path: shot });
     console.log(`截图 → ${shot}`);
-
-    for (const e of result.errors) fail.push(`运行时错误：${e}`);
   } catch (err) {
     fail.push(`浏览器检查过程出错：${String(err)}`);
   } finally {

@@ -6,9 +6,12 @@
 
 ## 一句话现状
 
-**票 01–07 已完成并合入集成分支；票 08（切默认 Pixi）、09（画面打磨）尚未开始；票 10（交付）完成了文档前半，剩余删 `source.html` 与最终验收。**
+**票 01–10 全部完成（11–17 的实机手感调整也已并入）；只剩用户真机验收 60fps 与长按手感。**
 
-本次交接只做「已完成部分的收尾」：修掉票 07 数字滚动引入的 e2e 回归、修正过期文档、把 CI 触发接到集成分支，并留下这份说明。**没有启动 08/09/10。**
+票 08 已把默认渲染路径切到 Pixi、删除 Canvas 2D 实现与 `?renderer=` 分支；
+票 09 完成特效调参与可读性回归；票 10 完成体积告警、文档同步与最终验收。
+`source.html` 经裁决保留为**只读参照物**（trace / 旧版 e2e 的生成源），不参与构建。
+移动端 60fps 仍需用户实机确认。
 
 ## 分支与提交
 
@@ -16,7 +19,7 @@
 - `main` 仍停在初始提交 `d2958e2`（旧版 `source.html` 的存档点），重构成果尚未合并到 `main`。
 - 工作方式：每票从集成分支切一个 worktree 分支，完成后 merge 回 `feat/refactor-v2`。
   本机残留的 worktree 在 `/home/eafen405/refactor-wt/`，属于本地资产，**不在 GitHub 上**，接手机器不需要它们。
-- 票的完成说明在各票的 `## Answer` 段；08/09/10 还没有 Answer。
+- 票的完成说明在各票的 `## Answer` 段；01–17 均已有 Answer。
 
 ## 票状态
 
@@ -29,12 +32,15 @@
 | 05 | React UI 层（HUD / 菜单 / 结算 / 竖屏） | ✅ resolved |
 | 06 | PixiJS v8 渲染器（12 个 view） | ✅ resolved |
 | 07 | bloom + 条件滤镜 + 战斗特效 + UI 动效 | ✅ resolved |
-| 08 | 收口：默认切 Pixi，删 Canvas 2D | ⏸ 未开始（`ready-for-agent`） |
-| 09 | 画面打磨：按验收标准调特效 | ⏸ 未开始（`ready-for-agent`） |
-| 10 | 交付：删 `source.html`、最终验收 | ◐ 文档前半已完成，其余待做 |
+| 08 | 收口：默认切 Pixi，删 Canvas 2D | ✅ resolved（实机 60fps 待用户确认） |
+| 09 | 画面打磨：按验收标准调特效 | ✅ resolved（实机观感 / 60fps 待确认） |
+| 10 | 交付：`source.html` 裁决、最终验收 | ✅ resolved（`source.html` 按裁决保留为只读参照） |
+| 11–17 | 实机手感调整（长按抢输入 / 角色 / 地面 / 重力 / 浏览器菜单 / 2 秒 / 判定框） | ✅ resolved |
 
-票 10 已完成的部分：README 改写、CHANGELOG、GLOSSARY / ADR 现状核对（提交 `bb2ca5c`，合并于 `43386f2`）。
-票 10 剩余：产物体积上限告警、删除 `source.html`、最终验收。
+票 09 的完成说明见 [issues/09-visual-polish.md](issues/09-visual-polish.md)；
+票 10 的完成说明见 [issues/10-delivery-single-file.md](issues/10-delivery-single-file.md)。
+`source.html` 未删除：它是 golden trace 的现场生成源与旧版 e2e 的对照对象，
+删除需要先冻结两份 114 KB 的 harness，成本高于收益。细节见票 10 Answer。
 
 ## 本次收口改了什么
 
@@ -51,59 +57,48 @@
 - `.github/workflows/ci.yml`：`push` 触发加上 `feat/**` —— 否则集成分支 push 不跑 CI，只能等 PR。
 - 全仓 Prettier 对齐（票 07 合并后遗留的格式漂移）。
 
-## 验证基线（本机，2026-10-21）
+## 验证基线（本机，2026-10-21，票 10 收口后）
 
 | 命令 | 结果 |
 | --- | --- |
 | `npm run typecheck` | ✅ |
 | `npm run lint` | ✅ |
-| `npm test` | ✅ 31 个文件 / 355 个测试 |
-| `npm run build` | ✅ `dist/index.html` **1,084.42 KB**（gzip 326.69 KB） |
-| `npm run verify` | ✅ 静态 + `file://` 浏览器检查；0 个外部请求 |
-| `npm run trace` | ✅ Golden trace 门禁通过（模式 A / B′ 逐帧一致，模式 C 分叉归因 D1） |
+| `npm test` | ✅ 30 个文件 / 360 个测试 |
+| `npm run build` | ✅ `dist/index.html` **1,068.16 kB**（gzip 321.92 kB） |
+| `npm run verify` | ✅ 静态通过；截图差分 195,173 像素；0 个外部请求；raw 1,043.1 KiB / gzip 311.5 KiB |
+| `npm run trace` | ✅ Golden trace 门禁通过（模式 A / B′ 逐帧一致，模式 C 分叉归因 D1；零输入场景一致） |
 | `npm run test:e2e` | ✅ 六个脚本全过（check-playable / flow-8-steps / input-desktop / portrait-progress / hud-stats / compare-legacy） |
 | `npm run format:check` | ✅ |
-| GitHub Actions（push 后） | ✅ 全绿 —— [run 39605253566](https://github.com/eafen405/dashing-game/actions/runs/39605253566) |
 
 `test:e2e` 跑的是 `dist/`，**必须先 `npm run build`**；`hud-stats` 单脚本约 70 秒。
+`verify` 的体积告警线为 raw 1,200 KB / gzip 380 KB（只告警不阻断）。
 
 ## 接下来怎么做
 
-顺序是 **08 → 09 → 10**，依赖关系见各票的 `Blocked by`。
+**没有待实现的票了。** 剩余工作只有用户实机验收：
 
-### 票 08 —— 切默认 Pixi
+1. 用手机打开 `dist/index.html`（或交付链接），确认横屏 60fps、bloom / FEVER 观感可接受。
+2. 长按怪按住 2 秒，确认浏览器不再弹「标记广告」/ 选词菜单，贯穿手感正常。
+3. 若真机掉帧，优先按 ADR-0004 的「结构性优化」排查：bloom resolution / DPR、
+   每帧分配、滤镜实例是否被重建；不要加性能基准循环。
 
-1. **先修一个假阴性**：`scripts/verify-single-file.mjs` 的浏览器检查用
-   `drawImage(canvas) → getImageData` 判断「画面画出来了」。WebGL 画布默认
-   `preserveDrawingBuffer: false`，这样读到的是空 buffer —— 一旦默认渲染器切成 Pixi，
-   `verify` 会误报「未绘制」。建议改用 `page.screenshot()` 统计像素（对 Canvas 2D / WebGL 都成立），
-   而不是给 Pixi 开 `preserveDrawingBuffer`（每帧多一次显存拷贝）。
-2. `src/App.tsx` 的默认 `renderer` 切成 `pixi`，删除 `?renderer=canvas2d` 分支与
-   `src/battlefield/canvas2d/`；`BattlefieldRenderer` 接口保留。
-3. DPR：**保持上限 2**（与旧版一致）。放宽到 3 的收益未经移动端实机验证，bloom 又是像素成本大户，
-   按 ADR-0004 不做未经验证的改动；在 CHANGELOG 记一句「评估过 3，未采纳」。
-4. 同步更新：README（默认渲染器）、ADR-0002 的「现状」段、CHANGELOG、e2e 脚本里冗余的
-   `?renderer=pixi`（`fx-moments` 还要跟旧版对照，旧版不带这个参数）。
-5. 验收：单一渲染路径、`dist/` 体积下降、`verify` / `trace` / e2e 全绿；移动端 60fps 由用户实机确认。
-
-### 票 09 —— 画面打磨
-
-票 07 已经把 bloom / RGBSplit / Shockwave / 差异化粒子 / 刀光余晖 / 冲击环分档 / 三档震动 / FEVER 火花落地，09 主要是**按四条验收标准调参并出并排截图**。这一票天然需要用户参与实机验收（性能与观感）。
-
-### 票 10 —— 交付
-
-剩余两件事，**动手前先裁决 `source.html` 的去留**：
-
-- `scripts/legacy/patch-legacy.mjs` 在 `npm run trace` 时会读 `source.html` 现场生成
-  `legacy-harness-*.html`（这些生成物被 gitignore）。
-- `tests/e2e/compare-legacy.mjs`、`tests/e2e/fx-moments.mjs` 也直接打开 `source.html` 做旧版对照。
-
-所以「删除 `source.html`」与「trace / e2e 继续可跑」目前是冲突的。两条路选一条：
-保留它作为只读参照物；或者把 legacy harness 固化成可提交的基线、并改写对照脚本的数据源，再删。
+票 08 / 09 / 10 的其余验收已在本机闭环，详见各票 `## Answer`。
+`source.html` 保留为只读参照物 —— 不要在没有冻结 harness 的前提下删除它。
 
 ## 已知陷阱
 
-- **默认渲染器仍是 Canvas 2D**。所有要验 Pixi 的 e2e 必须显式带 `?renderer=pixi`（如 `bloom-ab.mjs`、`fx-moments.mjs`）。
+- **Pixi 的 ticker 已关（`autoStart: false`）**。帧循环由 `GameSession` 驱动，
+  出帧在 `PixiRenderer.render()` 末尾显式调用 `app.renderer.render(app.stage)`。
+  不要在 `mount()` 里重新打开 ticker —— 会与 GameSession 重复渲染，并可能在
+  `resize()` 重建渐变后、下一帧 `draw()` 前抢先渲染到已销毁的纹理。
+- **`verify` 用截图差分判断画面**，不再读 WebGL 缓冲区（`preserveDrawingBuffer: false`）。
+- **无头 Chromium 在这台机器上没有 WebGL**，Pixi 会回退 Canvas2D，bloom / 色散 / 冲击波被跳过。
+  需要真实 WebGL 目检时用 `HEADED=1 xvfb-run -a node tests/e2e/fx-acceptance.mjs`
+  （或 `fx-fever-readability` / `bloom-ab` / `fx-moments`）。
+  SwiftShader 是软件光栅，FPS 挂件只有 11–13，**不能作为 60fps 证据**。
+- **`fx-acceptance.mjs` 是手动的视觉验收脚本**，不在 `test:e2e` 里：它通过 `?debug` 定点注入
+  四组效果，产出 `dist/e2e-shots/09/acceptance-09.png`。`npm run build` 会清空 `dist/`，
+  所以每次重新构建之后都要再跑一次。
 - **分数有 0.45 秒滚动动画**。断言 HUD 数值请读 `#scoreText[data-value]`（`readHud()` 已处理），不要读 `textContent`。
 - **`trace` 会重新生成** `scripts/legacy/legacy-harness-*.html`，依赖仓库根的 `source.html`；不要把它当成可随意删除的临时文件。
 - **e2e 依赖构建产物**：改了 `src/` 先 `npm run build`，否则跑的是旧 `dist/`。

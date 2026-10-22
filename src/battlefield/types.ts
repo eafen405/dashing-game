@@ -10,7 +10,7 @@
  *      ▲ 事件
  * 表现层         particles / slashes / rings / floaters / shake    60fps，可变
  *      ▲ FrameView
- * 战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现   60fps
+ * 战场层         BattlefieldRenderer 接口，PixiJS v8 实现   60fps
  * ```
  *
  * 规则层的类型（`Layout` / `Monster` / `Phase` / `Lane`）从 `../../game` 引入 ——
@@ -222,7 +222,7 @@ export interface FrameView {
 /**
  * 战场渲染器。
  *
- * 实现方：Canvas 2D（`src/battlefield/canvas2d/`）与 PixiJS v8（`src/battlefield/pixi/`）。
+ * 当前实现：PixiJS v8（`src/battlefield/pixi/`）。
  * 接口保留是有意的 —— 它是有效的抽象边界，未来换渲染器不必改规则层与表现层。
  */
 export interface BattlefieldRenderer {

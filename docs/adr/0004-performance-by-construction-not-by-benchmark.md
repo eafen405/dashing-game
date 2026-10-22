@@ -23,8 +23,8 @@
 
 **现状**（2026-10）：以上四个结构性热点均已消除 ——
 
-- ① `monsters.indexOf(p)` 的 O(n²) → 渲染器每帧预扫出"链主 = 上轨那只"，O(1) 判定（`battlefield/canvas2d/twin.ts`、`battlefield/pixi/twin.ts`）。
-- ② 每轨一次的 `monsters.some` 全量扫描 → 一次遍历同时算出两轨的"有长按怪"标志（`battlefield/canvas2d/renderer.ts`、`battlefield/pixi/PixiRenderer.ts`）。
+- ① `monsters.indexOf(p)` 的 O(n²) → 渲染器每帧预扫出"链主 = 上轨那只"，O(1) 判定（`battlefield/pixi/twin.ts`）。
+- ② 每轨一次的 `monsters.some` 全量扫描 → 一次遍历同时算出两轨的"有长按怪"标志（`battlefield/pixi/PixiRenderer.ts`）。
 - ③ 7 处 `filter` 重建 `monsters` 数组 → 收敛为**每 tick 一处**（`game/rules/tick.ts`），且只回收已离场的怪物。
 - ④ 每帧 `syncHUD()` → 事件驱动的 `hudStore` 订阅（`app/hud/hudStore.ts`）。
 

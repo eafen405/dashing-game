@@ -1,7 +1,6 @@
 /**
- * PixiJS v8 战场渲染器 —— `BattlefieldRenderer` 接口的第二个实现。
+ * PixiJS v8 战场渲染器 —— `BattlefieldRenderer` 接口的当前唯一实现。
  *
- * 与 Canvas 2D 版（`src/battlefield/canvas2d/renderer.ts`）**同构**：
  * 规则层只读、表现层只读、渲染层不重算任何几何。
  *
  * ## 场景结构
@@ -42,6 +41,7 @@ import { DefenseLineView } from './defense-line';
 import { ScreenFilterController } from './filters';
 import { FloaterView } from './floater';
 import { FrenzyView } from './frenzy';
+import { GroundView } from './ground';
 import { HitZoneView } from './hit-zone';
 import { HoldMonsterView } from './hold-monster';
 import { LAYER_ORDER } from './layers';
@@ -95,12 +95,13 @@ export class PixiRenderer implements BattlefieldRenderer {
   /**
    * 怪物层：**普通怪与长按怪共用一个 `Graphics`**，
    * 才能保持旧代码的交错 z 序（旧 `drawMonsters` 在同一个循环里按 `m.long` 分派，
-   * 拆成两个容器会改变 z 序 —— 见 `canvas2d/renderer.ts` 的注释）。
+   * 拆成两个容器会改变 z 序）。
    */
   private readonly monsterGfx = new Graphics();
 
   // ── 12 个 view（每个持有自己的 Graphics / 容器） ──────────────
   private readonly background = new BackgroundView();
+  private readonly ground = new GroundView();
   private readonly rails = new RailsView();
   private readonly defenseLine = new DefenseLineView();
   private readonly hitZone = new HitZoneView();
@@ -124,6 +125,10 @@ export class PixiRenderer implements BattlefieldRenderer {
       // **必须显式锁 webgl**：Pixi v8 默认尝试 WebGPU，而 WebGPU 在 `file://`
       // （非安全上下文）下会黑屏。Phase 0 已实测 `preference: 'webgl'` 在 `file://` 下正常。
       preference: 'webgl',
+      // 帧循环由 `GameSession` 统一驱动（`renderer.render()`）——关掉 Pixi 自带的
+      // ticker，否则同一帧会被重复渲染一次；更重要的是，独立 ticker 可能在
+      // `resize()` 重建渐变之后、下一帧 `draw()` 之前抢先渲染，读到已销毁的纹理。
+      autoStart: false,
       autoDensity: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       // 旧版画布是**透明**的 —— 背景氛围由 DOM 的 `#tint` / `#vignette` 提供
@@ -147,6 +152,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     // 图层容器（顺序由 `LAYER_ORDER` 决定 —— 自底向上）。
     const layers = {
       background: new Container(),
+      ground: new Container(),
       rails: new Container(),
       defense: new Container(),
       entities: new Container(),
@@ -159,6 +165,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     }
 
     layers.background.addChild(this.background.container);
+    layers.ground.addChild(this.ground.container);
     layers.rails.addChild(this.rails.container);
     layers.defense.addChild(this.defenseLine.container);
     // `entities` 内部复现旧代码的遮挡关系：
@@ -176,11 +183,15 @@ export class PixiRenderer implements BattlefieldRenderer {
     layers.glow.addChild(this.hitZone.haloGfx);
     layers.glow.addChild(this.player.haloGfx);
     layers.glow.addChild(this.player.platformGfx);
-    layers.glow.addChild(this.frenzy.container);
     layers.glow.addChild(this.slash.container);
     layers.glow.addChild(this.ring.container);
     layers.glow.addChild(this.particle.container);
+    // FEVER 能量带压在最上面（旧版 `drawFrenzyOverlay` 就是最后画）。
+    layers.glow.addChild(this.frenzy.container);
 
+    // 全场洗色不进 `glow` 层 —— 它铺满屏幕，过 bloom 会变成一片黄雾（票 09）。
+    // `floaters` 层没有 bloom，洗色叠在辉光之上、飘分文字之下。
+    layers.floaters.addChild(this.frenzy.washContainer);
     layers.floaters.addChild(this.floater.container);
 
     // ── 滤镜（票 07）────────────────────────────────────────
@@ -200,6 +211,7 @@ export class PixiRenderer implements BattlefieldRenderer {
 
     // 视图的 DOM 依赖（文本、粒子纹理）在这里才创建 —— 构造函数保持无 DOM。
     this.background.prepare();
+    this.ground.prepare();
     this.rails.prepare();
     this.defenseLine.prepare();
     this.hitZone.prepare();
@@ -216,7 +228,6 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.app = app;
     this.root = root;
     this.layers = layers;
-
     // 首帧尺寸：宿主还没量过时用 0，等 `resize()` / 首帧 `render()` 修正。
     this.appliedWidth = 0;
     this.appliedHeight = 0;
@@ -249,6 +260,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     // 再释放各 view **自己持有**、不在渲染器纹理池里的资源
     // （`FillGradient` 的渐变纹理是独立创建的，`app.destroy` 不会代劳）。
     this.background.destroy();
+    this.ground.destroy();
     this.rails.destroy();
     this.defenseLine.destroy();
     this.hitZone.destroy();
@@ -291,6 +303,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     }
 
     this.background.draw(this.fc);
+    this.ground.draw(this.fc);
     this.rails.draw(this.fc);
     this.defenseLine.draw(this.fc);
     this.hitZone.draw(this.fc);
@@ -305,6 +318,10 @@ export class PixiRenderer implements BattlefieldRenderer {
 
     // 全屏滤镜参数（实例不重建，只改参数）。
     this.applyScreenFx(frame);
+
+    // **显式出帧**：Pixi 的 ticker 已关（`autoStart: false`），
+    // 场景图更新完必须自己调用一次 renderer，否则画面永远停在上一帧。
+    this.app?.renderer.render(this.app.stage);
   }
 
   /** 把表现层的 `ScreenFx` 映射到滤镜参数上（实例不重建，只改参数）。 */
@@ -334,9 +351,10 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.rebuildStaticLayers(layout);
   }
 
-  /** 静态图层只在尺寸变化时重建（星空、轨道、防线）。 */
+  /** 静态图层只在尺寸变化时重建（星空、地面、轨道、防线）。 */
   private rebuildStaticLayers(layout: Layout): void {
     this.background.resize(layout);
+    this.ground.resize(layout);
     this.rails.resize(layout);
     this.defenseLine.resize();
     // 票 07：`glow` 层挂 bloom —— 滤镜区域必须显式给出，
@@ -360,17 +378,23 @@ export class PixiRenderer implements BattlefieldRenderer {
     const fc = this.fc;
     fc.layout = layout;
     fc.vt = frame.visualTime;
+    fc.phase = frame.phase;
+    fc.now = frame.now;
+    fc.scrollSpeed = frame.scrollSpeed;
     fc.frenzyActive = frame.frenzyActive;
     fc.hp = frame.hp;
     fc.playerFlash = frame.playerFlash;
     fc.attackT = frame.attackT;
     fc.attackLane = frame.attackLane;
+    fc.playerLane = frame.playerLane;
+    fc.playerAirT = frame.playerAirT;
+    fc.pairSmash = frame.pairSmash;
     fc.monsters = frame.monsters;
     fc.effects = frame.effects;
   }
 
   /**
-   * 每帧一次的怪物预扫（与 Canvas 2D 版同构，零分配）。
+   * 每帧一次的怪物预扫（零分配）。
    *
    * - 每轨的 `some` 扫描 → 一次遍历同时算出两轨的「有长按怪」标志。
    * - O(n²) 的 `monsters.indexOf(p)` → id → 怪物的 Map 查表。
@@ -381,13 +405,18 @@ export class PixiRenderer implements BattlefieldRenderer {
 
     fc.longInLane.top = false;
     fc.longInLane.bottom = false;
+    fc.holdMonster = null;
     fc.twinLinkCount = 0;
 
     this.monsterIndex.clear();
     for (const m of monsters) this.monsterIndex.set(m.id, m);
 
     for (const m of monsters) {
-      if (m.kind === 'hold' && !m.removed) fc.longInLane[m.lane] = true;
+      if (m.kind === 'hold' && !m.removed) {
+        fc.longInLane[m.lane] = true;
+        // 正在被按住的那只（同一时刻最多一只）驱动角色的悬浮连击动画
+        if (m.anchored && !m.escaped) fc.holdMonster = m;
+      }
     }
 
     for (const m of monsters) {

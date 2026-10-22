@@ -4,8 +4,9 @@
  * 逐字搬自 `source.html:1511-1551`（`drawRails`）。
  *
  * **静态内容不每帧重建**：两条轨道的渐变（旧代码每帧 `createLinearGradient` 两次，
- * 一共四次）缓存在这里，只在 `resize()` 或 **FEVER 开关**时重建 ——
+ * 一共四次）缓存在这里，只在 **FEVER 开关**时重建 ——
  * FEVER 会换轨道配色（`laneColorOf`），此时渐变必须跟着换。
+ * 渐变坐标是局部归一化的，与画布像素尺寸无关，resize 不需要重建。
  * 流动刻度是动画，仍每帧画。
  *
  * **实现说明**：
@@ -55,10 +56,9 @@ export class RailsView {
     this.buildGradients();
   }
 
-  /** 尺寸变化时丢弃渐变（下次绘制重建）。 */
+  /** 尺寸变化只需记录宽度 —— 渐变是局部归一化坐标，与像素尺寸无关，无需重建。 */
   resize(layout: Layout): void {
     this.w = layout.width;
-    this.invalidate();
   }
 
   draw(fc: FrameContext): void {

@@ -52,8 +52,7 @@ export const FRENZY_BOTTOM = FRENZY_LANE.bottom;
 /**
  * 某条轨道当前的配色。
  *
- * FEVER 时两轨仍保留区分度（上轨亮金 / 下轨琥珀金），与 Canvas 2D 版口径一致
- * （`src/battlefield/canvas2d/lane-color.ts`）。
+ * FEVER 时两轨仍保留区分度（上轨亮金 / 下轨琥珀金）。
  */
 export function laneColorOf(lane: Lane, frenzyActive: boolean): string {
   return frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
@@ -68,6 +67,11 @@ export function laneColorOf(lane: Lane, frenzyActive: boolean): string {
  * alpha **不做格式化**（`0.16 + pulse*0.09` 会原样拼进字符串）——
  * 改了会让颜色与旧版对不上。
  *
+ * **例外**：小于 `0.0001` 的 alpha 一律归零。渲染层有些 alpha 是
+ * `1 - t/life` 的残值（可能小到 `7e-16`），而 Pixi 的 `Color` 解析器
+ * **不接受科学计数法**，会抛 `Unable to convert color rgba(...)`。归零与
+ * 「寿命已经结束」在视觉上完全等价。
+ *
  * Pixi 的 `Color.setValue` 认识 CSS 的 `rgba(r,g,b,a)` 写法，所以本函数在
  * Pixi 版里同样有效（`Graphics.fill` / `stroke` / `TextStyle.fill` 都吃它）。
  */
@@ -76,5 +80,6 @@ export function hexA(hex: string, a: number): string {
   const r = (n >> 16) & 255,
     g = (n >> 8) & 255,
     b = n & 255;
-  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  const alpha = a < 0.0001 ? 0 : a;
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
 }

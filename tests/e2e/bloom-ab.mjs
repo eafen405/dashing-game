@@ -127,8 +127,8 @@ try {
     return path;
   }
 
-  const onPath = await capture('?renderer=pixi&debug', 'on');
-  const offPath = await capture('?renderer=pixi&debug&nobloom=1', 'off');
+  const onPath = await capture('?debug', 'on');
+  const offPath = await capture('?debug&nobloom=1', 'off');
 
   // 逐像素统计：把 PNG 以 data URL 喂给页面（data URL 不会污染画布，
   // 而 file:// 互相读会污染 → getImageData 直接抛 SecurityError）。

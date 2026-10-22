@@ -5,10 +5,11 @@
  * （`source.html:1466-1477`）：
  *
  * ```
- * background → rails → defense → entities → glow → floaters
+ * background → ground → rails → defense → entities → glow → floaters
  * ```
  *
  * - `background` —— 星空 + 中线
+ * - `ground` —— 下轨脚下的大地（土层 / 碎石 / 草簇）
  * - `rails` —— 轨道底光带 / 主线 / 流动刻度
  * - `defense` —— 角色身前的防线
  * - `entities` —— 判定区 / 角色 / 双生锁链 / 怪物 / 刀光 / 环 / 粒子
@@ -26,6 +27,7 @@
 /** 图层名（自底向上）。 */
 export const LAYER_ORDER = [
   'background',
+  'ground',
   'rails',
   'defense',
   'entities',

@@ -94,7 +94,7 @@ const browser = await launchBrowser();
 try {
   const { page } = await openApp(browser, {
     viewport: { width: 1280, height: 720 },
-    query: '?renderer=pixi&debug',
+    query: '?debug',
   });
   await page.locator('#startScreen h2').click();
   await page.addStyleTag({ content: '.overlay{display:none !important}' });

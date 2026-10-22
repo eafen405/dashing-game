@@ -19,8 +19,7 @@ export function toggleFullscreen(): void {
       void request({ navigationUI: 'hide' })
         .then(() => {
           const orientation = screen.orientation as unknown as
-            | { lock?: (mode: string) => Promise<void> }
-            | undefined;
+            { lock?: (mode: string) => Promise<void> } | undefined;
           void orientation?.lock?.('landscape').catch(() => {
             // 部分浏览器不支持锁定方向 —— 忽略
           });

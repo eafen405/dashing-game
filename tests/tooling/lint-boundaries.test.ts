@@ -102,7 +102,7 @@ describe('规则层 lint 边界', () => {
   it('拦截规则层跨层相对导入（app / battlefield / presentation / input）', async () => {
     for (const source of [
       '../../app/best',
-      '../../battlefield/canvas2d',
+      '../../battlefield/pixi',
       '../../presentation/effects',
       '../../input/pointer',
     ]) {
