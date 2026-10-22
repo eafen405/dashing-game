@@ -1,8 +1,9 @@
 # 双轨打怪 重构规格
 
-> **交接状态（2026-10-22）**：票 01–17 的功能全部完成，但 `cf3051b` 的 CI 是红的，
-> 且成果尚未合并到 `main`。剩余工作是收口票 **18–22**：修 CI 帧率断言 → 视觉验收进 CI →
-> 修过期脚本 → 合 `main` → 真机签字。进度、验证基线与已知陷阱见 [handoff.md](handoff.md)。
+> **交接状态（2026-10-22）**：票 01–21 的工作全部完成 —— 票 18–20 的门禁收口已合进
+> `feat/refactor-v2`，票 21 的 CHANGELOG / README 收口也已完成，成果**已备好待合并到 `main`**
+> （开 PR / 合并由编排者执行）。剩余工作只有票 **22**：真机签字（60fps / 长按手感 /
+> 浏览器兼容）—— 这一票必须人做。进度、验证基线与已知陷阱见 [handoff.md](handoff.md)。
 
 ## 背景
 
@@ -56,7 +57,7 @@ React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore�
      ▲ 事件
 表现层         particles / slashes / rings / floaters / shake，可变      60fps
      ▲ FrameView
-战场层         BattlefieldRenderer 接口，canvas2d/ 与 pixi/ 两套实现      60fps
+战场层         BattlefieldRenderer 接口，PixiJS v8 唯一实现                  60fps
 ```
 
 ## 目录结构
@@ -67,7 +68,7 @@ src/
 ├── app/            App · GameSession · screens/ · hud/
 ├── game/           规则层：constants · types · state · rng · layout · reducer · rules/
 ├── presentation/   表现层：effects · shake · hudStore
-├── battlefield/    types（接口）· palette · canvas2d/ · pixi/{views,filters,layers}
+├── battlefield/    types（接口）· palette · pixi/{views,filters,layers}
 ├── input/          pointer · keyboard · orientation
 └── styles/
 ```
@@ -126,6 +127,9 @@ src/
 | **D12** | 长按贯穿时间 3s → 2s | 记账（用户要求） | 见票 16；harness 同步改为 2s，trace 仍逐帧一致 | 长按完成 / 失败 / 漏过覆盖计数 |
 | **D13** | 判定区移到棒尖攻击范围 | 记账（用户要求） | 见票 17；`hitX = playerX + playerR * CLUB_REACH_R`，去掉飞行刀光 | `layout.test.ts` + 实机截图 |
 | **D14** | 手机长按不再弹菜单 / 标记广告 | 修（用户要求） | 见票 15；舞台 `touchstart` / `touchmove` / `contextmenu` 阻止默认行为 | `pointer.test.ts` + 实机 |
+| **D15** | 角色重做成棒子人 + 受伤改为「触碰」判定 | 记账（用户要求） | 见票 12；角色从持剑的发光人形改成会走路的棒球人（棒球帽 / 红球衣 / 木棒），攻击动作随之改变（打上轨 = 跳起上挥，打下轨 = 抡棒下砸，双生 = 大幅跳起落下砸，长按怪 = 悬浮连砸）。规则层新增 `playerLane` —— 另一轨漏怪**擦身而过不扣血**，只清连击 / FEVER；同轨漏怪仍扣血。 | `tick.test.ts` / `resolve.test.ts` / `reducer.test.ts` / `renderer.test.ts`（实机手感见票 22） |
+| **D16** | 看得见的地面，角色走在陆地上 | 记账（用户要求） | 见票 13；脚下出现陆地与随世界左移的碎石，角色待机时持续摆腿，画面读成「角色持续向前走、途中遇到怪」。**只改表现**，不改打击 / 漏怪 / 受伤的规则；票 14 把它收窄为「下轨的大地」（见 D17）。 | Playwright 连续帧截图（腿 / 碎石 / 阴影）+ 暂停时地面像素差为 0 |
+| **D17** | 天空 / 大地双轨与重力 | 记账（用户要求） | 见票 14；上轨 = 天空、下轨 = 大地，角色有重力、默认在下轨地面上跑；打上轨从下轨起跳约 1 秒后受重力落回，打下轨立即结束滞空，空中点下轨加速下坠。上轨漏怪从头顶飞过**不扣血**、只清连击。**判定规则本身不变。** | `tick.test.ts`（滞空 / 落回 / 空中改轨）+ Playwright 帧序列 |
 
 ### 不可观察的差异（10 条）
 

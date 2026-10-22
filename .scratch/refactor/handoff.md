@@ -1,17 +1,21 @@
 # 交接说明 —— 双轨打怪重构
 
 > 更新时间：2026-10-22
-> 集成分支：`feat/refactor-v2` @ `cf3051b`（已同步到 GitHub）
+> 集成分支：`feat/refactor-v2` @ `e46d4ae`（票 01–20 已合入，**本地**；
+> `origin/feat/refactor-v2` 仍在 `cf3051b` —— 票 18–20 **尚未推送**）
+> 交付准备：`feat/ticket-21-merge-to-main`（票 21 的收口提交；**PR 与合并由编排者执行**）
 > 规格：[spec.md](spec.md) · 票：[issues/](issues/) · 差异记账：[CHANGELOG.md](../../CHANGELOG.md)
 
 ## 一句话现状
 
-**票 01–20 的功能全部完成，但成果还没有合并到 `main`。**
-剩余工作不是「再做功能」，而是**收口**：合 `main` → 真机签字。
-（修 CI 是票 18，把视觉验收接进门禁是票 20，两件都已完成。）
+**票 01–21 全部完成，成果已备好待合并到 `main`。**
+剩下的不是「再做功能」，而是**合 `main` → 真机签字**：
+票 21 的文档收口（CHANGELOG / README / GLOSSARY / ADR）已做完，
+**开 PR 与合并由编排者执行**（本票不推送、不开 PR、不合并）；
+再往后只剩票 22 —— 真机验收，必须人做。
 
-> ⚠️ 上一版交接说明写的「CI 全绿 / 没有待实现的票了」**与事实不符**。
-> 核对结果见下节，票 18–22 是据此重新规划的。
+> ⚠️ 上一版交接说明写的「CI 全绿 / 没有待实现的票了」**与事实不符**，
+> 核对结果见下节，票 18–22 是据此重新规划的（18 / 19 / 20 已按这个规划完成）。
 
 ## 情况核对（2026-10-22，本机逐条实测）
 
@@ -19,23 +23,29 @@
 
 | 核对项 | 结论 |
 | --- | --- |
-| `dashing-game(1).html` 是什么 | 与 `npm run build` 的产物**逐字节相同**（1,068,167 B）。它就是 `cf3051b` 的构建产物 —— **当前状态已经等于预期效果**，没有待补的画面差距。核对完已于 2026-10-22 移入回收站（产物由构建复现，不需要入库） |
-| 它对应哪一版 | `origin/feat/refactor-v2` @ `cf3051b`（票 01–17 全部并入）。本机原先停在 `c7a7bcd`，已快进同步 |
+| `dashing-game(1).html` 是什么 | 与 `npm run build` 的产物**逐字节相同**（1,068,167 B）。它就是 `cf3051b` 的构建产物 —— **当前状态已经等于预期效果**，没有待补的画面差距。核对完已于 2026-10-22 移入回收站（产物由构建复现，不需要入库；`.gitignore` 已挡住同名文件回流） |
+| 它对应哪一版 | 本地 `feat/refactor-v2` @ `e46d4ae`（票 01–20 全部并入）。⚠️ `origin/feat/refactor-v2` 仍在 `cf3051b` —— 票 18 / 19 / 20 **尚未推送** |
 | 里面的判定框位置 | `hitX = playerX + playerR * CLUB_REACH_R`（`CLUB_REACH_R = 3.07`）—— 票 17「判定框挪到棒尖」的实现，与源码一致 |
 | CSS / UI 文案 | 与当前源码产物完全一致，无漂移 |
 | 本机门禁 | typecheck ✅ · lint ✅ · 单测 30 文件 / 360 测试 ✅ · build ✅ · verify ✅ · trace ✅（11 条结算路径）· `test:e2e` 六个脚本 ✅ · `test:visual` 六个脚本 ✅ |
-| **CI（`cf3051b`）** | ❌ **红** —— [run 39773140165](https://github.com/eafen405/dashing-game/actions/runs/39773140165) 的 e2e 步骤失败，`npm run trace` 被跳过。根因见票 18（**已修**，待合进集成分支后复跑） |
-| `main` | 仍停在初始提交 `d2958e2`，**没有任何 PR** —— 票 01–20 的成果只在 `feat/refactor-v2` 上 |
+| **CI（`cf3051b`）** | ❌ **红** —— [run 39773140165](https://github.com/eafen405/dashing-game/actions/runs/39773140165) 的 e2e 步骤失败，`npm run trace` 被跳过。根因见票 18 —— **已修并合入集成分支**（`e46d4ae`），复跑要等编排者开 PR 后由 GitHub Actions 验证（票 21 不推送） |
+| `main` | 仍停在初始提交 `d2958e2`，**没有任何 PR** —— 票 21 已把 CHANGELOG / README 收口做完，**开 PR 与合并由编排者执行** |
 | 「无头 Chromium 没有 WebGL」 | **已过期**。`--enable-unsafe-swiftshader` 之后无头能拿到 WebGL；bloom / 色散 / 冲击波实测全部生效（票 20） |
 | 特效验收脚本 | 5 个特效脚本 + 键盘长按怪已接进 CI（`npm run test:visual`，票 20），验收拼图作为 artifact 留档 |
 
 ## 分支与提交
 
-- 集成分支：`feat/refactor-v2` @ `cf3051b`，已推送 `origin`。远端只有 `main` 与它。
+- 集成分支：`feat/refactor-v2` @ `e46d4ae`（**本地**）。
+  ⚠️ 它比 `origin/feat/refactor-v2`（`cf3051b`）**领先 8 个提交** ——
+  票 18 / 19 / 20 已合进**本地**分支但**还没推送**；远端目前只有 `main` 与 `feat/refactor-v2`。
+  **开 PR 之前先把本地集成分支推上去**（否则 PR 会漏掉票 18–20）。
 - `main` 仍停在初始提交 `d2958e2`（旧版 `source.html` 的存档点），重构成果尚未合并到 `main`。
+- 票 21 的工作分支：`feat/ticket-21-merge-to-main`（本机 worktree 在 `/home/eafen405/refactor-wt/21-merge-to-main`）——
+  它只做**文档收口**：CHANGELOG / README / GLOSSARY / ADR / `.gitignore` / 交接说明，
+  **不推送、不开 PR、不合并 `main`**（那是编排者在用户确认后做的事）。
 - 工作方式：每票从集成分支切一个 worktree 分支，完成后 merge 回 `feat/refactor-v2`。
   本机残留的 worktree 在 `/home/eafen405/refactor-wt/`，属于本地资产，**不在 GitHub 上**，接手机器不需要它们。
-- 票的完成说明在各票的 `## Answer` 段；01–17 均已有 Answer。
+- 票的完成说明在各票的 `## Answer` 段；01–21 均已有 Answer。
 
 ## 票状态
 
@@ -55,11 +65,12 @@
 | **18** | **修复 CI 红：`hud-stats` 的隐含帧率断言** | ✅ resolved |
 | **19** | **修复过期的键盘长按怪脚本** | ✅ resolved |
 | **20** | **把特效视觉验收接进 CI（5 个脚本）** | ✅ resolved（验收拼图作为 artifact 留档） |
-| **21** | **合并到 `main` + 交付收口** | ⏸ ready-for-agent |
+| **21** | **合并到 `main` + 交付收口** | ✅ resolved（文档收口已完成；**PR 与合并由编排者执行**） |
 | **22** | **真机验收：60fps / 长按手感 / 浏览器兼容** | ⏸ ready-for-human |
 
 票 09 的完成说明见 [issues/09-visual-polish.md](issues/09-visual-polish.md)；
-票 10 的完成说明见 [issues/10-delivery-single-file.md](issues/10-delivery-single-file.md)。
+票 10 的完成说明见 [issues/10-delivery-single-file.md](issues/10-delivery-single-file.md)；
+票 21 的完成说明见 [issues/21-merge-to-main-and-deliver.md](issues/21-merge-to-main-and-deliver.md)。
 `source.html` 未删除：它是 golden trace 的现场生成源与旧版 e2e 的对照对象，
 删除需要先冻结两份 114 KB 的 harness，成本高于收益。细节见票 10 Answer。
 
@@ -71,8 +82,8 @@
                 ┘
 ```
 
-18 / 19 / 20 已完成并合进 `feat/refactor-v2`（@ `7757321`）。
-21 之前要确认 CI 在合进后的集成分支上是绿的。
+18 / 19 / 20 已完成并合进 `feat/refactor-v2`（@ `e46d4ae`）。
+21 的**文档收口**已完成，**开 PR / 合并 `main` 留给编排者**（票 21 本身不推送）。
 22 必须人做 —— SwiftShader 的 11–13 FPS 不是产品性能。
 
 ## 上一轮收口改了什么（2026-10-21，票 07 回归修复）
@@ -90,20 +101,20 @@
 - `.github/workflows/ci.yml`：`push` 触发加上 `feat/**` —— 否则集成分支 push 不跑 CI，只能等 PR。
 - 全仓 Prettier 对齐（票 07 合并后遗留的格式漂移）。
 
-## 验证基线（本机，2026-10-22，`7757321` 复核）
+## 验证基线（本机，2026-10-22，票 21 收口后复核，基线 `e46d4ae`）
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm run typecheck` | ✅ |
-| `npm run lint` | ✅ |
-| `npm run test` | ✅ 30 个文件 / 360 个测试 |
-| `npm run build` | ✅ `dist/index.html` **1,068.16 kB**（gzip 321.92 kB）—— 与参考产物 `dashing-game(1).html` **逐字节相同** |
-| `npm run verify` | ✅ 静态通过；截图差分 214,158 像素；0 个外部请求；raw 1,043.1 KiB / gzip 311.5 KiB |
-| `npm run trace` | ✅ Golden trace 门禁通过（模式 A / B′ 逐帧一致，模式 C 分叉归因 D1；零输入场景一致；11 条结算路径全覆盖） |
-| `npm run test:e2e` | ✅ 六个脚本全过（check-playable / flow-8-steps / input-desktop / portrait-progress / hud-stats / compare-legacy） |
-| `npm run test:visual` | ✅ 六个脚本全过（fx-acceptance / bloom-ab / fx-fever-readability / filter-center-probe / fx-moments / hold-monster-keyboard）—— 票 20 接进 CI 的那一条 |
-| `npm run format:check` | ✅（2026-10-22 清掉仓库根的两个参考 HTML 后恢复绿色） |
-| **GitHub Actions（`cf3051b`）** | ❌ **红** —— e2e 步骤失败，`npm run trace` 被跳过（票 18 已修，待合并后复跑） |
+| `npm run typecheck` | ✅（本票复跑） |
+| `npm run lint` | ✅（本票复跑） |
+| `npm run test` | ✅ 30 个文件 / 360 个测试（本票复跑） |
+| `npm run build` | ✅ `dist/index.html` **1,068.16 kB**（gzip 321.92 kB）（本票复跑）—— 与参考产物 `dashing-game(1).html` **逐字节相同** |
+| `npm run format:check` | ✅（本票复跑，干净工作区）—— 仓库根只有 `index.html` / `source.html`，`.gitignore` 已挡住参考产物回流 |
+| `npm run trace` | ✅ Golden trace 门禁通过（本票复跑）：模式 A / B′ 逐帧一致，模式 C 分叉归因 D1，零输入场景一致，11 条结算路径全覆盖 |
+| `npm run verify` | ✅ 静态通过；截图差分 214,158 像素；0 个外部请求（票 20 复核；本票未改构建产物） |
+| `npm run test:e2e` | ✅ 六个脚本全过（票 20 复核；本票只改文档，未动脚本） |
+| `npm run test:visual` | ✅ 六个脚本全过（票 20 复核；同上） |
+| **GitHub Actions（`cf3051b`）** | ❌ **红**（历史记录）—— e2e 步骤失败，`npm run trace` 被跳过；票 18 已修并合入集成分支，**待编排者开 PR 后由 Actions 复跑确认** |
 
 `test:e2e` / `test:visual` 跑的都是 `dist/`，**必须先 `npm run build`**；
 `hud-stats` 单脚本约 70 秒；`test:visual` 整套本机 **3.5–8 分钟**
@@ -112,7 +123,7 @@
 
 ## 接下来怎么做
 
-**功能做完了，剩下的是收口。** 顺序：**18 / 19 / 20 已完成 → 21 → 22**。
+**功能做完了，剩下的是合 `main` 与真机签字。** 顺序：**18 / 19 / 20 / 21 已完成 → 开 PR 合 `main` → 22**。
 
 1. ~~**票 18**：修 `hud-stats.mjs` 的隐含帧率断言。~~ ✅ 已完成
    （判据改成结构性判据：循环没冻 + 每帧发布一次，绝对下限压到 1fps 量级）。
@@ -122,9 +133,11 @@
    （`npm run test:visual` 接进 CI 的 `visual` job，与 `verify` 并行；
    验收拼图 `dist/e2e-shots/09/acceptance-09.png` 作为 artifact
    `visual-acceptance-shots` 留档）。
-4. **票 21（下一个）**：CI 绿了之后开 PR 合 `main`，CHANGELOG 收口，
-   仓库根保持只有 `index.html` / `source.html`。
-5. **票 22**：把 `dist/index.html` 交给用户，手机横屏 60fps + 长按 2 秒手感 +
+4. ~~**票 21**：合并到 `main` + 交付收口。~~ ✅ **文档收口已完成**
+   （CHANGELOG `[0.2.0]` 收口、README 首屏对齐当前玩法、`source.html` 定位写清、
+   参考产物不入库、GLOSSARY / ADR / spec / 交接说明同步）。
+   **剩下的开 PR 与合并 `main` 由编排者执行** —— 票 21 本身不推送、不开 PR。
+5. **票 22（唯一剩下的）**：把 `dist/index.html` 交给用户，手机横屏 60fps + 长按 2 秒手感 +
    Firefox / Safari 逐条签字。
 
 若真机掉帧，优先按 ADR-0004 的「结构性优化」排查：bloom resolution / DPR、
@@ -134,6 +147,11 @@
 
 ## 已知陷阱
 
+- **仓库根只保留 `index.html` / `source.html` 两个 HTML**（票 21）。参考产物
+  `dashing-game(1).html` / `pelican-bicycle.html` 已于 2026-10-22 移出，
+  `.gitignore` 里加了根锚定的两条忽略规则挡它们回流 —— **Prettier 3 会读 `.gitignore`**，
+  它们躺在根目录会让 `npm run format:check` 变红。
+  `source.html` **不要删**：它是 golden trace 的生成源与旧版 e2e 的对照对象。
 - **Pixi 的 ticker 已关（`autoStart: false`）**。帧循环由 `GameSession` 驱动，
   出帧在 `PixiRenderer.render()` 末尾显式调用 `app.renderer.render(app.stage)`。
   不要在 `mount()` 里重新打开 ticker —— 会与 GameSession 重复渲染，并可能在
