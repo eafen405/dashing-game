@@ -19,10 +19,8 @@ import {
   CRIT_GAIN,
   FEVER_COMBO,
   FEVER_MULT,
-  FRENZY_LANE,
   GOLD,
   HIT_DAMAGE,
-  LANE,
   LONG_COLOR,
   LONG_ESCAPE_SPEED,
   LONG_HEAD_GAIN,
@@ -32,9 +30,10 @@ import {
   PAIR_COLOR,
   PAIR_CRIT_GAIN,
   PAIR_GAIN,
+  laneColorOf,
 } from '../constants';
-import type { Effect } from '../effects';
-import type { GameState, HoldMonster, Lane, Monster } from '../types';
+import { BURST, type Effect } from '../effects';
+import type { GameState, HoldMonster, Monster } from '../types';
 import { triggerFever } from './fever';
 
 /* ------------------------------------------------------------------ *
@@ -49,11 +48,6 @@ export function findMonster(monsters: readonly Monster[], id: number): Monster |
 /** 按 id 替换怪物（返回新数组，不改传入的数组）。 */
 function patch(monsters: readonly Monster[], id: number, fn: (m: Monster) => Monster): Monster[] {
   return monsters.map((m) => (m.id === id ? fn(m) : m));
-}
-
-/** 轨道颜色 —— `source.html:1507-1509`。FEVER 时两轨仍保留区分度。 */
-export function laneColorOf(lane: Lane, frenzyActive: boolean): string {
-  return frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
 }
 
 /** 长按怪头部横坐标 —— `source.html:1089-1091`。 */
@@ -107,13 +101,14 @@ export function killMonster(
 
   const critCol = s.frenzyActive ? '#ffffff' : GOLD;
   const c = crit ? critCol : laneColorOf(m.lane, s.frenzyActive);
+  const burst = crit ? BURST.crit : BURST.normal;
   effects.push({
     type: 'burst',
     x: m.x,
     y: m.y,
     color: c,
-    count: crit ? 36 : 26,
-    power: crit ? 1.5 : 1.25,
+    count: burst.count,
+    power: burst.power,
   });
   effects.push({
     type: 'burst',
@@ -249,14 +244,15 @@ export function killPair(
   s = { ...s, score: s.score + gain };
 
   const col = critPair ? (s.frenzyActive ? '#ffffff' : GOLD) : PAIR_COLOR;
+  const burst = critPair ? BURST.twinCrit : BURST.twin;
   for (const m of [a, b]) {
     effects.push({
       type: 'burst',
       x: m.x,
       y: m.y,
       color: col,
-      count: critPair ? 34 : 28,
-      power: critPair ? 1.5 : 1.3,
+      count: burst.count,
+      power: burst.power,
     });
     effects.push({ type: 'burst', x: m.x, y: m.y, color: '#ffffff', count: 12, power: 0.9 });
     effects.push({
@@ -359,7 +355,14 @@ export function pairBlast(
     { type: 'player-flash' },
     { type: 'shake-max', amount: 13 },
     { type: 'hurt' },
-    { type: 'burst', x: p.x, y: p.y, color: '#ff4d6d', count: 26, power: 1.25 },
+    {
+      type: 'burst',
+      x: p.x,
+      y: p.y,
+      color: '#ff4d6d',
+      count: BURST.normal.count,
+      power: BURST.normal.power,
+    },
     { type: 'burst', x: p.x, y: p.y, color: PAIR_COLOR, count: 18, power: 1.0 },
     { type: 'ring', x: p.x, y: p.y, life: 0.45, r0: 10, r1: 80, color: '#ff4d6d' },
     { type: 'toast', text: '单破 +' + gain + ' · 另一只自爆 -' + HIT_DAMAGE, color: '#ff6b81' },

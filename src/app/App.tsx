@@ -21,6 +21,7 @@ import { attachOrientationWatcher, detectLandscape } from '../input/orientation'
 import { attachPointerInput } from '../input/pointer';
 import { GameSession } from './GameSession';
 import { loadBest, saveBest } from './best';
+import { toggleFullscreen } from './fullscreen';
 import { Hud } from './hud/Hud';
 import { hudStore } from './hud/hudStore';
 import { GameOverScreen } from './screens/GameOverScreen';
@@ -369,49 +370,5 @@ function vibrate(pattern: number | number[]): void {
     navigator.vibrate(pattern);
   } catch {
     // 某些浏览器会抛（未获用户手势）—— 忽略
-  }
-}
-
-/** 全屏切换 —— `source.html:2585-2597`。 */
-function toggleFullscreen(): void {
-  const el = document.documentElement;
-  try {
-    if (!document.fullscreenElement) {
-      const request =
-        el.requestFullscreen ??
-        (
-          el as unknown as {
-            webkitRequestFullscreen?: () => Promise<void>;
-          }
-        ).webkitRequestFullscreen;
-      if (request) {
-        void request.call(el, { navigationUI: 'hide' } as FullscreenOptions);
-        lockLandscape();
-      }
-    } else {
-      const exit =
-        document.exitFullscreen ??
-        (
-          document as unknown as {
-            webkitExitFullscreen?: () => Promise<void>;
-          }
-        ).webkitExitFullscreen;
-      if (exit) void exit.call(document);
-    }
-  } catch {
-    // 全屏被拒绝 —— 忽略
-  }
-}
-
-/** 锁定横屏（`screen.orientation.lock` 是移动端专有 API，TS 的 DOM lib 里没有）。 */
-function lockLandscape(): void {
-  const orientation = screen.orientation as ScreenOrientation & {
-    lock?: (orientation: string) => Promise<void>;
-  };
-  if (typeof orientation.lock !== 'function') return;
-  try {
-    void orientation.lock('landscape').catch(() => undefined);
-  } catch {
-    // 锁定失败 —— 忽略
   }
 }

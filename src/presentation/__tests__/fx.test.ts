@@ -1,14 +1,14 @@
 /**
  * 效果签名的契约测试 —— 票 07 的**主 seam**的「翻译表」部分。
  *
- * 规则层**不可改动**（golden trace 门禁），所以「这是不是暴击 / 双生同破」
- * 只能从效果事件的签名反推。这里逐条锁住那张签名表
- * （签名出处见 `src/presentation/fx.ts` 的文件头）。
+ * 「这是不是暴击 / 双生同破」由表现层从效果事件的签名反推。
+ * 签名词表住在**规则层**（`src/game/effects.ts` 的 `BURST`）——
+ * 本文件的期望值也从那里取，不另抄一份（抄一份就等于重新引入漂移的口子）。
  */
 
 import { describe, expect, it } from 'vitest';
 
-import type { Effect } from '../../game/effects';
+import { BURST, type Effect } from '../../game/effects';
 import {
   classifyBatch,
   EFFECT_INTENSITY,
@@ -24,8 +24,9 @@ function sig(): BatchSignature {
   return { crit: false, wave: 'none', waveX: 0, waveY: 0 };
 }
 
-/** 规则层 `killMonster` 的完整效果批次（`resolve.ts:110-154`）。 */
+/** 规则层 `killMonster` 的完整效果批次（`resolve.ts`）。 */
 function killBatch(crit: boolean): Effect[] {
+  const burst = crit ? BURST.crit : BURST.normal;
   return [
     { type: 'slash', x: 300, x0: 200, y: 100, life: 0.3, lane: 'top' },
     {
@@ -33,8 +34,8 @@ function killBatch(crit: boolean): Effect[] {
       x: 300,
       y: 100,
       color: crit ? '#ffd24a' : '#4fd1ff',
-      count: crit ? 36 : 26,
-      power: crit ? 1.5 : 1.25,
+      count: burst.count,
+      power: burst.power,
     },
     { type: 'burst', x: 300, y: 100, color: '#ffffff', count: crit ? 16 : 10, power: 0.9 },
     { type: 'ring', x: 300, y: 100, life: 0.4, r0: 6, r1: 46, color: '#4fd1ff' },
@@ -68,9 +69,23 @@ describe('效果签名 · 批次分类', () => {
   it('双生击破批次：双生档冲击波，中心是两只怪的中点', () => {
     const s = sig();
     const batch: Effect[] = [
-      { type: 'burst', x: 100, y: 50, color: '#ff5ecb', count: 28, power: 1.3 },
+      {
+        type: 'burst',
+        x: 100,
+        y: 50,
+        color: '#ff5ecb',
+        count: BURST.twin.count,
+        power: BURST.twin.power,
+      },
       { type: 'burst', x: 100, y: 50, color: '#ffffff', count: 12, power: 0.9 },
-      { type: 'burst', x: 300, y: 400, color: '#ff5ecb', count: 28, power: 1.3 },
+      {
+        type: 'burst',
+        x: 300,
+        y: 400,
+        color: '#ff5ecb',
+        count: BURST.twin.count,
+        power: BURST.twin.power,
+      },
       { type: 'burst', x: 300, y: 400, color: '#ffffff', count: 12, power: 0.9 },
       { type: 'shake-add', amount: 13, cap: 20 },
     ];
@@ -87,8 +102,22 @@ describe('效果签名 · 批次分类', () => {
   it('双生暴击批次：crit + 双生档冲击波', () => {
     const s = sig();
     const batch: Effect[] = [
-      { type: 'burst', x: 100, y: 50, color: '#ffd24a', count: 34, power: 1.5 },
-      { type: 'burst', x: 300, y: 400, color: '#ffd24a', count: 34, power: 1.5 },
+      {
+        type: 'burst',
+        x: 100,
+        y: 50,
+        color: '#ffd24a',
+        count: BURST.twinCrit.count,
+        power: BURST.twinCrit.power,
+      },
+      {
+        type: 'burst',
+        x: 300,
+        y: 400,
+        color: '#ffd24a',
+        count: BURST.twinCrit.count,
+        power: BURST.twinCrit.power,
+      },
     ];
 
     classifyBatch(batch, s);
@@ -100,7 +129,14 @@ describe('效果签名 · 批次分类', () => {
   it('单破自爆批次（26 / 1.25）不会被误判成双生或暴击', () => {
     const s = sig();
     const batch: Effect[] = [
-      { type: 'burst', x: 100, y: 50, color: '#ff4d6d', count: 26, power: 1.25 },
+      {
+        type: 'burst',
+        x: 100,
+        y: 50,
+        color: '#ff4d6d',
+        count: BURST.normal.count,
+        power: BURST.normal.power,
+      },
       { type: 'burst', x: 100, y: 50, color: '#ff5ecb', count: 18, power: 1.0 },
     ];
 
@@ -155,7 +191,19 @@ describe('效果签名 · 特效强度四档', () => {
     const crit = sig();
     classifyBatch(killBatch(true), crit);
     const twin = sig();
-    classifyBatch([{ type: 'burst', x: 0, y: 0, color: '#ff5ecb', count: 28, power: 1.3 }], twin);
+    classifyBatch(
+      [
+        {
+          type: 'burst',
+          x: 0,
+          y: 0,
+          color: '#ff5ecb',
+          count: BURST.twin.count,
+          power: BURST.twin.power,
+        },
+      ],
+      twin,
+    );
 
     expect(intensityOf(plain, false)).toBe('normal');
     expect(intensityOf(crit, false)).toBe('crit');

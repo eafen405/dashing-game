@@ -76,3 +76,15 @@ export const LANE: Record<Lane, { color: string }> = {
   top: { color: '#4fd1ff' },
   bottom: { color: '#ff8a4f' },
 };
+
+/**
+ * 某条轨道当前的配色 —— `source.html:1507-1509`。FEVER 时两轨仍保留区分度。
+ *
+ * **只有这一份实现**：规则层（爆散 / 冲击环 / 提示条的颜色）与战场层
+ * （轨道渐变 / 判定区 / 刀光 / 怪物本体）都要它。
+ * 按 ADR-0003 的分层方向（战场层可以依赖规则层，规则层不能反向依赖战场层），
+ * 实现放在规则层的常量层 —— 战场层从 `game/constants` 取，不再自己抄一份。
+ */
+export function laneColorOf(lane: Lane, frenzyActive: boolean): string {
+  return frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
+}

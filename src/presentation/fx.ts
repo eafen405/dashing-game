@@ -2,23 +2,27 @@
  * 效果签名 —— 规则层效果事件 → 表现层视觉档位的**翻译表**。
  *
  * 分层依据 ADR-0003：规则层只说「发生了什么」，表现层决定「怎么画」。
- * 规则层**不可改动**（票 07 的硬约束），所以「这一次击破是不是暴击」
- * 「这是不是双生同破」只能由表现层从**效果事件的签名**里反推出来 ——
- * 这张表就是那份签名的书面形式，每一条都注明规则层的出处。
+ * 但「这一次击破是不是暴击」「这是不是双生同破」规则层本来就知道 ——
+ * 它决定分数、连击、震屏，也决定爆散用多少粒子、什么力度。
+ * 表现层拿不到这个「是什么」，只能从**效果事件的签名**里反推出来。
+ *
+ * **签名词表住在规则层**（`src/game/effects.ts` 的 {@link BURST}）——
+ * 规则层生成爆散用的就是那一组值，表现层导入同一组值来认词。
+ * 两边各抄一份的话，规则层一改，表现层就会静默误判（暴击被当成双生）。
  *
  * ## 规则层的签名（`src/game/rules/resolve.ts`）
  *
  * | 事件 | 主爆散 `count` | 主爆散 `power` | 出处 |
  * |---|---|---|---|
- * | 普攻击破 | 26 | 1.25 | `resolve.ts:110-117` |
- * | **暴击**击破 | 36 | **1.5** | `resolve.ts:110-117` |
- * | 双生击破 | 28 | **1.3** | `resolve.ts:253-260` |
- * | **双生暴击** | 34 | **1.5** | `resolve.ts:253-260` |
- * | 单破自爆（另一只） | 26 | 1.25 | `resolve.ts:360` |
- * | 长按奖励 | 10 | 0.8 | `resolve.ts:405` |
- * | 长按失败 | 22 | 1.0 | `resolve.ts:513` |
- * | 长按完成 | 9 | 0.95 | `resolve.ts:588` |
- * | 角色受击 | 22 | 1.15 | `resolve.ts:654` |
+ * | 普攻击破 | 26 | 1.25 | `resolve.ts:104-111` |
+ * | **暴击**击破 | 36 | **1.5** | `resolve.ts:104-111` |
+ * | 双生击破 | 28 | **1.3** | `resolve.ts:247-256` |
+ * | **双生暴击** | 34 | **1.5** | `resolve.ts:247-256` |
+ * | 单破自爆（另一只） | 26 | 1.25 | `resolve.ts:358-365` |
+ * | 长按奖励 | 10 | 0.8 | `resolve.ts:411` |
+ * | 长按失败 | 22 | 1.0 | `resolve.ts:522` |
+ * | 长按完成 | 9 | 0.95 | `resolve.ts:600` |
+ * | 角色受击 | 22 | 1.15 | `resolve.ts:666` |
  *
  * 「白色内核」爆散（`power = 0.9`）永远不是主爆散 —— 它只是击中瞬间的白色闪光，
  * 但**形态**跟随所在批次（暴击批次的白色内核也是碎片形）。
@@ -27,18 +31,18 @@
  *
  * | 事件 | `amount` | 出处 |
  * |---|---|---|
- * | 普攻击破 | 5（FEVER 中 7） | `resolve.ts:154` |
- * | 暴击击破 | 11 | `resolve.ts:154` |
- * | 长按完成 | 12 | `resolve.ts:601` |
- * | 双生击破 | 13 | `resolve.ts:288` |
- * | 双生暴击 | 16 | `resolve.ts:288` |
- * | 单破自爆 | 13（`shake-max`） | `resolve.ts:358` |
- * | 长按失败 | 8（`shake-max`） | `resolve.ts:514` |
- * | 角色受击 | 14（`shake-set`） | `resolve.ts:652` |
+ * | 普攻击破 | 5（FEVER 中 7） | `resolve.ts:148` |
+ * | 暴击击破 | 11 | `resolve.ts:148` |
+ * | 长按完成 | 12 | `resolve.ts:608` |
+ * | 双生击破 | 13 | `resolve.ts:281` |
+ * | 双生暴击 | 16 | `resolve.ts:281` |
+ * | 单破自爆 | 13（`shake-max`） | `resolve.ts:355` |
+ * | 长按失败 | 8（`shake-max`） | `resolve.ts:520` |
+ * | 角色受击 | 14（`shake-set`） | `resolve.ts:660` |
  */
 
 import type { ParticleForm, RingTier } from '../battlefield/types';
-import type { Effect } from '../game/effects';
+import { BURST, BURST_POWER_CRIT_MIN, BURST_POWER_TWIN_MIN, type Effect } from '../game/effects';
 
 /** 震动档位 —— 普攻 / 暴击 / 双生同破。 */
 export type ShakeTier = 'normal' | 'crit' | 'twin';
@@ -106,15 +110,6 @@ export interface BatchSignature {
   waveY: number;
 }
 
-/** 暴击主爆散的 `power` 下限（规则层用 1.5）。 */
-const CRIT_POWER = 1.45;
-/** 双生普通击破的主爆散 `power` 下限（规则层用 1.3）。 */
-const TWIN_POWER = 1.28;
-/** 单只暴击的主爆散粒子数（规则层用 36；双生暴击是 34）。 */
-const SINGLE_CRIT_COUNT = 36;
-/** 双生击破的主爆散粒子数下限（规则层用 28 / 34）。 */
-const TWIN_COUNT = 28;
-
 /** 主爆散位置的暂存（一次批次最多两只双生 + 一只自爆，4 个足够）。 */
 const MAX_PRIMARY = 4;
 const primaryX: number[] = [0, 0, 0, 0];
@@ -140,8 +135,8 @@ export function classifyBatch(list: readonly Effect[], out: BatchSignature): voi
 
   for (const e of list) {
     if (e.type !== 'burst') continue;
-    const isCrit = e.power >= CRIT_POWER;
-    const isTwin = !isCrit && e.power >= TWIN_POWER && e.count >= TWIN_COUNT;
+    const isCrit = e.power >= BURST_POWER_CRIT_MIN;
+    const isTwin = !isCrit && e.power >= BURST_POWER_TWIN_MIN && e.count >= BURST.twin.count;
     if (!isCrit && !isTwin) continue;
 
     if (n < MAX_PRIMARY) {
@@ -154,7 +149,7 @@ export function classifyBatch(list: readonly Effect[], out: BatchSignature): voi
 
     if (isCrit) {
       out.crit = true;
-      if (e.count >= SINGLE_CRIT_COUNT) critSingle = true;
+      if (e.count >= BURST.crit.count) critSingle = true;
       else critTwin = true;
     } else {
       twinPlain = true;

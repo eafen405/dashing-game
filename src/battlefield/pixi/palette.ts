@@ -25,8 +25,8 @@ import {
   LANE,
   LONG_COLOR as RULE_LONG_COLOR,
   PAIR_COLOR as RULE_PAIR_COLOR,
+  laneColorOf,
 } from '../../game/constants';
-import type { Lane } from '../../game/types';
 
 /** 得分金 —— 得分飘字、暴击判定圈。 */
 export const GOLD = RULE_GOLD;
@@ -53,10 +53,12 @@ export const FRENZY_BOTTOM = FRENZY_LANE.bottom;
  * 某条轨道当前的配色。
  *
  * FEVER 时两轨仍保留区分度（上轨亮金 / 下轨琥珀金）。
+ *
+ * **实现住在规则层**（`game/constants.ts` 的 `laneColorOf`）——
+ * 规则层给爆散 / 冲击环 / 提示条上色时用的是同一个函数，两边不许各抄一份。
+ * 这里只做转发，战场层其余模块照旧从 `./palette` 取。
  */
-export function laneColorOf(lane: Lane, frenzyActive: boolean): string {
-  return frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
-}
+export { laneColorOf };
 
 /**
  * `#rrggbb` + alpha → `rgba(...)` —— 逐字搬自 `source.html:2502-2506`。
