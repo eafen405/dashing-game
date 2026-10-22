@@ -105,7 +105,7 @@ CI 已在 `.github/workflows/ci.yml` 里把 `node scripts/verify-single-file.mjs
 | `npm run trace` | ✅ 模式 A / B′ 逐帧一致，模式 C 仅已知 D1 分叉；零输入场景一致 |
 | `npm run test:e2e` | ✅ 六个脚本全过 |
 | `npm run format:check` | ✅ |
-| `fx-acceptance.mjs`（HEADED，WebGL） | ✅ 四格验收图（票 09） |
+| `fx-acceptance.mjs`（SwiftShader WebGL） | ✅ 四格验收图（票 09；票 20 起无头即可跑） |
 
 CI 状态以推送后 GitHub Actions 为准；本机门禁全绿。
 
