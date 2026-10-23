@@ -60,6 +60,7 @@ import {
   setFill,
   setFillGradient,
   setStroke,
+  setStrokeGradient,
   starInto,
 } from './gfx';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
@@ -82,29 +83,48 @@ const SKIN = '#ffcf9f';
 const SKIN_DARK = '#e2a76f';
 const JERSEY = '#d94f4a';
 const JERSEY_DARK = '#8f2f34';
+const JERSEY_LIGHT = '#ff7a6e';
 const TRIM = '#f4ead6';
 const PANTS = '#2a3f55';
+const PANTS_LIGHT = '#4d6c8c';
 const SHOE = '#ece4d2';
 const CAP = '#14232f';
+const CAP_LIGHT = '#33506a';
 const CAP_BRIM = '#c9433f';
 const BAT = '#e0a25e';
 const BAT_DARK = '#a86b32';
+const BAT_LIGHT = '#ffd9a6';
 const BAT_GRIP = '#3a2a20';
+/** 哲的墨线 / 冷色轮廓光。 */
+const INK_ZHE = '#160f14';
+const RIM_ZHE = '#9fe8ff';
 
 /* 凛的配色：青绿短打 + 紫裙 + 深紫长发。 */
-const SKIN_F = '#ffd9c0';
-const SKIN_F_DARK = '#e7b393';
+const SKIN_F = '#ffdcc4';
+const SKIN_F_DARK = '#e8b295';
+const SKIN_F_SHADE = '#d38e7f';
 const TOP_F = '#1f7a72';
-const TOP_F_DARK = '#124b49';
+const TOP_F_DARK = '#0f4a47';
+const TOP_F_LIGHT = '#54c9b7';
 const SASH_F = '#d44f7a';
+const SASH_F_LIGHT = '#ff8cae';
 const SKIRT_F = '#4b2a6b';
-const SKIRT_F_DARK = '#2b1542';
-const HAIR_F = '#2a1b2e';
-const HAIR_F_LIGHT = '#5c3a66';
-const LEGGING_F = '#211a2e';
-const BOOT_F = '#7a5a92';
-const SCYTHE_SHAFT = '#3b2c44';
-const SCYTHE_METAL = '#c9b6d8';
+const SKIRT_F_DARK = '#241033';
+const SKIRT_F_LIGHT = '#8a58b8';
+const HAIR_F = '#3b2350';
+const HAIR_F_LIGHT = '#a06fc8';
+const HAIR_F_GLOSS = '#d2a8ee';
+const LEGGING_F = '#1d1529';
+const LEGGING_F_LIGHT = '#48345f';
+const BOOT_F = '#6b4a86';
+const BOOT_F_LIGHT = '#b58ad6';
+const SCYTHE_SHAFT = '#2e2038';
+const SCYTHE_SHAFT_LIGHT = '#8b68a8';
+const SCYTHE_METAL = '#cdb6e0';
+const SCYTHE_DARK = '#2a1245';
+/** 凛的墨线 / 紫色轮廓光。 */
+const INK_RIN = '#140b1e';
+const RIM_RIN = '#d9a6ff';
 
 /** 凛的刀光 / 残影：偏紫红。 */
 const RIN_TRAIL = '#c84dff';
@@ -114,6 +134,9 @@ const RIN_IMPACT = '#ff4d9a';
 const BURN_REF_ALPHA = 0.22;
 
 const SIDES = [-1, 1] as const;
+
+/** 镰刀视觉长度（比球棒略长，命中判定不变）。 */
+const SCYTHE_LEN_R = CLUB_LEN_R * 1.18;
 
 /** 挥棒残影的采样位置。 */
 const GHOST_T = [0.42, 0.64, 0.86] as const;
@@ -184,26 +207,46 @@ export class PlayerView {
 
   // ── 复用路径 ─────────────────────────────────────────────
   private readonly torsoPath = new GraphicsPath();
+  private readonly torsoShadePath = new GraphicsPath();
   private readonly headPath = new GraphicsPath();
+  private readonly facePath = new GraphicsPath();
   private readonly hatPath = new GraphicsPath();
   private readonly hairPath = new GraphicsPath();
+  private readonly hairMassPath = new GraphicsPath();
   private readonly skirtPath = new GraphicsPath();
+  private readonly skirtBackPath = new GraphicsPath();
+  private readonly bladeBackPath = new GraphicsPath();
   private readonly bladePath = new GraphicsPath();
+  private readonly bladeBevelPath = new GraphicsPath();
+  private readonly bladeEdgePath = new GraphicsPath();
+  private readonly bladeRunePath = new GraphicsPath();
+  private readonly ribbonPath = new GraphicsPath();
+  private readonly legPath = new GraphicsPath();
+  private readonly armPath = new GraphicsPath();
   private readonly flashPath = new GraphicsPath();
   private readonly hpPath = new GraphicsPath();
   private readonly haloArcPath = new GraphicsPath();
   private readonly swingArcPath = new GraphicsPath();
+  private readonly swingRibbonPath = new GraphicsPath();
   private readonly batBodyPath = new GraphicsPath();
   private readonly ghostBatPath = new GraphicsPath();
   private readonly starPath = new GraphicsPath();
   private readonly shoePath = new GraphicsPath();
+  private readonly eyePath = new GraphicsPath();
 
   // ── 渐变（复用，不每帧重建） ──────────────────────────────
   private bodyGradient: FillGradient | null = null;
   private bodyGradientF: FillGradient | null = null;
+  private skinGradient: FillGradient | null = null;
+  private skinGradientF: FillGradient | null = null;
+  private hairGradient: FillGradient | null = null;
+  private capGradient: FillGradient | null = null;
   private skirtGradient: FillGradient | null = null;
   private batGradient: FillGradient | null = null;
   private scytheGradient: FillGradient | null = null;
+  private bladeGlowGradient: FillGradient | null = null;
+  private shaftGradient: FillGradient | null = null;
+  private irisGradient: FillGradient | null = null;
   private haloGradient: FillGradient | null = null;
   private burnGradient: FillGradient | null = null;
   private glowGradient: FillGradient | null = null;
@@ -211,6 +254,13 @@ export class PlayerView {
   // ── 动作状态（渲染层内部，只跟视觉有关） ───────────────────
   /** 本帧是否画凛（女性外观 + 镰刀）。 */
   private female = false;
+  /** 本帧视觉时钟（给头发 / 裙摆 / 飘带做次级运动）。 */
+  private visT = 0;
+  /** 本帧步态强度（0..1）与步频相位。 */
+  private motionWalk = 0;
+  private motionPhase = 0;
+  /** 本帧是否腾空（马尾 / 裙摆上扬）。 */
+  private motionAir = false;
   /** 平滑后的身体中心纵坐标（换轨时走过去，而不是瞬移）。 */
   private displayY = Number.NaN;
   /** 上一帧的视觉时钟（用来算 dt；`vt` 在所有阶段都推进）。 */
@@ -287,6 +337,53 @@ export class PlayerView {
       1,
       1,
     );
+    // 皮肤：左上受光 → 右下阴影（赛璐珞式两段过渡）。
+    this.skinGradient = linearGradient(
+      [
+        { offset: 0, color: '#ffe4bd' },
+        { offset: 0.5, color: SKIN },
+        { offset: 1, color: SKIN_DARK },
+      ],
+      0,
+      0,
+      1,
+      1,
+    );
+    this.skinGradientF = linearGradient(
+      [
+        { offset: 0, color: '#fff0e2' },
+        { offset: 0.5, color: SKIN_F },
+        { offset: 1, color: SKIN_F_DARK },
+      ],
+      0,
+      0,
+      1,
+      1,
+    );
+    // 长发：顶部受光、发梢沉入暗紫。
+    this.hairGradient = linearGradient(
+      [
+        { offset: 0, color: '#6a4185' },
+        { offset: 0.45, color: '#3b2350' },
+        { offset: 1, color: '#1c0e28' },
+      ],
+      0,
+      0,
+      1,
+      1,
+    );
+    // 帽顶：斜向高光。
+    this.capGradient = linearGradient(
+      [
+        { offset: 0, color: CAP_LIGHT },
+        { offset: 0.55, color: CAP },
+        { offset: 1, color: '#0a121a' },
+      ],
+      0,
+      0,
+      1,
+      1,
+    );
     // 紫裙渐变。
     this.skirtGradient = linearGradient(
       [
@@ -301,14 +398,51 @@ export class PlayerView {
     // 镰刀刃：紫红金属。
     this.scytheGradient = linearGradient(
       [
-        { offset: 0, color: '#ff9ad5' },
-        { offset: 0.45, color: RIN_IMPACT },
-        { offset: 1, color: '#7a2fd0' },
+        { offset: 0, color: '#8b4fc4' },
+        { offset: 0.38, color: '#52218a' },
+        { offset: 0.75, color: '#2b1247' },
+        { offset: 1, color: '#160a26' },
       ],
       0,
       0,
       1,
       1,
+    );
+    // 刃口外发光：从刃尖亮到根部暗。
+    this.bladeGlowGradient = linearGradient(
+      [
+        { offset: 0, color: 'rgba(255,214,255,0.95)' },
+        { offset: 0.45, color: 'rgba(255,92,190,0.85)' },
+        { offset: 1, color: 'rgba(140,60,255,0.2)' },
+      ],
+      0,
+      0,
+      1,
+      0,
+    );
+    // 柄：横向金属圆柱（上亮下暗）。
+    this.shaftGradient = linearGradient(
+      [
+        { offset: 0, color: SCYTHE_SHAFT_LIGHT },
+        { offset: 0.35, color: SCYTHE_SHAFT },
+        { offset: 1, color: '#150c1d' },
+      ],
+      0,
+      0,
+      0,
+      1,
+    );
+    // 虹膜：中心品红、边缘深紫（局部径向）。
+    this.irisGradient = radialGradient(
+      [
+        { offset: 0, color: '#ff9ae0' },
+        { offset: 0.55, color: '#c02fbe' },
+        { offset: 1, color: '#4d1268' },
+      ],
+      0.5,
+      0.5,
+      0,
+      0.5,
     );
     // FEVER 光环：内圈透明 → 0.55 处最亮 → 外圈透明。
     this.haloGradient = radialGradient(
@@ -350,6 +484,7 @@ export class PlayerView {
   draw(fc: FrameContext): void {
     const { playerR: s, playerX } = fc.layout;
     this.female = fc.characterId === 'rin';
+    this.visT = fc.vt;
 
     const dt = this.frameDt(fc);
 
@@ -413,6 +548,9 @@ export class PlayerView {
     const laneWalk = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
     const walkAmp = jumping || falling || hold ? 0 : Math.max(laneWalk, walking ? 1 : 0);
     const walkPhase = fc.now * WALK_RATE;
+    this.motionWalk = walkAmp;
+    this.motionPhase = walkPhase;
+    this.motionAir = jumping || falling;
 
     /* ---------- 姿态参数 ---------- */
     let lift = 0; // 负值 = 跳起
@@ -521,6 +659,9 @@ export class PlayerView {
       bodyRot += 0.05;
     }
 
+    // 跑步时上身向前压一点，让「冲出去」更有重量感。
+    if (walkAmp > 0 && !hold) bodyRot += 0.05 * walkAmp;
+
     // 落地压缩：身体略微压扁、重心下沉。
     if (this.landT > 0) squash = Math.max(squash, (this.landT / LAND_DUR) * 0.45);
     lift += squash * s * 0.1;
@@ -611,6 +752,10 @@ export class PlayerView {
     const s = fc.layout.playerR * pose.scale;
     const laneColor = fc.frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
     this.female = fc.characterId === 'rin';
+    this.visT = fc.vt;
+    this.motionWalk = 0;
+    this.motionPhase = 0;
+    this.motionAir = pose.legTuck > 0.3;
 
     // 清掉分身不该有的世界层反馈（这些 Graphics 只属于本体）。
     this.shadowGfx.clear();
@@ -670,17 +815,31 @@ export class PlayerView {
   destroy(): void {
     destroyGradient(this.bodyGradient);
     destroyGradient(this.bodyGradientF);
+    destroyGradient(this.skinGradient);
+    destroyGradient(this.skinGradientF);
+    destroyGradient(this.hairGradient);
+    destroyGradient(this.capGradient);
     destroyGradient(this.skirtGradient);
     destroyGradient(this.batGradient);
     destroyGradient(this.scytheGradient);
+    destroyGradient(this.bladeGlowGradient);
+    destroyGradient(this.shaftGradient);
+    destroyGradient(this.irisGradient);
     destroyGradient(this.haloGradient);
     destroyGradient(this.burnGradient);
     destroyGradient(this.glowGradient);
     this.bodyGradient = null;
     this.bodyGradientF = null;
+    this.skinGradient = null;
+    this.skinGradientF = null;
+    this.hairGradient = null;
+    this.capGradient = null;
     this.skirtGradient = null;
     this.batGradient = null;
     this.scytheGradient = null;
+    this.bladeGlowGradient = null;
+    this.shaftGradient = null;
+    this.irisGradient = null;
     this.haloGradient = null;
     this.burnGradient = null;
     this.glowGradient = null;
@@ -812,8 +971,13 @@ export class PlayerView {
     const swing = Math.sin(step) * 0.26 * walkAmp;
     const lift = tuck * s * 0.18;
     const legCol = this.female ? LEGGING_F : PANTS;
+    const legShade = this.female ? '#0d0814' : '#17232f';
+    const legLight = this.female ? LEGGING_F_LIGHT : PANTS_LIGHT;
+    const ink = this.female ? INK_RIN : INK_ZHE;
+    const rim = this.female ? RIM_RIN : RIM_ZHE;
     const bootCol = this.female ? BOOT_F : SHOE;
-    const legW = s * (this.female ? 0.17 : 0.21);
+    const bootLight = this.female ? BOOT_F_LIGHT : '#ffffff';
+    const legW = s * (this.female ? 0.165 : 0.2);
 
     for (const sgn of SIDES) {
       const phase = sgn * swing;
@@ -821,48 +985,104 @@ export class PlayerView {
       const footX = sgn * s * 0.2 + phase * s + tuck * s * 0.18;
       const kneeX = (hipX + footX) / 2 + sgn * s * 0.02;
       const kneeY = (hipY + footY - lift) / 2;
+      const toeY = footY - lift;
 
+      this.legPath.clear();
+      this.legPath.moveTo(hipX, hipY);
+      this.legPath.quadraticCurveTo(kneeX, kneeY, footX, toeY);
+
+      // 墨线（比腿略粗一圈）→ 底色 → 暗面 → 轮廓光，四层把腿做成圆柱。
+      setStroke(g, legW + s * 0.045, ink, 0.9, 'round');
+      attachPath(g, this.legPath);
+      g.stroke();
       setStroke(g, legW, legCol, 1, 'round');
-      g.beginPath();
-      g.moveTo(hipX, hipY);
-      g.quadraticCurveTo(kneeX, kneeY, footX, footY - lift);
+      attachPath(g, this.legPath);
       g.stroke();
 
-      // 地面偏暗，给腿加一道轮廓光，避免和地面糊在一起。
-      setStroke(
-        g,
-        s * 0.045,
-        this.female ? 'rgba(205,170,240,.24)' : 'rgba(170,215,245,.2)',
-        1,
-        'round',
-      );
+      setStroke(g, legW * 0.36, legShade, 0.55, 'round');
       g.beginPath();
-      g.moveTo(hipX - s * 0.055, hipY + s * 0.04);
-      g.quadraticCurveTo(kneeX - s * 0.055, kneeY, footX - s * 0.055, footY - lift - s * 0.03);
+      g.moveTo(hipX + s * 0.035, hipY + s * 0.02);
+      g.quadraticCurveTo(kneeX + s * 0.035, kneeY, footX + s * 0.03, toeY - s * 0.02);
       g.stroke();
 
-      // 鞋。
+      setStroke(g, s * 0.028, legLight, 0.5, 'round');
+      g.beginPath();
+      g.moveTo(hipX - s * 0.045, hipY + s * 0.03);
+      g.quadraticCurveTo(kneeX - s * 0.045, kneeY, footX - s * 0.045, toeY - s * 0.03);
+      g.stroke();
+
+      setStroke(g, s * 0.02, rim, 0.55, 'round');
+      g.beginPath();
+      g.moveTo(hipX - s * 0.065, hipY + s * 0.05);
+      g.quadraticCurveTo(kneeX - s * 0.065, kneeY, footX - s * 0.065, toeY - s * 0.05);
+      g.stroke();
+
+      // 凛的过膝袜口：一道亮紫边。
+      if (this.female) {
+        setStroke(g, s * 0.035, SASH_F, 0.85, 'round');
+        g.beginPath();
+        g.moveTo(hipX - legW * 0.55, hipY + s * 0.11);
+        g.lineTo(hipX + legW * 0.55, hipY + s * 0.11);
+        g.stroke();
+      }
+
+      // 鞋：鞋头朝右，带鞋底厚度。
+      const bootX = footX - s * 0.13;
+      const bootW = s * (this.female ? 0.34 : 0.36);
+      const bootH = s * 0.14;
+      this.shoePath.clear();
+      roundRectInto(this.shoePath, bootX, toeY - bootH * 0.62, bootW, bootH, s * 0.055);
       setFill(g, bootCol);
+      attachPath(g, this.shoePath);
+      g.fill();
+      setStroke(g, s * 0.032, ink, 0.9);
+      attachPath(g, this.shoePath);
+      g.stroke();
+
+      // 鞋面高光 / 鞋底。
+      setFill(g, bootLight, this.female ? 0.45 : 0.85);
       this.shoePath.clear();
       roundRectInto(
         this.shoePath,
-        footX - s * 0.16,
-        footY - lift - s * 0.05,
-        s * 0.34,
-        s * 0.14,
-        s * 0.06,
+        bootX + s * 0.03,
+        toeY - bootH * 0.5,
+        bootW * 0.42,
+        s * 0.035,
+        s * 0.018,
       );
       attachPath(g, this.shoePath);
       g.fill();
-      setStroke(g, s * 0.035, this.female ? '#1b1226' : '#22303c');
-      g.beginPath();
-      g.moveTo(footX - s * 0.14, footY - lift + s * 0.07);
-      g.lineTo(footX + s * 0.16, footY - lift + s * 0.07);
-      g.stroke();
+      setFill(g, this.female ? '#241033' : '#b9aa93');
+      this.shoePath.clear();
+      roundRectInto(
+        this.shoePath,
+        bootX + s * 0.01,
+        toeY + bootH * 0.22,
+        bootW - s * 0.02,
+        s * 0.045,
+        s * 0.02,
+      );
+      attachPath(g, this.shoePath);
+      g.fill();
+
+      // 哲的球鞋红线 / 凛的靴口紫边。
+      if (this.female) {
+        setStroke(g, s * 0.03, BOOT_F_LIGHT, 0.9, 'round');
+        g.beginPath();
+        g.moveTo(bootX + s * 0.04, toeY - bootH * 0.6);
+        g.lineTo(bootX + bootW - s * 0.04, toeY - bootH * 0.6);
+        g.stroke();
+      } else {
+        setStroke(g, s * 0.025, CAP_BRIM, 0.9, 'round');
+        g.beginPath();
+        g.moveTo(bootX + s * 0.04, toeY - s * 0.015);
+        g.lineTo(bootX + bootW - s * 0.06, toeY - s * 0.015);
+        g.stroke();
+      }
     }
   }
 
-  /** 躯干：红色球衣 + 奶油色条纹。 */
+  /** 躯干：红色球衣 + 奶油色条纹（赛璐珞暗面 + 冷色轮廓光）。 */
   private drawTorso(s: number): void {
     if (this.female) {
       this.drawTorsoFemale(s);
@@ -870,6 +1090,12 @@ export class PlayerView {
     }
     const g = this.torsoGfx;
     g.clear();
+
+    // 后肩：先铺一层暗色，让肩膀比胸腔退后半步。
+    setFill(g, JERSEY_DARK, 0.9);
+    g.beginPath();
+    g.ellipse(0, -s * 0.42, s * 0.42, s * 0.18);
+    g.fill();
 
     this.torsoPath.clear();
     this.torsoPath.moveTo(-s * 0.4, -s * 0.46);
@@ -884,25 +1110,57 @@ export class PlayerView {
     }
     attachPath(g, this.torsoPath);
     g.fill();
-    setStroke(g, s * 0.045, 'rgba(40,16,20,.55)');
+    setStroke(g, s * 0.045, INK_ZHE, 0.9);
     attachPath(g, this.torsoPath);
     g.stroke();
 
-    // 奶油色胸带。
+    // 右半侧暗面：硬边，像动画上色的一层阴影。
+    this.torsoShadePath.clear();
+    this.torsoShadePath.moveTo(-s * 0.02, -s * 0.53);
+    this.torsoShadePath.quadraticCurveTo(s * 0.24, -s * 0.5, s * 0.38, -s * 0.4);
+    this.torsoShadePath.lineTo(s * 0.28, s * 0.2);
+    this.torsoShadePath.quadraticCurveTo(s * 0.08, s * 0.3, -s * 0.02, s * 0.26);
+    this.torsoShadePath.closePath();
+    setFill(g, '#5c1a24', 0.34);
+    attachPath(g, this.torsoShadePath);
+    g.fill();
+
+    // 左肩轮廓光 + 袖口高光。
+    setStroke(g, s * 0.03, RIM_ZHE, 0.6, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.36, -s * 0.4);
+    g.quadraticCurveTo(-s * 0.27, s * 0.02, -s * 0.24, s * 0.16);
+    g.stroke();
+    setStroke(g, s * 0.045, JERSEY_LIGHT, 0.5, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.3, -s * 0.42);
+    g.quadraticCurveTo(-s * 0.16, -s * 0.5, -s * 0.02, -s * 0.49);
+    g.stroke();
+
+    // 奶油色胸带（下缘带一道暗边，做出布料的厚度）。
+    setStroke(g, s * 0.09, '#8f2530', 0.75);
+    g.beginPath();
+    g.moveTo(-s * 0.33, -s * 0.04);
+    g.quadraticCurveTo(0, s * 0.045, s * 0.33, -s * 0.04);
+    g.stroke();
     setStroke(g, s * 0.075, TRIM);
     g.beginPath();
     g.moveTo(-s * 0.33, -s * 0.06);
     g.quadraticCurveTo(0, s * 0.02, s * 0.33, -s * 0.06);
     g.stroke();
 
-    // 领口。
+    // 领口 + 锁骨阴影。
+    setFill(g, 'rgba(30,8,12,.45)');
+    g.beginPath();
+    g.ellipse(0, -s * 0.47, s * 0.15, s * 0.045);
+    g.fill();
     setStroke(g, s * 0.05, '#3a1519');
     g.beginPath();
     g.arc(0, -s * 0.46, s * 0.16, 0.15, Math.PI - 0.15);
     g.stroke();
 
     // 背号（一个简单的 7）。
-    setStroke(g, s * 0.035, 'rgba(244,234,214,.85)', 1, 'round');
+    setStroke(g, s * 0.04, 'rgba(244,234,214,.9)', 1, 'round');
     g.beginPath();
     g.moveTo(-s * 0.11, s * 0.06);
     g.lineTo(s * 0.1, s * 0.02);
@@ -912,18 +1170,47 @@ export class PlayerView {
     g.moveTo(-s * 0.13, s * 0.2);
     g.lineTo(s * 0.06, s * 0.24);
     g.stroke();
+
+    // 下摆束口。
+    setStroke(g, s * 0.045, '#53161d', 0.9);
+    g.beginPath();
+    g.moveTo(-s * 0.28, s * 0.27);
+    g.quadraticCurveTo(0, s * 0.37, s * 0.28, s * 0.27);
+    g.stroke();
   }
 
-  /** 凛的躯干：青绿短打 + 紫裙 + 粉色腰带。 */
+  /** 凛的躯干：青绿短打 + 紫裙 + 粉色腰带（分层裙摆 + 赛璐珞明暗）。 */
   private drawTorsoFemale(s: number): void {
     const g = this.torsoGfx;
     g.clear();
 
-    // 紫裙（先画，短打压住腰线）。
+    // 次级运动：走路 / 腾空时裙摆左右摆、整体上扬。
+    const sway =
+      Math.sin(this.visT * 3.3) * s * 0.018 * (0.4 + this.motionWalk) +
+      Math.cos(this.visT * 5.1) * s * 0.006;
+    const hemLift = this.motionAir ? s * 0.05 : 0;
+
+    // 裙后片：更暗、更宽，先铺出体积。
+    this.skirtBackPath.clear();
+    this.skirtBackPath.moveTo(-s * 0.28, s * 0.06);
+    this.skirtBackPath.lineTo(-s * 0.52 + sway * 0.6, s * 0.46 - hemLift);
+    this.skirtBackPath.quadraticCurveTo(
+      sway * 0.6,
+      s * 0.6 - hemLift,
+      s * 0.52 + sway * 0.6,
+      s * 0.46 - hemLift,
+    );
+    this.skirtBackPath.lineTo(s * 0.28, s * 0.06);
+    this.skirtBackPath.closePath();
+    setFill(g, SKIRT_F_DARK);
+    attachPath(g, this.skirtBackPath);
+    g.fill();
+
+    // 裙前片。
     this.skirtPath.clear();
     this.skirtPath.moveTo(-s * 0.27, s * 0.1);
-    this.skirtPath.lineTo(-s * 0.47, s * 0.44);
-    this.skirtPath.quadraticCurveTo(0, s * 0.55, s * 0.47, s * 0.44);
+    this.skirtPath.lineTo(-s * 0.47 + sway, s * 0.44 - hemLift);
+    this.skirtPath.quadraticCurveTo(sway, s * 0.55 - hemLift, s * 0.47 + sway, s * 0.44 - hemLift);
     this.skirtPath.lineTo(s * 0.27, s * 0.1);
     this.skirtPath.closePath();
     if (this.skirtGradient) {
@@ -933,20 +1220,48 @@ export class PlayerView {
     }
     attachPath(g, this.skirtPath);
     g.fill();
-    setStroke(g, s * 0.04, 'rgba(24,10,38,.7)');
+    setStroke(g, s * 0.04, INK_RIN, 0.9);
     attachPath(g, this.skirtPath);
     g.stroke();
 
-    // 裙摆褶皱。
-    setStroke(g, s * 0.026, 'rgba(196,150,232,.4)', 1, 'round');
+    // 右半侧暗面 + 裙摆内侧阴影。
+    this.torsoShadePath.clear();
+    this.torsoShadePath.moveTo(s * 0.05, s * 0.1);
+    this.torsoShadePath.lineTo(s * 0.3, s * 0.1);
+    this.torsoShadePath.lineTo(s * 0.48 + sway, s * 0.45 - hemLift);
+    this.torsoShadePath.quadraticCurveTo(
+      s * 0.2 + sway,
+      s * 0.52 - hemLift,
+      s * 0.08 + sway * 0.5,
+      s * 0.45 - hemLift,
+    );
+    this.torsoShadePath.closePath();
+    setFill(g, '#12061f', 0.3);
+    attachPath(g, this.torsoShadePath);
+    g.fill();
+
+    // 褶皱：亮暗交替，让裙摆有立体的折面。
     for (let i = -1; i <= 1; i++) {
+      setStroke(g, s * 0.035, i === 0 ? SKIRT_F_LIGHT : '#1b0b28', i === 0 ? 0.55 : 0.5, 'round');
       g.beginPath();
       g.moveTo(s * i * 0.1, s * 0.14);
-      g.quadraticCurveTo(s * i * 0.17, s * 0.32, s * i * 0.22, s * 0.46);
+      g.quadraticCurveTo(
+        s * i * 0.16 + sway * 0.5,
+        s * 0.32,
+        s * i * 0.22 + sway,
+        s * 0.45 - hemLift,
+      );
       g.stroke();
     }
 
-    // 上衣：窄肩收腰。
+    // 裙摆下缘的亮边。
+    setStroke(g, s * 0.025, RIM_RIN, 0.55, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.45 + sway, s * 0.45 - hemLift);
+    g.quadraticCurveTo(sway, s * 0.56 - hemLift, s * 0.45 + sway, s * 0.45 - hemLift);
+    g.stroke();
+
+    // 上衣：窄肩收腰，胸前留一点厚度。
     this.torsoPath.clear();
     this.torsoPath.moveTo(-s * 0.33, -s * 0.46);
     this.torsoPath.quadraticCurveTo(0, -s * 0.57, s * 0.33, -s * 0.46);
@@ -960,43 +1275,122 @@ export class PlayerView {
     }
     attachPath(g, this.torsoPath);
     g.fill();
-    setStroke(g, s * 0.04, 'rgba(8,34,34,.65)');
+    setStroke(g, s * 0.04, INK_RIN, 0.9);
     attachPath(g, this.torsoPath);
     g.stroke();
 
-    // 交领。
-    setStroke(g, s * 0.055, '#d8f2e8', 1, 'round');
+    // 上衣右侧暗面。
+    this.torsoShadePath.clear();
+    this.torsoShadePath.moveTo(s * 0.02, -s * 0.52);
+    this.torsoShadePath.quadraticCurveTo(s * 0.2, -s * 0.48, s * 0.31, -s * 0.42);
+    this.torsoShadePath.lineTo(s * 0.23, s * 0.1);
+    this.torsoShadePath.quadraticCurveTo(s * 0.1, s * 0.16, s * 0.02, s * 0.14);
+    this.torsoShadePath.closePath();
+    setFill(g, '#062f2e', 0.4);
+    attachPath(g, this.torsoShadePath);
+    g.fill();
+
+    // 下颌投在上胸的硬边阴影。
+    setFill(g, '#062f2e', 0.34);
+    this.torsoShadePath.clear();
+    this.torsoShadePath.moveTo(-s * 0.22, -s * 0.47);
+    this.torsoShadePath.quadraticCurveTo(0, -s * 0.31, s * 0.22, -s * 0.47);
+    this.torsoShadePath.quadraticCurveTo(0, -s * 0.39, -s * 0.22, -s * 0.47);
+    this.torsoShadePath.closePath();
+    attachPath(g, this.torsoShadePath);
+    g.fill();
+
+    // 左肩轮廓光 + 胸口高光。
+    setStroke(g, s * 0.03, RIM_RIN, 0.6, 'round');
     g.beginPath();
-    g.moveTo(-s * 0.17, -s * 0.44);
-    g.lineTo(0, -s * 0.26);
-    g.lineTo(s * 0.18, -s * 0.44);
+    g.moveTo(-s * 0.3, -s * 0.42);
+    g.quadraticCurveTo(-s * 0.24, -s * 0.05, -s * 0.2, s * 0.1);
     g.stroke();
-    setStroke(g, s * 0.028, 'rgba(8,34,34,.5)');
+    setStroke(g, s * 0.05, TOP_F_LIGHT, 0.45, 'round');
     g.beginPath();
-    g.moveTo(-s * 0.17, -s * 0.44);
-    g.lineTo(0, -s * 0.26);
-    g.lineTo(s * 0.18, -s * 0.44);
+    g.moveTo(-s * 0.26, -s * 0.4);
+    g.quadraticCurveTo(-s * 0.1, -s * 0.48, s * 0.04, -s * 0.46);
     g.stroke();
 
-    // 腰带 + 侧边结。
+    // 交领（外白内暗）。
+    setStroke(g, s * 0.075, '#0a3a38', 0.9, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.17, -s * 0.45);
+    g.lineTo(0, -s * 0.25);
+    g.lineTo(s * 0.18, -s * 0.45);
+    g.stroke();
+    setStroke(g, s * 0.055, '#e6fff7', 1, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.17, -s * 0.44);
+    g.lineTo(0, -s * 0.26);
+    g.lineTo(s * 0.18, -s * 0.44);
+    g.stroke();
+    setStroke(g, s * 0.02, SASH_F_LIGHT, 0.8);
+    g.beginPath();
+    g.moveTo(0, -s * 0.26);
+    g.lineTo(s * 0.05, -s * 0.17);
+    g.stroke();
+
+    // 颈圈。
+    setStroke(g, s * 0.045, '#1b0b28', 0.95);
+    g.beginPath();
+    g.moveTo(-s * 0.12, -s * 0.53);
+    g.quadraticCurveTo(0, -s * 0.48, s * 0.12, -s * 0.53);
+    g.stroke();
+    setFill(g, '#ff6fae');
+    g.beginPath();
+    g.circle(s * 0.03, -s * 0.49, s * 0.028);
+    g.fill();
+
+    // 腰带：亮面 + 暗边 + 侧边结，两条飘带随动作摆。
+    setFill(g, '#7d2344');
+    this.headPath.clear();
+    roundRectInto(this.headPath, -s * 0.28, s * 0.1, s * 0.56, s * 0.12, s * 0.04);
+    attachPath(g, this.headPath);
+    g.fill();
     setFill(g, SASH_F);
     this.headPath.clear();
-    roundRectInto(this.headPath, -s * 0.28, s * 0.08, s * 0.56, s * 0.11, s * 0.04);
+    roundRectInto(this.headPath, -s * 0.28, s * 0.07, s * 0.56, s * 0.1, s * 0.04);
     attachPath(g, this.headPath);
     g.fill();
-    setFill(g, '#ff7ba6');
+    setFill(g, SASH_F_LIGHT, 0.75);
     this.headPath.clear();
-    roundRectInto(this.headPath, -s * 0.3, s * 0.15, s * 0.12, s * 0.1, s * 0.035);
+    roundRectInto(this.headPath, -s * 0.24, s * 0.08, s * 0.48, s * 0.025, s * 0.012);
     attachPath(g, this.headPath);
     g.fill();
-    setStroke(g, s * 0.025, 'rgba(90,20,45,.55)');
+
+    const knotX = -s * 0.26;
+    const knotY = s * 0.13;
+    setFill(g, SASH_F);
     g.beginPath();
-    g.moveTo(-s * 0.28, s * 0.1);
-    g.lineTo(-s * 0.28, s * 0.18);
+    g.ellipse(knotX, knotY, s * 0.075, s * 0.06);
+    g.fill();
+    setStroke(g, s * 0.025, '#5e1732', 0.9);
+    g.beginPath();
+    g.ellipse(knotX, knotY, s * 0.075, s * 0.06);
+    g.stroke();
+
+    const tailSway = Math.sin(this.visT * 4.2) * s * 0.025 + this.motionWalk * s * 0.02;
+    setFill(g, SASH_F, 0.95);
+    this.ribbonPath.clear();
+    this.ribbonPath.moveTo(knotX, knotY);
+    this.ribbonPath.quadraticCurveTo(
+      knotX - s * 0.1,
+      knotY + s * (0.12 + tailSway / s),
+      knotX - s * 0.06 + tailSway,
+      knotY + s * 0.26,
+    );
+    this.ribbonPath.lineTo(knotX + s * 0.02 + tailSway, knotY + s * 0.24);
+    this.ribbonPath.quadraticCurveTo(knotX + s * 0.02, knotY + s * 0.14, knotX, knotY);
+    this.ribbonPath.closePath();
+    attachPath(g, this.ribbonPath);
+    g.fill();
+    setStroke(g, s * 0.018, SASH_F_LIGHT, 0.8);
+    attachPath(g, this.ribbonPath);
     g.stroke();
   }
 
-  /** 头：棒球帽 + 侧脸。 */
+  /** 头：棒球帽 + 侧脸（下颌线 + 帽檐阴影 + 大眼）。 */
   private drawHead(fc: FrameContext, s: number): void {
     if (this.female) {
       this.drawHeadFemale(fc, s);
@@ -1004,239 +1398,655 @@ export class PlayerView {
     }
     const g = this.torsoGfx;
     const hx = s * 0.04;
-    const hy = -s * 0.78;
-    const hr = s * 0.28;
+    const hy = -s * 0.8;
+    const hr = s * 0.3;
+    const lowHp = fc.maxHp > 0 && fc.hp / fc.maxHp <= 0.3;
 
-    // 脖子。
+    // 脖子 + 下颌投影。
     setFill(g, SKIN_DARK);
     this.headPath.clear();
-    roundRectInto(this.headPath, -s * 0.09, -s * 0.58, s * 0.2, s * 0.18, s * 0.05);
+    roundRectInto(this.headPath, -s * 0.09, -s * 0.58, s * 0.2, s * 0.2, s * 0.05);
     attachPath(g, this.headPath);
     g.fill();
-
-    // 脸。
-    setFill(g, SKIN);
+    setFill(g, 'rgba(110,55,30,.3)');
     g.beginPath();
-    g.circle(hx, hy, hr);
+    g.ellipse(hx - s * 0.02, hy + hr * 0.82, hr * 0.48, hr * 0.16);
     g.fill();
-    setStroke(g, s * 0.035, 'rgba(90,50,30,.5)');
-    g.beginPath();
-    g.circle(hx, hy, hr);
+
+    // 侧脸：额头 → 鼻梁 → 下巴，比正圆更有二次元的尖下颌。
+    this.facePath.clear();
+    this.facePath.moveTo(hx - hr * 0.95, hy - hr * 0.45);
+    this.facePath.quadraticCurveTo(hx, hy - hr * 1.04, hx + hr * 0.92, hy - hr * 0.5);
+    this.facePath.quadraticCurveTo(hx + hr * 1.02, hy, hx + hr * 0.64, hy + hr * 0.52);
+    this.facePath.quadraticCurveTo(hx + hr * 0.46, hy + hr * 0.9, hx + hr * 0.12, hy + hr * 0.93);
+    this.facePath.quadraticCurveTo(hx - hr * 0.5, hy + hr * 0.78, hx - hr * 0.78, hy + hr * 0.25);
+    this.facePath.closePath();
+    if (this.skinGradient) {
+      setFillGradient(g, this.skinGradient, 1);
+    } else {
+      setFill(g, SKIN);
+    }
+    attachPath(g, this.facePath);
+    g.fill();
+    setStroke(g, s * 0.03, INK_ZHE, 0.7);
+    attachPath(g, this.facePath);
     g.stroke();
 
     // 耳朵。
-    setFill(g, SKIN);
+    setFill(g, SKIN_DARK);
     g.beginPath();
-    g.circle(hx - hr * 0.92, hy + hr * 0.14, s * 0.075);
+    g.ellipse(hx - hr * 0.86, hy + hr * 0.12, s * 0.075, s * 0.09);
     g.fill();
-    setStroke(g, s * 0.025, 'rgba(90,50,30,.35)');
+    setStroke(g, s * 0.02, 'rgba(90,50,30,.55)');
     g.beginPath();
-    g.circle(hx - hr * 0.92, hy + hr * 0.14, s * 0.075);
+    g.arc(hx - hr * 0.86, hy + hr * 0.12, s * 0.04, -0.5, Math.PI * 0.9);
     g.stroke();
 
-    // 帽顶。
-    setFill(g, CAP);
+    // 鬓角 + 后脑短发。
+    setFill(g, '#3a2a24');
+    this.hairPath.clear();
+    this.hairPath.moveTo(hx - hr * 1.02, hy - hr * 0.35);
+    this.hairPath.lineTo(hx - hr * 1.12, hy + hr * 0.45);
+    this.hairPath.lineTo(hx - hr * 0.88, hy + hr * 0.54);
+    this.hairPath.lineTo(hx - hr * 0.82, hy + hr * 0.02);
+    this.hairPath.closePath();
+    attachPath(g, this.hairPath);
+    g.fill();
+
+    // 帽檐下的额发。
+    setFill(g, '#2c1f1b');
+    this.hairPath.clear();
+    this.hairPath.moveTo(hx - hr * 0.92, hy - hr * 0.36);
+    this.hairPath.quadraticCurveTo(hx - hr * 0.2, hy - hr * 0.02, hx + hr * 0.72, hy - hr * 0.24);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.3, hy - hr * 0.32, hx - hr * 0.1, hy - hr * 0.24);
+    this.hairPath.quadraticCurveTo(hx - hr * 0.5, hy - hr * 0.18, hx - hr * 0.92, hy - hr * 0.36);
+    this.hairPath.closePath();
+    attachPath(g, this.hairPath);
+    g.fill();
+
+    // 帽子：有厚度的帽檐 + 受光的帽顶。
     this.hatPath.clear();
-    this.hatPath.moveTo(hx - hr * 1.02, hy - s * 0.04);
-    this.hatPath.arc(hx, hy - s * 0.04, hr * 1.02, Math.PI, Math.PI * 2);
+    this.hatPath.moveTo(hx - hr * 1.06, hy - hr * 0.2);
+    this.hatPath.arc(hx, hy - hr * 0.2, hr * 1.06, Math.PI, Math.PI * 2);
     this.hatPath.closePath();
+    if (this.capGradient) {
+      setFillGradient(g, this.capGradient, 1);
+    } else {
+      setFill(g, CAP);
+    }
+    attachPath(g, this.hatPath);
+    g.fill();
+    setStroke(g, s * 0.028, INK_ZHE, 0.8);
+    attachPath(g, this.hatPath);
+    g.stroke();
+
+    // 帽顶高光与拼缝。
+    setStroke(g, s * 0.03, CAP_LIGHT, 0.75, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.72, hy - hr * 0.5);
+    g.quadraticCurveTo(hx - hr * 0.28, hy - hr * 0.96, hx + hr * 0.18, hy - hr * 0.9);
+    g.stroke();
+    setStroke(g, s * 0.016, 'rgba(8,16,24,.6)');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.1, hy - hr * 1.24);
+    g.lineTo(hx - hr * 0.05, hy - hr * 0.55);
+    g.stroke();
+
+    // 帽檐：先暗面再亮面。
+    setFill(g, '#6d1e26');
+    this.hatPath.clear();
+    roundRectInto(this.hatPath, hx + hr * 0.02, hy - hr * 0.32, hr * 1.18, s * 0.055, s * 0.026);
     attachPath(g, this.hatPath);
     g.fill();
     setFill(g, CAP_BRIM);
     this.hatPath.clear();
-    roundRectInto(this.hatPath, hx + s * 0.03, hy - s * 0.16, hr * 0.98, s * 0.1, s * 0.045);
+    roundRectInto(this.hatPath, hx + hr * 0.02, hy - hr * 0.38, hr * 1.12, s * 0.05, s * 0.024);
     attachPath(g, this.hatPath);
     g.fill();
-    setFill(g, '#2b3f52');
-    this.hatPath.clear();
-    roundRectInto(this.hatPath, hx - hr * 0.18, hy - s * 0.29, hr * 0.36, s * 0.08, s * 0.035);
+    setStroke(g, s * 0.022, INK_ZHE, 0.85);
     attachPath(g, this.hatPath);
-    g.fill();
-
-    // 眼睛：血量低时变红。
-    const eyeCol = fc.maxHp > 0 && fc.hp / fc.maxHp <= 0.3 ? '#ff4d6d' : '#1a2836';
-    setFill(g, eyeCol);
+    g.stroke();
+    setStroke(g, s * 0.018, '#ff8a76', 0.8);
     g.beginPath();
-    g.ellipse(hx + s * 0.12, hy + s * 0.03, s * 0.045, s * 0.065);
+    g.moveTo(hx + hr * 0.14, hy - hr * 0.36);
+    g.lineTo(hx + hr * 1.0, hy - hr * 0.36);
+    g.stroke();
+
+    // 帽扣。
+    setFill(g, '#2b3f52');
+    g.beginPath();
+    g.circle(hx, hy - hr * 1.24, s * 0.035);
     g.fill();
 
-    // 眉毛：出手时更凶。
+    // 眼睛：白眼球 + 深色虹膜 + 高光，低血量转红。
+    const eyeX = hx + hr * 0.42;
+    const eyeY = hy + hr * 0.06;
+    setFill(g, '#fff8ee', 0.95);
+    g.beginPath();
+    g.ellipse(eyeX, eyeY, hr * 0.19, hr * 0.2);
+    g.fill();
+    setFill(g, lowHp ? '#ff3d5e' : '#1a2836');
+    g.beginPath();
+    g.ellipse(eyeX + hr * 0.025, eyeY + hr * 0.02, hr * 0.11, hr * 0.15);
+    g.fill();
+    setFill(g, '#ffffff', 0.95);
+    g.beginPath();
+    g.circle(eyeX - hr * 0.02, eyeY - hr * 0.05, hr * 0.035);
+    g.fill();
+
+    // 上眼睑 / 眉毛：出手时更凶。
+    setStroke(g, s * 0.028, INK_ZHE, 1, 'round');
+    g.beginPath();
+    g.moveTo(eyeX - hr * 0.2, eyeY - hr * 0.14);
+    g.quadraticCurveTo(eyeX, eyeY - hr * 0.28, eyeX + hr * 0.24, eyeY - hr * 0.12);
+    g.stroke();
     setStroke(g, s * 0.03, '#3a2a24', 1, 'round');
     g.beginPath();
-    g.moveTo(hx + s * 0.03, hy - s * 0.06);
-    g.lineTo(hx + s * 0.2, hy - s * 0.02);
+    g.moveTo(eyeX - hr * 0.18, eyeY - hr * 0.32);
+    g.lineTo(eyeX + hr * 0.24, eyeY - hr * 0.22);
     g.stroke();
 
-    // 嘴。
-    setStroke(g, s * 0.028, 'rgba(120,60,40,.7)');
+    // 鼻梁 / 嘴。
+    setStroke(g, s * 0.02, 'rgba(130,70,45,.7)', 1, 'round');
     g.beginPath();
-    g.moveTo(hx + s * 0.05, hy + s * 0.17);
-    g.lineTo(hx + s * 0.19, hy + s * 0.15);
+    g.moveTo(hx + hr * 0.72, hy + hr * 0.1);
+    g.lineTo(hx + hr * 0.8, hy + hr * 0.3);
     g.stroke();
+    setStroke(g, s * 0.024, 'rgba(120,60,40,.8)');
+    g.beginPath();
+    g.moveTo(hx + hr * 0.36, hy + hr * 0.66);
+    g.lineTo(hx + hr * 0.66, hy + hr * 0.63);
+    g.stroke();
+
+    // 帽檐投影：压在额头上的一层暗色。
+    setFill(g, 'rgba(70,30,25,.25)');
+    g.beginPath();
+    g.ellipse(hx + hr * 0.1, hy - hr * 0.28, hr * 0.7, hr * 0.07);
+    g.fill();
   }
 
-  /** 凛的头：深紫长发 + 刘海 + 发带，无帽。 */
+  /** 凛的头：深紫长发 + 刘海 + 发带 + 二次元大眼（无帽）。 */
   private drawHeadFemale(fc: FrameContext, s: number): void {
     const g = this.torsoGfx;
     const hx = s * 0.04;
-    const hy = -s * 0.78;
-    const hr = s * 0.28;
+    const hy = -s * 0.81;
+    const hr = s * 0.31;
+    const lowHp = fc.maxHp > 0 && fc.hp / fc.maxHp <= 0.3;
+    const eyeTint = fc.burning ? '#ff7ad9' : lowHp ? '#ff4d6d' : null;
 
-    // 脖子。
+    // 脖子 + 下颌投影。
     setFill(g, SKIN_F_DARK);
     this.headPath.clear();
-    roundRectInto(this.headPath, -s * 0.09, -s * 0.58, s * 0.2, s * 0.18, s * 0.05);
+    roundRectInto(this.headPath, -s * 0.09, -s * 0.59, s * 0.2, s * 0.21, s * 0.05);
+    attachPath(g, this.headPath);
+    g.fill();
+    setFill(g, SKIN_F_SHADE, 0.55);
+    this.headPath.clear();
+    roundRectInto(this.headPath, -s * 0.09, -s * 0.59, s * 0.08, s * 0.18, s * 0.04);
     attachPath(g, this.headPath);
     g.fill();
 
-    // 脸。
-    setFill(g, SKIN_F);
-    g.beginPath();
-    g.circle(hx, hy, hr);
+    // 脸：尖下颌 + 柔和轮廓。
+    this.facePath.clear();
+    this.facePath.moveTo(hx - hr * 0.96, hy - hr * 0.42);
+    this.facePath.quadraticCurveTo(hx, hy - hr * 1.02, hx + hr * 0.9, hy - hr * 0.48);
+    this.facePath.quadraticCurveTo(hx + hr * 1.02, hy + hr * 0.02, hx + hr * 0.62, hy + hr * 0.55);
+    this.facePath.quadraticCurveTo(hx + hr * 0.44, hy + hr * 0.92, hx + hr * 0.12, hy + hr * 0.95);
+    this.facePath.quadraticCurveTo(hx - hr * 0.5, hy + hr * 0.8, hx - hr * 0.8, hy + hr * 0.26);
+    this.facePath.closePath();
+    if (this.skinGradientF) {
+      setFillGradient(g, this.skinGradientF, 1);
+    } else {
+      setFill(g, SKIN_F);
+    }
+    attachPath(g, this.facePath);
     g.fill();
-    setStroke(g, s * 0.03, 'rgba(120,70,60,.45)');
-    g.beginPath();
-    g.circle(hx, hy, hr);
+    setStroke(g, s * 0.028, INK_RIN, 0.72);
+    attachPath(g, this.facePath);
     g.stroke();
+
+    // 刘海下的额头阴影。
+    setFill(g, SKIN_F_SHADE, 0.38);
+    this.hairPath.clear();
+    this.hairPath.moveTo(hx - hr * 0.9, hy - hr * 0.3);
+    this.hairPath.quadraticCurveTo(hx, hy - hr * 0.62, hx + hr * 0.86, hy - hr * 0.3);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.3, hy - hr * 0.1, hx - hr * 0.9, hy - hr * 0.3);
+    this.hairPath.closePath();
+    attachPath(g, this.hairPath);
+    g.fill();
 
     // 耳朵。
-    setFill(g, SKIN_F);
+    setFill(g, SKIN_F_DARK);
     g.beginPath();
-    g.circle(hx - hr * 0.92, hy + hr * 0.14, s * 0.07);
+    g.ellipse(hx - hr * 0.88, hy + hr * 0.12, s * 0.07, s * 0.095);
     g.fill();
 
-    // 头顶长发（盖住上半个头）。
-    setFill(g, HAIR_F);
+    // 远侧眼睛（稍小、稍暗）与近侧大眼。
+    for (let i = 0; i < 2; i++) {
+      const far = i === 0;
+      const sc = far ? 0.8 : 1;
+      const ex = hx + hr * (far ? 0.03 : 0.56);
+      const ey = hy + hr * (far ? 0.1 : 0.08);
+
+      if (fc.burning) {
+        setFill(g, '#ff6ec7', 0.18);
+        g.beginPath();
+        g.ellipse(ex, ey, hr * 0.36 * sc, hr * 0.36 * sc);
+        g.fill();
+      }
+
+      // 眼白。
+      setFill(g, '#fff6fd', far ? 0.92 : 0.98);
+      g.beginPath();
+      g.ellipse(ex, ey, hr * 0.2 * sc, hr * 0.27 * sc);
+      g.fill();
+
+      // 虹膜：品红径向渐变 / 低血量与燃魂时的纯色。
+      const irx = hr * 0.135 * sc;
+      const iry = hr * 0.2 * sc;
+      if (eyeTint) {
+        setFill(g, eyeTint);
+      } else if (this.irisGradient) {
+        setFillGradient(g, this.irisGradient, far ? 0.95 : 1);
+      } else {
+        setFill(g, '#c02fbe');
+      }
+      g.beginPath();
+      g.ellipse(ex + hr * 0.015, ey + hr * 0.02, irx, iry);
+      g.fill();
+
+      // 瞳孔。
+      setFill(g, '#2a0b38', 0.9);
+      g.beginPath();
+      g.ellipse(ex + hr * 0.02, ey + hr * 0.03, irx * 0.48, iry * 0.62);
+      g.fill();
+
+      // 双高光：左上大、右下小。
+      setFill(g, '#ffffff', 0.95);
+      g.beginPath();
+      g.circle(ex - hr * 0.05 * sc, ey - hr * 0.08 * sc, hr * 0.052 * sc);
+      g.fill();
+      g.beginPath();
+      g.circle(ex + hr * 0.07 * sc, ey + hr * 0.09 * sc, hr * 0.025 * sc);
+      g.fill();
+
+      // 上睫毛：粗、外眼角上挑。
+      setStroke(g, s * 0.032, '#1b0a26', 1, 'round');
+      g.beginPath();
+      g.moveTo(ex - hr * 0.21 * sc, ey - hr * 0.15 * sc);
+      g.quadraticCurveTo(ex, ey - hr * 0.32 * sc, ex + hr * 0.24 * sc, ey - hr * 0.14 * sc);
+      g.stroke();
+      setStroke(g, s * 0.024, '#1b0a26', 1, 'round');
+      g.beginPath();
+      g.moveTo(ex + hr * 0.18 * sc, ey - hr * 0.2 * sc);
+      g.lineTo(ex + hr * 0.3 * sc, ey - hr * 0.3 * sc);
+      g.stroke();
+
+      // 下眼睑。
+      setStroke(g, s * 0.012, 'rgba(110,40,80,.55)', 1, 'round');
+      g.beginPath();
+      g.moveTo(ex - hr * 0.14 * sc, ey + hr * 0.2 * sc);
+      g.quadraticCurveTo(ex, ey + hr * 0.3 * sc, ex + hr * 0.18 * sc, ey + hr * 0.18 * sc);
+      g.stroke();
+
+      // 眉毛：细、带一点凌厉的弧度。
+      setStroke(g, s * 0.022, '#3d2350', 0.95, 'round');
+      g.beginPath();
+      g.moveTo(ex - hr * 0.17 * sc, ey - hr * 0.38 * sc);
+      g.quadraticCurveTo(ex, ey - hr * 0.44 * sc, ex + hr * 0.15 * sc, ey - hr * 0.36 * sc);
+      g.stroke();
+    }
+
+    // 鼻尖 / 嘴 / 腮红。
+    setStroke(g, s * 0.016, 'rgba(150,80,90,.7)', 1, 'round');
     g.beginPath();
-    g.arc(hx, hy - s * 0.015, hr * 1.06, Math.PI * 0.99, Math.PI * 2.01);
-    g.closePath();
-    g.fill();
-
-    // 刘海：从头顶斜扫到右眉。
-    this.hairPath.clear();
-    this.hairPath.moveTo(hx - hr * 1.02, hy - s * 0.02);
-    this.hairPath.quadraticCurveTo(hx - hr * 0.2, hy - s * 0.34, hx + hr * 0.92, hy - s * 0.16);
-    this.hairPath.quadraticCurveTo(hx + hr * 0.4, hy - s * 0.14, hx + hr * 0.06, hy + s * 0.02);
-    this.hairPath.quadraticCurveTo(hx - hr * 0.5, hy + s * 0.02, hx - hr * 1.02, hy - s * 0.02);
-    this.hairPath.closePath();
-    attachPath(g, this.hairPath);
-    g.fill();
-
-    // 左侧鬓发垂到肩。
-    setFill(g, HAIR_F);
-    this.hairPath.clear();
-    this.hairPath.moveTo(hx - hr * 1.02, hy - s * 0.06);
-    this.hairPath.quadraticCurveTo(hx - hr * 1.35, hy + s * 0.24, hx - hr * 1.15, hy + s * 0.52);
-    this.hairPath.quadraticCurveTo(hx - hr * 1.0, hy + s * 0.3, hx - hr * 0.86, hy + s * 0.04);
-    this.hairPath.closePath();
-    attachPath(g, this.hairPath);
-    g.fill();
-
-    // 发丝高光。
-    setStroke(g, s * 0.03, hexA(HAIR_F_LIGHT, 0.85), 1, 'round');
-    g.beginPath();
-    g.moveTo(hx - hr * 0.7, hy - s * 0.2);
-    g.quadraticCurveTo(hx - hr * 0.2, hy - s * 0.29, hx + hr * 0.45, hy - s * 0.2);
+    g.moveTo(hx + hr * 0.72, hy + hr * 0.28);
+    g.lineTo(hx + hr * 0.8, hy + hr * 0.34);
     g.stroke();
 
-    // 发带（右侧小蝴蝶结）。
-    const bx = hx + hr * 0.82;
-    const by = hy - s * 0.16;
+    setFill(g, '#b83e63');
+    this.eyePath.clear();
+    this.eyePath.moveTo(hx + hr * 0.3, hy + hr * 0.62);
+    this.eyePath.quadraticCurveTo(hx + hr * 0.46, hy + hr * 0.72, hx + hr * 0.62, hy + hr * 0.6);
+    this.eyePath.quadraticCurveTo(hx + hr * 0.46, hy + hr * 0.64, hx + hr * 0.3, hy + hr * 0.62);
+    this.eyePath.closePath();
+    attachPath(g, this.eyePath);
+    g.fill();
+
+    setFill(g, '#ff7fa8', 0.28);
+    g.beginPath();
+    g.ellipse(hx + hr * 0.44, hy + hr * 0.44, hr * 0.2, hr * 0.1);
+    g.fill();
+    g.beginPath();
+    g.ellipse(hx - hr * 0.32, hy + hr * 0.44, hr * 0.14, hr * 0.08);
+    g.fill();
+
+    // 头顶发盖。
+    this.hairMassPath.clear();
+    this.hairMassPath.moveTo(hx - hr * 1.08, hy - hr * 0.08);
+    this.hairMassPath.quadraticCurveTo(
+      hx - hr * 1.02,
+      hy - hr * 1.18,
+      hx + hr * 0.18,
+      hy - hr * 1.16,
+    );
+    this.hairMassPath.quadraticCurveTo(
+      hx + hr * 1.14,
+      hy - hr * 1.04,
+      hx + hr * 1.08,
+      hy - hr * 0.1,
+    );
+    this.hairMassPath.quadraticCurveTo(hx + hr * 0.7, hy - hr * 0.5, hx + hr * 0.2, hy - hr * 0.62);
+    this.hairMassPath.quadraticCurveTo(
+      hx - hr * 0.5,
+      hy - hr * 0.6,
+      hx - hr * 0.96,
+      hy - hr * 0.16,
+    );
+    this.hairMassPath.closePath();
+    if (this.hairGradient) {
+      setFillGradient(g, this.hairGradient, 1);
+    } else {
+      setFill(g, HAIR_F);
+    }
+    attachPath(g, this.hairMassPath);
+    g.fill();
+    setStroke(g, s * 0.025, INK_RIN, 0.85);
+    attachPath(g, this.hairMassPath);
+    g.stroke();
+
+    // 刘海：三缕带尖的发束，向右扫；发梢抬高，露出双眼。
+    this.hairPath.clear();
+    this.hairPath.moveTo(hx - hr * 1.06, hy - hr * 0.2);
+    this.hairPath.quadraticCurveTo(hx - hr * 0.75, hy - hr * 0.92, hx + hr * 0.05, hy - hr * 1.04);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.9, hy - hr * 0.96, hx + hr * 1.08, hy - hr * 0.26);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.92, hy - hr * 0.56, hx + hr * 0.7, hy - hr * 0.42);
+    this.hairPath.lineTo(hx + hr * 0.6, hy - hr * 0.24);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.5, hy - hr * 0.54, hx + hr * 0.38, hy - hr * 0.58);
+    this.hairPath.lineTo(hx + hr * 0.24, hy - hr * 0.34);
+    this.hairPath.quadraticCurveTo(hx + hr * 0.12, hy - hr * 0.64, hx - hr * 0.02, hy - hr * 0.6);
+    this.hairPath.lineTo(hx - hr * 0.2, hy - hr * 0.3);
+    this.hairPath.quadraticCurveTo(hx - hr * 0.38, hy - hr * 0.56, hx - hr * 0.52, hy - hr * 0.38);
+    this.hairPath.lineTo(hx - hr * 0.66, hy - hr * 0.16);
+    this.hairPath.quadraticCurveTo(hx - hr * 0.86, hy - hr * 0.3, hx - hr * 1.06, hy - hr * 0.2);
+    this.hairPath.closePath();
+    attachPath(g, this.hairPath);
+    g.fill();
+    setStroke(g, s * 0.02, INK_RIN, 0.7);
+    attachPath(g, this.hairPath);
+    g.stroke();
+
+    // 刘海发梢的亮丝，勾出每一缕的厚度。
+    setStroke(g, s * 0.016, HAIR_F_LIGHT, 0.5, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.62, hy - hr * 0.2);
+    g.quadraticCurveTo(hx - hr * 0.42, hy - hr * 0.44, hx - hr * 0.26, hy - hr * 0.34);
+    g.stroke();
+    setStroke(g, s * 0.014, HAIR_F_GLOSS, 0.45, 'round');
+    g.beginPath();
+    g.moveTo(hx + hr * 0.46, hy - hr * 0.42);
+    g.quadraticCurveTo(hx + hr * 0.56, hy - hr * 0.5, hx + hr * 0.64, hy - hr * 0.32);
+    g.stroke();
+
+    // 发丝高光带 + 两缕亮丝。
+    setStroke(g, s * 0.045, HAIR_F_GLOSS, 0.65, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.78, hy - hr * 0.72);
+    g.quadraticCurveTo(hx - hr * 0.2, hy - hr * 1.02, hx + hr * 0.52, hy - hr * 0.84);
+    g.stroke();
+    setStroke(g, s * 0.02, HAIR_F_LIGHT, 0.9, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.55, hy - hr * 0.62);
+    g.quadraticCurveTo(hx - hr * 0.1, hy - hr * 0.8, hx + hr * 0.4, hy - hr * 0.68);
+    g.stroke();
+
+    // 左侧鬓发：垂到肩，随走路 / 风摆动。
+    const lockSway =
+      Math.sin(this.visT * 3.1) * s * 0.02 * (0.5 + this.motionWalk) +
+      (this.motionAir ? -s * 0.05 : 0);
+    setFill(g, HAIR_F);
+    this.hairPath.clear();
+    this.hairPath.moveTo(hx - hr * 1.02, hy - hr * 0.12);
+    this.hairPath.quadraticCurveTo(
+      hx - hr * 1.3 + lockSway,
+      hy + hr * 0.7,
+      hx - hr * 1.08 + lockSway,
+      hy + hr * 1.55,
+    );
+    this.hairPath.quadraticCurveTo(
+      hx - hr * 0.92 + lockSway,
+      hy + hr * 0.9,
+      hx - hr * 0.82,
+      hy + hr * 0.2,
+    );
+    this.hairPath.closePath();
+    attachPath(g, this.hairPath);
+    g.fill();
+    setStroke(g, s * 0.018, HAIR_F_LIGHT, 0.7, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 1.0, hy + hr * 0.05);
+    g.quadraticCurveTo(
+      hx - hr * 1.12 + lockSway,
+      hy + hr * 0.7,
+      hx - hr * 1.03 + lockSway,
+      hy + hr * 1.3,
+    );
+    g.stroke();
+
+    // 呆毛：一根有弹性的细发。
+    const ahogeSway = Math.sin(this.visT * 3.7) * s * 0.03;
+    setStroke(g, s * 0.022, HAIR_F, 1, 'round');
+    g.beginPath();
+    g.moveTo(hx - hr * 0.12, hy - hr * 1.14);
+    g.quadraticCurveTo(
+      hx + hr * 0.1 + ahogeSway,
+      hy - hr * 1.55,
+      hx + hr * 0.36 + ahogeSway,
+      hy - hr * 1.32,
+    );
+    g.stroke();
+
+    // 发带：右侧蝴蝶结 + 飘带。
+    const bx = hx + hr * 0.96;
+    const by = hy - hr * 0.52;
+    const bowSway = Math.sin(this.visT * 4.4) * s * 0.02;
     setFill(g, SASH_F);
     g.beginPath();
     g.moveTo(bx, by);
-    g.lineTo(bx + s * 0.12, by - s * 0.08);
-    g.lineTo(bx + s * 0.12, by + s * 0.05);
+    g.lineTo(bx + s * 0.15, by - s * 0.1 + bowSway);
+    g.lineTo(bx + s * 0.13, by + s * 0.06 + bowSway);
     g.closePath();
     g.fill();
     g.beginPath();
     g.moveTo(bx, by);
-    g.lineTo(bx - s * 0.02, by + s * 0.12);
-    g.lineTo(bx + s * 0.08, by + s * 0.08);
+    g.lineTo(bx + s * 0.03, by + s * 0.15 + bowSway);
+    g.lineTo(bx + s * 0.12, by + s * 0.08 + bowSway);
     g.closePath();
     g.fill();
-    setFill(g, '#ff9ac0');
+    setStroke(g, s * 0.018, '#7a1f45', 0.9);
     g.beginPath();
-    g.circle(bx, by, s * 0.035);
+    g.moveTo(bx, by);
+    g.lineTo(bx + s * 0.15, by - s * 0.1 + bowSway);
+    g.stroke();
+    setFill(g, SASH_F_LIGHT);
+    g.beginPath();
+    g.circle(bx, by, s * 0.04);
     g.fill();
 
-    // 眼睛：血量低时变红；燃魂时品红。
-    const eyeCol = fc.burning
-      ? '#ff6ec7'
-      : fc.maxHp > 0 && fc.hp / fc.maxHp <= 0.3
-        ? '#ff4d6d'
-        : '#3a1f45';
-    setFill(g, eyeCol);
-    g.beginPath();
-    g.ellipse(hx + s * 0.13, hy + s * 0.04, s * 0.05, s * 0.07);
+    // 飘带：从蝴蝶结垂下的两条细带。
+    this.ribbonPath.clear();
+    this.ribbonPath.moveTo(bx, by);
+    this.ribbonPath.quadraticCurveTo(
+      bx + s * 0.08,
+      by + s * 0.16,
+      bx + s * 0.02 + bowSway,
+      by + s * 0.32,
+    );
+    this.ribbonPath.lineTo(bx + s * 0.07 + bowSway, by + s * 0.31);
+    this.ribbonPath.quadraticCurveTo(bx + s * 0.12, by + s * 0.15, bx + s * 0.05, by);
+    this.ribbonPath.closePath();
+    setFill(g, SASH_F, 0.95);
+    attachPath(g, this.ribbonPath);
     g.fill();
-    // 睫毛。
-    setStroke(g, s * 0.028, '#2a1630', 1, 'round');
-    g.beginPath();
-    g.moveTo(hx + s * 0.07, hy - s * 0.02);
-    g.lineTo(hx + s * 0.2, hy + s * 0.01);
+    setStroke(g, s * 0.014, SASH_F_LIGHT, 0.85);
+    attachPath(g, this.ribbonPath);
     g.stroke();
 
-    // 眉毛。
-    setStroke(g, s * 0.024, '#3a2542', 1, 'round');
-    g.beginPath();
-    g.moveTo(hx + s * 0.06, hy - s * 0.08);
-    g.lineTo(hx + s * 0.2, hy - s * 0.05);
-    g.stroke();
-
-    // 腮红 + 嘴。
-    setFill(g, 'rgba(255,120,160,.22)');
-    g.beginPath();
-    g.ellipse(hx + s * 0.05, hy + s * 0.16, s * 0.09, s * 0.045);
-    g.fill();
-    setStroke(g, s * 0.026, 'rgba(150,60,80,.75)');
-    g.beginPath();
-    g.moveTo(hx + s * 0.1, hy + s * 0.2);
-    g.lineTo(hx + s * 0.19, hy + s * 0.19);
-    g.stroke();
+    // 银色发夹：三颗菱形。
+    setFill(g, '#e8dcff', 0.95);
+    for (let i = 0; i < 3; i++) {
+      const px = hx - hr * 0.5 + s * 0.05 * i;
+      const py = hy - hr * 0.48 + s * 0.012 * i;
+      g.beginPath();
+      g.moveTo(px, py - s * 0.025);
+      g.lineTo(px + s * 0.022, py);
+      g.lineTo(px, py + s * 0.025);
+      g.lineTo(px - s * 0.022, py);
+      g.closePath();
+      g.fill();
+    }
   }
 
-  /** 凛的马尾（在身体后面）。 */
+  /** 凛的后发：整片长发 + 会甩动的马尾（在身体后面）。 */
   private drawHairBack(fc: FrameContext, s: number, airborne: boolean): void {
     const g = this.hairBackGfx;
     g.clear();
     if (!this.female) return;
 
-    const sway = Math.sin(fc.vt * 3.1) * s * 0.06 + (airborne ? -s * 0.16 : 0);
-    const lift = airborne ? -s * 0.3 : 0;
-    const x0 = -s * 0.12;
-    const y0 = -s * 0.74;
-    const x1 = -s * 0.42 + sway * 0.6;
-    const y1 = -s * 0.18 + lift;
-    const x2 = -s * 0.52 + sway;
-    const y2 = s * 0.34 + lift;
+    const sway =
+      Math.sin(this.visT * 3.1) * s * 0.025 * (0.45 + this.motionWalk) + (airborne ? -s * 0.09 : 0);
+    const bounce =
+      (airborne ? -s * 0.12 : 0) -
+      Math.abs(Math.sin(this.motionPhase)) * s * 0.02 * this.motionWalk;
 
-    // 主束。
-    setStroke(g, s * 0.17, HAIR_F, 1, 'round');
-    g.beginPath();
-    g.moveTo(x0, y0);
-    g.quadraticCurveTo(x1, y1, x2, y2);
+    // 后脑整片长发：左侧压暗、右侧留出肩线。
+    this.hairMassPath.clear();
+    this.hairMassPath.moveTo(-s * 0.08, -s * 0.98);
+    this.hairMassPath.quadraticCurveTo(-s * 0.55, -s * 0.95, -s * 0.64, -s * 0.5);
+    this.hairMassPath.lineTo(-s * 0.6 + sway * 0.4, s * 0.24 + bounce * 0.3);
+    this.hairMassPath.quadraticCurveTo(-s * 0.5 + sway * 0.4, s * 0.02, -s * 0.4, -s * 0.24);
+    this.hairMassPath.quadraticCurveTo(-s * 0.4, s * 0.22, -s * 0.3 + sway * 0.5, s * 0.48);
+    this.hairMassPath.quadraticCurveTo(-s * 0.2, s * 0.12, -s * 0.16, -s * 0.16);
+    this.hairMassPath.lineTo(-s * 0.1, -s * 0.62);
+    this.hairMassPath.closePath();
+    if (this.hairGradient) {
+      setFillGradient(g, this.hairGradient, 1);
+    } else {
+      setFill(g, HAIR_F);
+    }
+    attachPath(g, this.hairMassPath);
+    g.fill();
+    setStroke(g, s * 0.03, INK_RIN, 0.85);
+    attachPath(g, this.hairMassPath);
     g.stroke();
-    // 亮面发丝。
-    setStroke(g, s * 0.06, hexA(HAIR_F_LIGHT, 0.9), 1, 'round');
+
+    // 发束高光。
+    setStroke(g, s * 0.045, HAIR_F_LIGHT, 0.55, 'round');
     g.beginPath();
-    g.moveTo(x0 - s * 0.03, y0 + s * 0.05);
-    g.quadraticCurveTo(x1 - s * 0.02, y1, x2 - s * 0.04, y2 - s * 0.06);
+    g.moveTo(-s * 0.16, -s * 0.9);
+    g.quadraticCurveTo(-s * 0.46, -s * 0.72, -s * 0.5, -s * 0.24);
     g.stroke();
-    // 发梢。
+    setStroke(g, s * 0.018, HAIR_F_GLOSS, 0.55, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.18, -s * 0.82);
+    g.quadraticCurveTo(-s * 0.4, -s * 0.62, -s * 0.44, -s * 0.3);
+    g.stroke();
+
+    // 马尾：从发圈位置甩到左下方。
+    this.hairPath.clear();
+    this.hairPath.moveTo(-s * 0.18, -s * 0.7);
+    this.hairPath.quadraticCurveTo(
+      -s * 0.52 + sway,
+      -s * 0.42 + bounce,
+      -s * 0.5 + sway * 1.2,
+      s * 0.06 + bounce,
+    );
+    this.hairPath.quadraticCurveTo(
+      -s * 0.48 + sway * 1.4,
+      s * 0.48 + bounce,
+      -s * 0.63 + sway * 1.6,
+      s * 0.76 + bounce,
+    );
+    this.hairPath.quadraticCurveTo(
+      -s * 0.7 + sway * 1.5,
+      s * 0.42 + bounce,
+      -s * 0.64 + sway * 1.2,
+      s * 0.04 + bounce,
+    );
+    this.hairPath.quadraticCurveTo(-s * 0.6 + sway, -s * 0.36 + bounce, -s * 0.34, -s * 0.62);
+    this.hairPath.closePath();
+    if (this.hairGradient) {
+      setFillGradient(g, this.hairGradient, 1);
+    } else {
+      setFill(g, HAIR_F);
+    }
+    attachPath(g, this.hairPath);
+    g.fill();
+    setStroke(g, s * 0.028, INK_RIN, 0.85);
+    attachPath(g, this.hairPath);
+    g.stroke();
+
+    // 马尾的亮面与分叉发梢。
+    setStroke(g, s * 0.035, HAIR_F_LIGHT, 0.8, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.24, -s * 0.58);
+    g.quadraticCurveTo(-s * 0.5 + sway, -s * 0.2, -s * 0.54 + sway * 1.3, s * 0.4 + bounce);
+    g.stroke();
+    setStroke(g, s * 0.018, HAIR_F_GLOSS, 0.6, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.28, -s * 0.5);
+    g.quadraticCurveTo(-s * 0.44 + sway, -s * 0.12, -s * 0.48 + sway * 1.3, s * 0.3 + bounce);
+    g.stroke();
     setFill(g, HAIR_F);
     g.beginPath();
-    g.ellipse(x2, y2, s * 0.09, s * 0.14);
+    g.moveTo(-s * 0.63 + sway * 1.6, s * 0.76 + bounce);
+    g.lineTo(-s * 0.56 + sway * 1.7, s * 0.58 + bounce);
+    g.lineTo(-s * 0.5 + sway * 1.5, s * 0.7 + bounce);
+    g.closePath();
     g.fill();
 
-    // 发圈。
+    // 燃魂时发梢透出紫红光。
+    if (fc.burning) {
+      setStroke(g, s * 0.03, RIN_IMPACT, 0.55, 'round');
+      g.beginPath();
+      g.moveTo(-s * 0.6 + sway * 1.5, s * 0.5 + bounce);
+      g.quadraticCurveTo(
+        -s * 0.62 + sway * 1.6,
+        s * 0.62 + bounce,
+        -s * 0.63 + sway * 1.6,
+        s * 0.76 + bounce,
+      );
+      g.stroke();
+    }
+
+    // 发圈 + 小飘带。
     setFill(g, SASH_F);
     g.beginPath();
-    g.ellipse(x0 - s * 0.02, y0 + s * 0.06, s * 0.07, s * 0.05);
+    g.ellipse(-s * 0.2, -s * 0.66, s * 0.075, s * 0.055);
+    g.fill();
+    setStroke(g, s * 0.02, '#7a1f45', 0.9);
+    g.beginPath();
+    g.ellipse(-s * 0.2, -s * 0.66, s * 0.075, s * 0.055);
+    g.stroke();
+
+    const tieSway = Math.sin(this.visT * 4.6) * s * 0.03 + this.motionWalk * s * 0.02;
+    setFill(g, SASH_F, 0.9);
+    this.ribbonPath.clear();
+    this.ribbonPath.moveTo(-s * 0.2, -s * 0.64);
+    this.ribbonPath.quadraticCurveTo(
+      -s * 0.34 + tieSway,
+      -s * 0.54,
+      -s * 0.36 + tieSway,
+      -s * 0.38,
+    );
+    this.ribbonPath.lineTo(-s * 0.29 + tieSway, -s * 0.4);
+    this.ribbonPath.quadraticCurveTo(-s * 0.28, -s * 0.54, -s * 0.18, -s * 0.64);
+    this.ribbonPath.closePath();
+    attachPath(g, this.ribbonPath);
     g.fill();
   }
 
-  /** 手臂：上臂球衣袖 + 前臂皮肤。 */
+  /** 手臂：上臂球衣袖 + 前臂皮肤（墨线 + 暗面 + 轮廓光）。 */
   private drawArm(
     g: Graphics,
     s: number,
@@ -1250,23 +2060,76 @@ export class PlayerView {
     g.clear();
     const midX = lerp(shoulderX, gripX, 0.42);
     const midY = lerp(shoulderY, gripY, 0.42);
+    const ink = this.female ? INK_RIN : INK_ZHE;
+    const rim = this.female ? RIM_RIN : RIM_ZHE;
+    const sleeveLight = this.female ? TOP_F_LIGHT : JERSEY_LIGHT;
 
+    // 墨线底：两条线段一起铺。
+    this.armPath.clear();
+    this.armPath.moveTo(shoulderX, shoulderY);
+    this.armPath.lineTo(midX, midY);
+    this.armPath.moveTo(midX, midY);
+    this.armPath.lineTo(gripX, gripY);
+    setStroke(g, s * 0.235, ink, 0.85, 'round');
+    attachPath(g, this.armPath);
+    g.stroke();
+
+    // 上臂袖子。
     setStroke(g, s * 0.2, sleeve, 1, 'round');
     g.beginPath();
     g.moveTo(shoulderX, shoulderY);
     g.lineTo(midX, midY);
     g.stroke();
 
+    // 袖口 / 肩头高光。
+    setStroke(g, s * 0.04, sleeveLight, 0.55, 'round');
+    g.beginPath();
+    g.moveTo(shoulderX - s * 0.03, shoulderY - s * 0.02);
+    g.lineTo(midX - s * 0.02, midY - s * 0.02);
+    g.stroke();
+
+    // 前臂：皮肤 + 下侧暗面 + 上侧轮廓光。
     setStroke(g, s * 0.16, skin, 1, 'round');
     g.beginPath();
     g.moveTo(midX, midY);
     g.lineTo(gripX, gripY);
     g.stroke();
+    setStroke(g, s * 0.045, 'rgba(95,45,55,.28)', 1, 'round');
+    g.beginPath();
+    g.moveTo(midX + s * 0.02, midY + s * 0.04);
+    g.lineTo(gripX + s * 0.02, gripY + s * 0.04);
+    g.stroke();
+    setStroke(g, s * 0.022, rim, 0.45, 'round');
+    g.beginPath();
+    g.moveTo(midX - s * 0.04, midY - s * 0.01);
+    g.lineTo(gripX - s * 0.04, gripY - s * 0.01);
+    g.stroke();
 
-    // 手掌。
+    // 凛的腕带。
+    if (this.female) {
+      setStroke(g, s * 0.05, SASH_F, 0.9, 'round');
+      const wx = lerp(midX, gripX, 0.82);
+      const wy = lerp(midY, gripY, 0.82);
+      const dx = (gripX - midX) * 0.04;
+      const dy = (gripY - midY) * 0.04;
+      g.beginPath();
+      g.moveTo(wx - dy, wy + dx);
+      g.lineTo(wx + dy, wy - dx);
+      g.stroke();
+    }
+
+    // 手掌：先墨线再肤色，最后一点高光。
+    setFill(g, ink, 0.85);
+    g.beginPath();
+    g.circle(gripX, gripY, s * 0.115);
+    g.fill();
     setFill(g, skin);
     g.beginPath();
-    g.arc(gripX, gripY, s * 0.1, 0, Math.PI * 2);
+    g.circle(gripX, gripY, s * 0.095);
+    g.fill();
+    setFill(g, '#ffffff', 0.22);
+    g.beginPath();
+    g.circle(gripX - s * 0.025, gripY - s * 0.03, s * 0.03);
     g.fill();
   }
 
@@ -1314,6 +2177,11 @@ export class PlayerView {
     }
 
     // 握把。
+    setStroke(g, s * 0.13, INK_ZHE, 0.85, 'round');
+    g.beginPath();
+    g.moveTo(-s * 0.02, 0);
+    g.lineTo(s * 0.34, 0);
+    g.stroke();
     setStroke(g, s * 0.12, BAT_GRIP, 1, 'round');
     g.beginPath();
     g.moveTo(-s * 0.02, 0);
@@ -1321,7 +2189,7 @@ export class PlayerView {
     g.stroke();
 
     // 握把防滑纹。
-    setStroke(g, s * 0.02, 'rgba(220,190,150,.35)');
+    setStroke(g, s * 0.02, 'rgba(220,190,150,.45)');
     for (let i = 1; i <= 3; i++) {
       const x = s * (0.05 + i * 0.07);
       g.beginPath();
@@ -1344,22 +2212,31 @@ export class PlayerView {
     }
     attachPath(g, this.batBodyPath);
     g.fill();
-    setStroke(g, s * 0.025, 'rgba(70,40,20,.55)');
+    setStroke(g, s * 0.03, INK_ZHE, 0.8);
     attachPath(g, this.batBodyPath);
     g.stroke();
 
-    // 高光。
-    setStroke(g, s * 0.025, 'rgba(255,240,215,.5)');
+    // 底侧暗面 + 上侧高光，做成一根圆柱。
+    setStroke(g, s * 0.035, BAT_DARK, 0.55, 'round');
     g.beginPath();
-    g.moveTo(s * 0.42, -s * 0.035);
-    g.quadraticCurveTo(L * 0.74, -s * 0.075, L * 0.87, -s * 0.035);
+    g.moveTo(s * 0.34, s * 0.045);
+    g.quadraticCurveTo(L * 0.72, s * 0.085, L * 0.92, s * 0.03);
+    g.stroke();
+    setStroke(g, s * 0.03, BAT_LIGHT, 0.75);
+    g.beginPath();
+    g.moveTo(s * 0.42, -s * 0.05);
+    g.quadraticCurveTo(L * 0.74, -s * 0.095, L * 0.87, -s * 0.045);
     g.stroke();
 
     // 尾端旋钮。
     setFill(g, '#2a1d16');
     g.beginPath();
-    g.arc(-s * 0.02, 0, s * 0.075, 0, Math.PI * 2);
+    g.circle(-s * 0.02, 0, s * 0.075);
     g.fill();
+    setStroke(g, s * 0.02, INK_ZHE, 0.9);
+    g.beginPath();
+    g.circle(-s * 0.02, 0, s * 0.075);
+    g.stroke();
 
     // 击打闪光（棒尖）。
     if (impact > 0.02) {
@@ -1376,7 +2253,28 @@ export class PlayerView {
     }
   }
 
-  /** 镰刀：长柄 + 紫红弯刃，长度与棒子一致。 */
+  /** 镰刀刃形（前后面共用，`ox/oy` 用来做厚度偏移）。 */
+  private buildScytheBlade(path: GraphicsPath, s: number, L: number, ox: number, oy: number): void {
+    const mx = L * 0.985 + ox;
+    const my = oy;
+    path.clear();
+    // 刃跟：接在长柄末端。
+    path.moveTo(mx - s * 0.07, my + s * 0.04);
+    // 外弧（凸边即为切割刃）：先向上立起，再沿长弧扫向后方。
+    path.quadraticCurveTo(mx + s * 0.02, my - s * 0.3, mx - s * 0.12, my - s * 0.6);
+    path.quadraticCurveTo(mx - s * 0.3, my - s * 0.94, mx - s * 0.64, my - s * 1.06);
+    path.quadraticCurveTo(mx - s * 1.04, my - s * 1.16, mx - s * 1.36, my - s * 0.96);
+    // 刃尖：细长回勾。
+    path.lineTo(mx - s * 1.5, my - s * 0.84);
+    // 内凹刃背：绕回刃跟，形成新月刀身。
+    path.quadraticCurveTo(mx - s * 1.38, my - s * 0.78, mx - s * 1.3, my - s * 0.8);
+    path.quadraticCurveTo(mx - s * 1.0, my - s * 0.84, mx - s * 0.68, my - s * 0.64);
+    path.quadraticCurveTo(mx - s * 0.4, my - s * 0.38, mx - s * 0.18, my - s * 0.18);
+    path.quadraticCurveTo(mx - s * 0.16, my - s * 0.16, mx - s * 0.07, my + s * 0.04);
+    path.closePath();
+  }
+
+  /** 镰刀：长柄 + 巨型新月刃 + 倒钩 + 紫红刃光，长度与棒子一致。 */
   private drawScythe(
     s: number,
     gripX: number,
@@ -1390,117 +2288,317 @@ export class PlayerView {
     this.batRoot.position.set(gripX, gripY);
     this.batRoot.rotation = angle;
 
-    const L = s * CLUB_LEN_R;
+    const L = s * SCYTHE_LEN_R;
+    const mountX = L * 0.985;
+    const tipX = mountX - s * 1.49;
+    const tipY = -s * 0.83;
 
-    // 挥击光晕（紫红）。
-    if (swing > 0.03) {
-      setStroke(g, s * 0.3, hexA(RIN_TRAIL, 0.2 * swing), 1, 'round');
-      g.beginPath();
-      g.moveTo(s * 0.04, 0);
-      g.lineTo(L * 0.92, 0);
-      g.stroke();
-    }
-
-    // 握把缠布。
-    setStroke(g, s * 0.12, '#2a1d33', 1, 'round');
-    g.beginPath();
-    g.moveTo(-s * 0.04, 0);
-    g.lineTo(s * 0.3, 0);
+    // ── 飘带：系在刃根，随挥击与视觉时钟摆动（画在最后面） ──
+    const wob = Math.sin(this.visT * 4.5) * s * 0.035 + swing * s * 0.12;
+    setFill(g, '#b02f86', 0.85);
+    this.ribbonPath.clear();
+    this.ribbonPath.moveTo(mountX - s * 0.04, s * 0.05);
+    this.ribbonPath.quadraticCurveTo(
+      mountX - s * 0.18,
+      s * (0.26 + wob / s),
+      mountX - s * 0.4,
+      s * (0.5 + wob / s),
+    );
+    this.ribbonPath.lineTo(mountX - s * 0.33, s * (0.6 + wob / s));
+    this.ribbonPath.quadraticCurveTo(
+      mountX - s * 0.08,
+      s * (0.34 + wob / s),
+      mountX + s * 0.03,
+      s * 0.1,
+    );
+    this.ribbonPath.closePath();
+    attachPath(g, this.ribbonPath);
+    g.fill();
+    setStroke(g, s * 0.018, '#ff8ad8', 0.8);
+    attachPath(g, this.ribbonPath);
     g.stroke();
-    setStroke(g, s * 0.022, 'rgba(210,150,220,.35)');
-    for (let i = 1; i <= 3; i++) {
-      const x = s * (0.04 + i * 0.065);
-      g.beginPath();
-      g.moveTo(x, -s * 0.045);
-      g.lineTo(x, s * 0.045);
+
+    const wob2 = Math.sin(this.visT * 4.5 + 1.4) * s * 0.035 + swing * s * 0.09;
+    setFill(g, '#7a2fc0', 0.75);
+    this.ribbonPath.clear();
+    this.ribbonPath.moveTo(mountX - s * 0.04, s * 0.03);
+    this.ribbonPath.quadraticCurveTo(
+      mountX - s * 0.22,
+      s * (0.14 + wob2 / s),
+      mountX - s * 0.48,
+      s * (0.34 + wob2 / s),
+    );
+    this.ribbonPath.lineTo(mountX - s * 0.42, s * (0.43 + wob2 / s));
+    this.ribbonPath.quadraticCurveTo(mountX - s * 0.16, s * (0.24 + wob2 / s), mountX, s * 0.06);
+    this.ribbonPath.closePath();
+    attachPath(g, this.ribbonPath);
+    g.fill();
+
+    // ── 挥击时的刃部辉光（垫在刃身后面） ─────────────────
+    this.buildScytheBlade(this.bladePath, s, L, 0, 0);
+    if (swing > 0.03) {
+      setStroke(g, s * 0.4, hexA(RIN_TRAIL, 0.14 * swing), 1, 'round');
+      attachPath(g, this.bladePath);
+      g.stroke();
+      setStroke(g, s * 0.2, hexA(RIN_IMPACT, 0.24 * swing), 1, 'round');
+      attachPath(g, this.bladePath);
       g.stroke();
     }
 
-    // 长柄。
+    // ── 长柄：从配重一直延伸到刃根 ───────────────────────
     this.batBodyPath.clear();
-    this.batBodyPath.moveTo(-s * 0.03, -s * 0.045);
-    this.batBodyPath.lineTo(L * 0.9, -s * 0.035);
-    this.batBodyPath.lineTo(L * 0.9, s * 0.035);
-    this.batBodyPath.lineTo(-s * 0.03, s * 0.045);
+    this.batBodyPath.moveTo(-s * 0.2, -s * 0.05);
+    this.batBodyPath.lineTo(mountX - s * 0.1, -s * 0.058);
+    this.batBodyPath.lineTo(mountX + s * 0.01, -s * 0.042);
+    this.batBodyPath.lineTo(mountX + s * 0.01, s * 0.042);
+    this.batBodyPath.lineTo(mountX - s * 0.1, s * 0.058);
+    this.batBodyPath.lineTo(-s * 0.2, s * 0.05);
     this.batBodyPath.closePath();
-    setFill(g, SCYTHE_SHAFT);
+    setStroke(g, s * 0.14, hexA(RIN_TRAIL, 0.1), 1, 'round');
+    attachPath(g, this.batBodyPath);
+    g.stroke();
+    if (this.shaftGradient) {
+      setFillGradient(g, this.shaftGradient, 1);
+    } else {
+      setFill(g, SCYTHE_SHAFT);
+    }
     attachPath(g, this.batBodyPath);
     g.fill();
-    setStroke(g, s * 0.022, 'rgba(180,140,210,.4)');
-    g.beginPath();
-    g.moveTo(s * 0.1, -s * 0.018);
-    g.lineTo(L * 0.88, -s * 0.014);
+    setStroke(g, s * 0.032, INK_RIN, 1);
+    attachPath(g, this.batBodyPath);
     g.stroke();
 
-    // 柄尾配重。
-    setFill(g, SCYTHE_METAL);
+    // 圆柱高光 / 暗面。
+    setStroke(g, s * 0.018, '#b992d6', 1);
     g.beginPath();
-    g.arc(-s * 0.04, 0, s * 0.065, 0, Math.PI * 2);
-    g.fill();
+    g.moveTo(-s * 0.12, -s * 0.036);
+    g.lineTo(mountX - s * 0.12, -s * 0.044);
+    g.stroke();
+    setStroke(g, s * 0.012, '#0b0611', 0.8);
+    g.beginPath();
+    g.moveTo(-s * 0.1, s * 0.036);
+    g.lineTo(mountX - s * 0.12, s * 0.044);
+    g.stroke();
 
-    // 刃根金属箍。
-    setFill(g, SCYTHE_METAL);
+    // 柄上的金属箍。
+    setStroke(g, s * 0.024, '#b394cc', 0.55);
+    for (let i = 0; i < 3; i++) {
+      const bx = mountX - s * (0.26 + i * 0.55);
+      g.beginPath();
+      g.moveTo(bx, -s * 0.054);
+      g.lineTo(bx, s * 0.054);
+      g.stroke();
+    }
+
+    // 握把缠布：底布 + 斜向交叉绑带。
+    setFill(g, '#1b0f26', 0.92);
     this.headPath.clear();
-    roundRectInto(this.headPath, L * 0.72, -s * 0.065, s * 0.14, s * 0.13, s * 0.035);
+    roundRectInto(this.headPath, -s * 0.08, -s * 0.062, s * 0.54, s * 0.124, s * 0.03);
     attachPath(g, this.headPath);
     g.fill();
-    setStroke(g, s * 0.02, '#6a5182');
+    setStroke(g, s * 0.018, '#b98fd8', 0.5, 'round');
+    for (let i = 0; i < 4; i++) {
+      const x = s * (0.015 + i * 0.09);
+      g.beginPath();
+      g.moveTo(x, -s * 0.055);
+      g.lineTo(x + s * 0.045, s * 0.055);
+      g.stroke();
+    }
+    setStroke(g, s * 0.02, SASH_F_LIGHT, 0.85, 'round');
+    g.beginPath();
+    g.moveTo(s * 0.47, -s * 0.07);
+    g.lineTo(s * 0.47, s * 0.07);
+    g.stroke();
+
+    // 柄尾：菱形配重 + 尖刺。
+    setFill(g, SCYTHE_DARK);
+    this.headPath.clear();
+    roundRectInto(this.headPath, -s * 0.3, -s * 0.075, s * 0.14, s * 0.15, s * 0.03);
+    attachPath(g, this.headPath);
+    g.fill();
+    setStroke(g, s * 0.022, SCYTHE_METAL, 0.9);
+    attachPath(g, this.headPath);
+    g.stroke();
+    setFill(g, SCYTHE_METAL);
+    g.beginPath();
+    g.moveTo(-s * 0.3, -s * 0.075);
+    g.lineTo(-s * 0.42, 0);
+    g.lineTo(-s * 0.3, s * 0.075);
+    g.closePath();
+    g.fill();
+    setStroke(g, s * 0.016, INK_RIN, 0.9);
+    g.beginPath();
+    g.moveTo(-s * 0.3, -s * 0.075);
+    g.lineTo(-s * 0.42, 0);
+    g.lineTo(-s * 0.3, s * 0.075);
+    g.stroke();
+    setFill(g, '#ff5cc0');
+    g.beginPath();
+    g.circle(-s * 0.25, 0, s * 0.028);
+    g.fill();
+
+    // ── 刃根：菱形护手 + 倒钩 + 宝石 ─────────────────────
+    setFill(g, SCYTHE_DARK);
+    this.headPath.clear();
+    this.headPath.moveTo(mountX - s * 0.16, 0);
+    this.headPath.lineTo(mountX - s * 0.02, -s * 0.17);
+    this.headPath.lineTo(mountX + s * 0.09, 0);
+    this.headPath.lineTo(mountX - s * 0.02, s * 0.17);
+    this.headPath.closePath();
+    attachPath(g, this.headPath);
+    g.fill();
+    setStroke(g, s * 0.026, SCYTHE_METAL, 0.9);
     attachPath(g, this.headPath);
     g.stroke();
 
-    // 弯刃：从柄前端向后上方弯出，刃尖落在与棒尖相同的水平位置。
-    this.bladePath.clear();
-    this.bladePath.moveTo(L * 0.78, s * 0.02);
-    this.bladePath.quadraticCurveTo(L * 0.9, -s * 0.3, L * 1.0, -s * 0.13);
-    this.bladePath.quadraticCurveTo(L * 0.93, -s * 0.02, L * 0.86, s * 0.03);
-    this.bladePath.quadraticCurveTo(L * 0.82, s * 0.05, L * 0.78, s * 0.02);
-    this.bladePath.closePath();
+    // 倒钩：向柄尾方向勾出的暗钢刺。
+    setFill(g, '#3a1d55');
+    this.headPath.clear();
+    this.headPath.moveTo(mountX - s * 0.06, s * 0.07);
+    this.headPath.quadraticCurveTo(mountX - s * 0.16, s * 0.28, mountX - s * 0.08, s * 0.44);
+    this.headPath.quadraticCurveTo(mountX - s * 0.01, s * 0.24, mountX + s * 0.05, s * 0.09);
+    this.headPath.closePath();
+    attachPath(g, this.headPath);
+    g.fill();
+    setStroke(g, s * 0.018, '#c78bff', 0.85);
+    attachPath(g, this.headPath);
+    g.stroke();
+
+    // 刃根宝石与光晕。
+    setFill(g, RIN_IMPACT, 0.16);
+    g.beginPath();
+    g.circle(mountX - s * 0.015, 0, s * 0.16);
+    g.fill();
+    setFill(g, '#ff9ae0');
+    g.beginPath();
+    g.moveTo(mountX - s * 0.015, -s * 0.065);
+    g.lineTo(mountX + s * 0.035, 0);
+    g.lineTo(mountX - s * 0.015, s * 0.065);
+    g.lineTo(mountX - s * 0.065, 0);
+    g.closePath();
+    g.fill();
+    setFill(g, '#fff0ff', 0.95);
+    g.beginPath();
+    g.circle(mountX - s * 0.03, -s * 0.015, s * 0.018);
+    g.fill();
+
+    // ── 刃身：先画后层（厚度），再压前层 ─────────────────
+    this.buildScytheBlade(this.bladeBackPath, s, L, s * 0.045, s * 0.06);
+    setFill(g, '#150824');
+    attachPath(g, this.bladeBackPath);
+    g.fill();
+
+    this.buildScytheBlade(this.bladePath, s, L, 0, 0);
     if (this.scytheGradient) {
       setFillGradient(g, this.scytheGradient, 1);
     } else {
-      setFill(g, RIN_IMPACT);
+      setFill(g, '#7a2fd0');
     }
     attachPath(g, this.bladePath);
     g.fill();
-    setStroke(g, s * 0.03, 'rgba(70,20,90,.8)');
+    setStroke(g, s * 0.028, INK_RIN, 0.95);
     attachPath(g, this.bladePath);
     g.stroke();
 
-    // 刃口高光。
-    setStroke(g, s * 0.028, 'rgba(255,190,235,.9)', 1, 'round');
+    // 刃背暗带：沿内凹边压一条厚重的金属脊。
+    setStroke(g, s * 0.085, 'rgba(20,7,36,.6)', 1, 'round');
     g.beginPath();
-    g.moveTo(L * 0.79, s * 0.005);
-    g.quadraticCurveTo(L * 0.9, -s * 0.27, L * 0.99, -s * 0.125);
+    g.moveTo(mountX - s * 0.14, -s * 0.16);
+    g.quadraticCurveTo(mountX - s * 0.4, -s * 0.38, mountX - s * 0.68, -s * 0.62);
+    g.quadraticCurveTo(mountX - s * 0.99, -s * 0.8, mountX - s * 1.2, -s * 0.82);
+    g.stroke();
+    setStroke(g, s * 0.016, '#a879d6', 0.45, 'round');
+    g.beginPath();
+    g.moveTo(mountX - s * 0.16, -s * 0.22);
+    g.quadraticCurveTo(mountX - s * 0.42, -s * 0.44, mountX - s * 0.7, -s * 0.68);
+    g.quadraticCurveTo(mountX - s * 1.0, -s * 0.85, mountX - s * 1.18, -s * 0.84);
     g.stroke();
 
-    // 击打闪光（刃尖附近）。
+    // 刃口斜面：沿切割缘压出一条更亮的窄带，让刃身有折面。
+    this.bladeBevelPath.clear();
+    this.bladeBevelPath.moveTo(mountX - s * 0.19, -s * 0.04);
+    this.bladeBevelPath.quadraticCurveTo(
+      mountX - s * 0.08,
+      -s * 0.32,
+      mountX - s * 0.24,
+      -s * 0.58,
+    );
+    this.bladeBevelPath.quadraticCurveTo(mountX - s * 0.43, -s * 0.94, mountX - s * 0.72, -s * 1.0);
+    this.bladeBevelPath.quadraticCurveTo(mountX - s * 1.06, -s * 1.09, mountX - s * 1.36, -s * 0.9);
+    this.bladeBevelPath.lineTo(mountX - s * 1.34, -s * 0.84);
+    this.bladeBevelPath.quadraticCurveTo(mountX - s * 1.3, -s * 0.87, mountX - s * 1.06, -s * 0.93);
+    this.bladeBevelPath.quadraticCurveTo(mountX - s * 0.72, -s * 0.85, mountX - s * 0.5, -s * 0.62);
+    this.bladeBevelPath.quadraticCurveTo(mountX - s * 0.3, -s * 0.4, mountX - s * 0.19, -s * 0.04);
+    this.bladeBevelPath.closePath();
+    setFill(g, '#c07cf0', 0.62);
+    attachPath(g, this.bladeBevelPath);
+    g.fill();
+    setStroke(g, s * 0.012, '#e6bcff', 0.35);
+    attachPath(g, this.bladeBevelPath);
+    g.stroke();
+
+    // 刃口：外凸长弧 + 紫红渐层辉光。
+    this.bladeEdgePath.clear();
+    this.bladeEdgePath.moveTo(mountX - s * 0.07, s * 0.03);
+    this.bladeEdgePath.quadraticCurveTo(mountX + s * 0.02, -s * 0.3, mountX - s * 0.12, -s * 0.6);
+    this.bladeEdgePath.quadraticCurveTo(mountX - s * 0.3, -s * 0.94, mountX - s * 0.64, -s * 1.06);
+    this.bladeEdgePath.quadraticCurveTo(mountX - s * 1.04, -s * 1.16, mountX - s * 1.36, -s * 0.96);
+    this.bladeEdgePath.lineTo(tipX, tipY);
+    setStroke(g, s * 0.095, hexA(RIN_TRAIL, 0.18 + 0.14 * swing), 1, 'round');
+    attachPath(g, this.bladeEdgePath);
+    g.stroke();
+    if (this.bladeGlowGradient) {
+      setStrokeGradient(g, s * 0.062, this.bladeGlowGradient, 0.9, 'round');
+      attachPath(g, this.bladeEdgePath);
+      g.stroke();
+    }
+    setStroke(g, s * 0.038, '#ff74d2', 0.9, 'round');
+    attachPath(g, this.bladeEdgePath);
+    g.stroke();
+    setStroke(g, s * 0.015, '#ffe6ff', 0.95, 'round');
+    attachPath(g, this.bladeEdgePath);
+    g.stroke();
+
+    // 刃面符文：两道弧线 + 光点。
+    this.bladeRunePath.clear();
+    this.bladeRunePath.moveTo(mountX - s * 0.42, -s * 0.5);
+    this.bladeRunePath.quadraticCurveTo(mountX - s * 0.62, -s * 0.66, mountX - s * 0.86, -s * 0.7);
+    this.bladeRunePath.moveTo(mountX - s * 0.56, -s * 0.74);
+    this.bladeRunePath.quadraticCurveTo(mountX - s * 0.8, -s * 0.88, mountX - s * 1.04, -s * 0.88);
+    setStroke(g, s * 0.018, 'rgba(255,150,235,.7)', 0.9, 'round');
+    attachPath(g, this.bladeRunePath);
+    g.stroke();
+    setFill(g, '#ffc4ff', 0.9);
+    g.beginPath();
+    g.circle(mountX - s * 0.72, -s * 0.78, s * 0.022);
+    g.fill();
+    g.beginPath();
+    g.circle(mountX - s * 0.98, -s * 0.86, s * 0.016);
+    g.fill();
+
+    // 刃尖冷光：贴住刃口的一点高光。
+    setStroke(g, s * 0.02, '#f4dcff', 0.9, 'round');
+    g.beginPath();
+    g.moveTo(tipX + s * 0.03, tipY + s * 0.02);
+    g.lineTo(tipX + s * 0.14, tipY - s * 0.05);
+    g.stroke();
+
+    // ── 击打闪光（刃尖） ─────────────────────────────────
     if (impact > 0.02) {
       setFill(g, hexA(RIN_IMPACT, 0.4 * impact));
       this.starPath.clear();
-      starInto(
-        this.starPath,
-        L * 0.97,
-        -s * 0.02,
-        s * (0.2 + 0.2 * impact),
-        s * (0.07 + 0.07 * impact),
-      );
+      starInto(this.starPath, tipX, tipY, s * (0.26 + 0.24 * impact), s * (0.08 + 0.08 * impact));
       attachPath(g, this.starPath);
       g.fill();
       setFill(g, 'rgba(255,240,255,1)', 0.9 * impact);
       this.starPath.clear();
-      starInto(
-        this.starPath,
-        L * 0.97,
-        -s * 0.02,
-        s * (0.1 + 0.12 * impact),
-        s * (0.04 + 0.04 * impact),
-      );
+      starInto(this.starPath, tipX, tipY, s * (0.12 + 0.14 * impact), s * (0.045 + 0.045 * impact));
       attachPath(g, this.starPath);
       g.fill();
     }
   }
 
-  /** 挥棒残影：沿挥击弧线留几道半透明的棒影。 */
+  /** 挥棒残影：彩色扇形拖尾 + 三道淡影，越接近当前角度越实。 */
   private drawSwingGhosts(
     s: number,
     pivotX: number,
@@ -1519,27 +2617,61 @@ export class PlayerView {
       return;
     }
 
-    // 棒端扫过的细弧线。
-    const r = gripDist + s * CLUB_LEN_R;
+    const r = gripDist + s * (this.female ? SCYTHE_LEN_R : CLUB_LEN_R);
     const trailCol = this.female ? RIN_TRAIL : color;
+    const outerSweep = to < from;
+
+    // 扇形光带：外弧 → 内弧围成的实心拖尾（动画里的速度残像）。
+    const band = this.female ? s * 0.72 : s * 0.34;
+    const rIn = r - band;
+    this.swingRibbonPath.clear();
+    this.swingRibbonPath.moveTo(pivotX + Math.cos(from) * r, pivotY + Math.sin(from) * r);
+    this.swingRibbonPath.arc(pivotX, pivotY, r, from, to, outerSweep);
+    this.swingRibbonPath.lineTo(pivotX + Math.cos(to) * rIn, pivotY + Math.sin(to) * rIn);
+    this.swingRibbonPath.arc(pivotX, pivotY, rIn, to, from, !outerSweep);
+    this.swingRibbonPath.closePath();
+    setFill(this.swingGfx, trailCol, (this.female ? 0.1 : 0.055) * strength);
+    attachPath(this.swingGfx, this.swingRibbonPath);
+    this.swingGfx.fill();
+
+    // 内侧更亮的窄带。
+    const rIn2 = r - band * 0.45;
+    this.swingRibbonPath.clear();
+    this.swingRibbonPath.moveTo(pivotX + Math.cos(from) * r, pivotY + Math.sin(from) * r);
+    this.swingRibbonPath.arc(pivotX, pivotY, r, from, to, outerSweep);
+    this.swingRibbonPath.lineTo(pivotX + Math.cos(to) * rIn2, pivotY + Math.sin(to) * rIn2);
+    this.swingRibbonPath.arc(pivotX, pivotY, rIn2, to, from, !outerSweep);
+    this.swingRibbonPath.closePath();
+    setFill(this.swingGfx, this.female ? RIN_IMPACT : color, 0.08 * strength);
+    attachPath(this.swingGfx, this.swingRibbonPath);
+    this.swingGfx.fill();
+
+    // 外缘亮线。
+    setStroke(this.swingGfx, s * 0.05, hexA(trailCol, 0.42 * strength), 1, 'round');
     this.swingArcPath.clear();
     this.swingArcPath.moveTo(pivotX + Math.cos(from) * r, pivotY + Math.sin(from) * r);
-    this.swingArcPath.arc(pivotX, pivotY, r, from, to, to < from);
-    setStroke(this.swingGfx, s * 0.055, hexA(trailCol, 0.32 * strength), 1, 'round');
+    this.swingArcPath.arc(pivotX, pivotY, r, from, to, outerSweep);
     attachPath(this.swingGfx, this.swingArcPath);
     this.swingGfx.stroke();
 
+    // 3 条向外甩的速度线。
+    setStroke(this.swingGfx, s * 0.022, hexA(trailCol, 0.3 * strength), 1, 'round');
+    for (let i = 1; i <= 3; i++) {
+      const a = lerp(from, to, i / 4);
+      this.swingGfx.beginPath();
+      this.swingGfx.moveTo(pivotX + Math.cos(a) * rIn2, pivotY + Math.sin(a) * rIn2);
+      this.swingGfx.lineTo(
+        pivotX + Math.cos(a) * (r + s * 0.16),
+        pivotY + Math.sin(a) * (r + s * 0.16),
+      );
+      this.swingGfx.stroke();
+    }
+
     // 三道淡影，越接近当前角度越实。
-    const L = s * CLUB_LEN_R;
+    const L = s * (this.female ? SCYTHE_LEN_R : CLUB_LEN_R);
     this.ghostBatPath.clear();
     if (this.female) {
-      // 镰刀：细长柄 + 刃部的小弯钩。
-      this.ghostBatPath.moveTo(0, -s * 0.03);
-      this.ghostBatPath.lineTo(L * 0.86, -s * 0.022);
-      this.ghostBatPath.quadraticCurveTo(L * 0.95, -s * 0.16, L, -s * 0.1);
-      this.ghostBatPath.quadraticCurveTo(L * 0.9, -s * 0.02, L * 0.84, s * 0.02);
-      this.ghostBatPath.lineTo(0, s * 0.03);
-      this.ghostBatPath.closePath();
+      this.buildScytheBlade(this.ghostBatPath, s, L, 0, 0);
     } else {
       this.ghostBatPath.moveTo(0, -s * 0.05);
       this.ghostBatPath.quadraticCurveTo(L * 0.5, -s * 0.09, L * 0.94, -s * 0.055);
@@ -1559,6 +2691,14 @@ export class PlayerView {
       setFill(gfx, trailCol, (GHOST_ALPHA[i] ?? 0) * strength);
       attachPath(gfx, this.ghostBatPath);
       gfx.fill();
+      if (this.female) {
+        // 镰刀柄在淡影里也补一笔，让剪影能读出「长柄 + 弯刃」。
+        setStroke(gfx, s * 0.045, trailCol, (GHOST_ALPHA[i] ?? 0) * strength);
+        gfx.beginPath();
+        gfx.moveTo(-s * 0.1, 0);
+        gfx.lineTo(s * SCYTHE_LEN_R * 0.98, 0);
+        gfx.stroke();
+      }
     }
   }
 
