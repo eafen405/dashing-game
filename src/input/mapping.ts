@@ -11,6 +11,7 @@
  */
 
 import type { Lane } from '../game/types';
+import { DEFAULT_KEY_BINDINGS, laneForKeyCode, type KeyBindings } from './keyBindings';
 
 /** 指针输入 id —— `source.html:2550` 的 `"p" + e.pointerId`。 */
 export function pointerInputId(pointerId: number): string {
@@ -98,20 +99,26 @@ export interface KeyContext {
   /** 当前是否已结算。 */
   isOver: boolean;
   /**
-   * 当前是否停在**菜单子屏**（难度 / 玩法说明）。
+   * 当前是否停在**菜单子屏**（难度 / 玩法说明 / 按键设置）。
    *
    * 菜单屏上 `↑` / `↓` 不是出刀，而是**在列表里移动** ——
    * 菜单屏处于规则层的 `idle`，出刀本来就是空操作。
    */
   inMenu?: boolean;
+  /**
+   * 当前按键绑定（电脑端可自定义）。
+   *
+   * 不传时用默认的 ↑/W、↓/S —— 单测与旧路径不用改。
+   */
+  bindings?: KeyBindings;
 }
 
 /**
  * `keydown` 映射 —— `source.html:2566-2578`。
  *
  * 逐条照抄：
- *   - `↑` / `W` → 开始界面上是「开始」，否则上轨出刀
- *   - `↓` / `S` → 开始界面上是「开始」，否则下轨出刀
+ *   - `↑` / `W` → 开始界面上是「开始」，否则上轨出刀（默认绑定，可被 `ctx.bindings` 覆盖）
+ *   - `↓` / `S` → 开始界面上是「开始」，否则下轨出刀（默认绑定，可被 `ctx.bindings` 覆盖）
  *   - `P` → 暂停 / 恢复切换
  *   - `Enter` / `Space` → 开始界面上是「开始」；结算界面上是「再来一局」
  *
@@ -134,18 +141,14 @@ export function mapKeyDown(code: string, ctx: KeyContext): KeyAction {
       case 'Backspace':
         return { type: 'menuBack' };
       default:
-        // 其余键（`P` 等）落到下面的通用分支 —— 菜单不劫持它们。
-        break;
+        // 菜单屏不接出刀键 —— 自定义键在这里也不该让背后的轨道闪一下。
+        // `P` 仍沿用旧行为（菜单停在 idle，切换暂停本身是空操作）。
+        return code === 'KeyP' ? { type: 'togglePause' } : { type: 'none' };
     }
   }
 
+  // 游戏自己占用的键优先于自定义绑定（绑定界面也不允许占用它们）。
   switch (code) {
-    case 'ArrowUp':
-    case 'KeyW':
-      return ctx.isStartScreen ? { type: 'startFromTap' } : { type: 'press', lane: 'top' };
-    case 'ArrowDown':
-    case 'KeyS':
-      return ctx.isStartScreen ? { type: 'startFromTap' } : { type: 'press', lane: 'bottom' };
     case 'KeyP':
       return { type: 'togglePause' };
     case 'Enter':
@@ -154,8 +157,13 @@ export function mapKeyDown(code: string, ctx: KeyContext): KeyAction {
       if (ctx.isOver) return { type: 'restart' };
       return { type: 'none' };
     default:
-      return { type: 'none' };
+      break;
   }
+
+  const bindings = ctx.bindings ?? DEFAULT_KEY_BINDINGS;
+  const lane = laneForKeyCode(code, bindings);
+  if (lane === null || ctx.isOver) return { type: 'none' };
+  return ctx.isStartScreen ? { type: 'startFromTap' } : { type: 'press', lane };
 }
 
 /**
@@ -163,15 +171,7 @@ export function mapKeyDown(code: string, ctx: KeyContext): KeyAction {
  *
  * 键盘也要发 `Release` —— 长按怪靠它判失败。
  */
-export function mapKeyUp(code: string): KeyAction {
-  switch (code) {
-    case 'ArrowUp':
-    case 'KeyW':
-      return { type: 'release', lane: 'top' };
-    case 'ArrowDown':
-    case 'KeyS':
-      return { type: 'release', lane: 'bottom' };
-    default:
-      return { type: 'none' };
-  }
+export function mapKeyUp(code: string, bindings: KeyBindings = DEFAULT_KEY_BINDINGS): KeyAction {
+  const lane = laneForKeyCode(code, bindings);
+  return lane === null ? { type: 'none' } : { type: 'release', lane };
 }

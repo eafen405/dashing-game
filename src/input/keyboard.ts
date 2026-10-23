@@ -18,6 +18,7 @@
  * `keyup` 也要发 `Release` —— 长按怪靠它判失败（`source.html:2580-2583`）。
  */
 
+import { DEFAULT_KEY_BINDINGS, type KeyBindings } from './keyBindings';
 import { KEY_INPUT_ID, mapKeyDown, mapKeyUp } from './mapping';
 import type { InputSink } from './types';
 
@@ -43,6 +44,8 @@ export interface KeyboardInputOptions {
   onMenuConfirm?: () => void;
   /** 菜单里返回上一层。 */
   onMenuBack?: () => void;
+  /** 当前电脑端按键绑定（上下轨各 1–3 个）。 */
+  getKeyBindings?: () => KeyBindings;
   /** 事件所在的 window（默认 `window`；测试时注入假实现）。 */
   win?: Window;
 }
@@ -67,10 +70,12 @@ export function attachKeyboardInput(options: KeyboardInputOptions): () => void {
     const focusOnControl = Boolean(target?.closest('button, a, input, select, textarea'));
     if (focusOnControl && (event.code === 'Enter' || event.code === 'Space')) return;
 
+    const bindings = options.getKeyBindings?.() ?? DEFAULT_KEY_BINDINGS;
     const action = mapKeyDown(event.code, {
       isStartScreen: isStartScreen(),
       isOver: isOver(),
       inMenu: options.isInMenu?.() ?? false,
+      bindings,
     });
 
     switch (action.type) {
@@ -101,7 +106,7 @@ export function attachKeyboardInput(options: KeyboardInputOptions): () => void {
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {
-    const action = mapKeyUp(event.code);
+    const action = mapKeyUp(event.code, options.getKeyBindings?.() ?? DEFAULT_KEY_BINDINGS);
     if (action.type === 'release') {
       sink.release(KEY_INPUT_ID[action.lane]);
     }

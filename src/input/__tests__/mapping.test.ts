@@ -134,6 +134,53 @@ describe('keydown 映射', () => {
   });
 });
 
+describe('自定义按键绑定', () => {
+  const bindings = { top: ['KeyQ'], bottom: ['KeyZ'] };
+
+  it('绑定的键出对应轨道', () => {
+    expect(mapKeyDown('KeyQ', { isStartScreen: false, isOver: false, bindings })).toEqual({
+      type: 'press',
+      lane: 'top',
+    });
+    expect(mapKeyDown('KeyZ', { isStartScreen: false, isOver: false, bindings })).toEqual({
+      type: 'press',
+      lane: 'bottom',
+    });
+  });
+
+  it('被换掉的默认键不再出刀', () => {
+    for (const code of ['ArrowUp', 'KeyW', 'ArrowDown', 'KeyS']) {
+      expect(mapKeyDown(code, { isStartScreen: false, isOver: false, bindings })).toEqual({
+        type: 'none',
+      });
+    }
+  });
+
+  it('开始界面上按绑定的键也能开始游戏', () => {
+    expect(mapKeyDown('KeyQ', { isStartScreen: true, isOver: false, bindings })).toEqual({
+      type: 'startFromTap',
+    });
+  });
+
+  it('结算界面上绑定的键不出刀（Enter / Space 才是重开）', () => {
+    expect(mapKeyDown('KeyQ', { isStartScreen: false, isOver: true, bindings })).toEqual({
+      type: 'none',
+    });
+  });
+
+  it('菜单里绑定的键不出刀', () => {
+    expect(
+      mapKeyDown('KeyQ', { isStartScreen: false, isOver: false, inMenu: true, bindings }),
+    ).toEqual({ type: 'none' });
+  });
+
+  it('keyup 按同一份绑定发 release', () => {
+    expect(mapKeyUp('KeyQ', bindings)).toEqual({ type: 'release', lane: 'top' });
+    expect(mapKeyUp('KeyZ', bindings)).toEqual({ type: 'release', lane: 'bottom' });
+    expect(mapKeyUp('ArrowUp', bindings)).toEqual({ type: 'none' });
+  });
+});
+
 describe('菜单子屏的键位', () => {
   it('↑ / W 在菜单里是「往上移」', () => {
     for (const code of ['ArrowUp', 'KeyW']) {

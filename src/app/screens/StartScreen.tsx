@@ -31,6 +31,8 @@ export interface StartScreenProps {
   onOpenDifficulty: () => void;
   /** 进「玩法说明」界面。 */
   onOpenHelp: () => void;
+  /** 进「按键设置」界面（电脑端）。 */
+  onOpenKeys: () => void;
   /** 当前操作手法（上下 / 左右半屏）。 */
   controlMode: ControlMode;
   /** 切换操作手法。 */
@@ -42,6 +44,7 @@ export function StartScreen({
   diffLevel,
   onOpenDifficulty,
   onOpenHelp,
+  onOpenKeys,
   controlMode,
   onControlModeChange,
 }: StartScreenProps): ReactElement {
@@ -116,6 +119,17 @@ export function StartScreen({
         onClick={onOpenHelp}
       >
         玩法说明 ›
+      </button>
+
+      <button
+        id="btnKeys"
+        type="button"
+        className="home-link"
+        data-no-strike=""
+        aria-label="按键设置（电脑端）"
+        onClick={onOpenKeys}
+      >
+        按键设置 ›
       </button>
 
       <div className="tap-hint">点击屏幕开始</div>

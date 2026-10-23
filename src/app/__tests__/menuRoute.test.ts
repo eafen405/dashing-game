@@ -21,6 +21,15 @@ describe('菜单子路由', () => {
     expect(transition('home', 'openHelp')).toBe('help');
   });
 
+  it('home → keys：进按键设置屏', () => {
+    expect(canTransition('home', 'openKeys')).toBe(true);
+    expect(transition('home', 'openKeys')).toBe('keys');
+  });
+
+  it('keys → home：返回', () => {
+    expect(transition('keys', 'backHome')).toBe('home');
+  });
+
   it('difficulty → home：返回', () => {
     expect(transition('difficulty', 'backHome')).toBe('home');
   });
@@ -43,6 +52,11 @@ describe('菜单子路由', () => {
       ['help', 'openDifficulty'],
       ['help', 'openHelp'],
       ['help', 'confirmDifficulty'],
+      ['help', 'openKeys'],
+      ['keys', 'openDifficulty'],
+      ['keys', 'openHelp'],
+      ['keys', 'openKeys'],
+      ['keys', 'confirmDifficulty'],
     ];
 
     for (const [from, action] of illegal) {
@@ -54,10 +68,11 @@ describe('菜单子路由', () => {
   });
 
   it('从任意路由都到不了表外的路由（无隐藏边）', () => {
-    const all: readonly MenuRoute[] = ['home', 'difficulty', 'help'];
+    const all: readonly MenuRoute[] = ['home', 'difficulty', 'help', 'keys'];
     const actions: readonly MenuAction[] = [
       'openDifficulty',
       'openHelp',
+      'openKeys',
       'backHome',
       'confirmDifficulty',
     ];
@@ -73,5 +88,11 @@ describe('菜单子路由', () => {
   it('难度屏与玩法说明屏之间不能直接跳（必须回主页面）', () => {
     expect(transition('difficulty', 'openHelp')).toBe('difficulty');
     expect(transition('help', 'openDifficulty')).toBe('help');
+  });
+
+  it('按键设置屏只能从主页面进（不能从难度 / 玩法说明横跳）', () => {
+    expect(transition('difficulty', 'openKeys')).toBe('difficulty');
+    expect(transition('help', 'openKeys')).toBe('help');
+    expect(transition('home', 'openKeys')).toBe('keys');
   });
 });

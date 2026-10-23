@@ -659,6 +659,176 @@ body {
   transform: scale(0.96);
 }
 
+/* 「按键设置」只对电脑端有意义 —— 触屏设备直接收起入口。 */
+@media (pointer: coarse) {
+  #btnKeys {
+    display: none;
+  }
+}
+
+/* ============ 按键设置界面（电脑端） ============ */
+.key-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(11px, 1.8vw, 13px);
+  line-height: 1.6;
+}
+
+.key-lanes {
+  display: flex;
+  gap: 12px;
+  width: min(92vw, 620px);
+  margin: 8px 0 0;
+}
+
+.key-lane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 18, 34, 0.72);
+}
+
+.key-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.key-lane .dot {
+  width: 10px;
+  height: 10px;
+}
+
+.dot-top {
+  background: var(--p1);
+  box-shadow: 0 0 10px rgba(79, 209, 255, 0.55);
+}
+
+.dot-bottom {
+  background: var(--p2);
+  box-shadow: 0 0 10px rgba(255, 138, 79, 0.55);
+}
+
+.key-lane-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.key-lane-note {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.key-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+}
+
+.key-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-btn,
+.key-add {
+  min-width: 70px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf8ff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.key-btn:hover,
+.key-add:hover {
+  border-color: rgba(79, 209, 255, 0.5);
+}
+
+.key-btn.listening {
+  border-color: rgba(79, 209, 255, 0.8);
+  background: rgba(79, 209, 255, 0.16);
+  color: #9fe9ff;
+  font-size: 11px;
+  font-weight: 400;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.key-add {
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  min-width: 78px;
+}
+
+.key-clear {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.key-clear:hover {
+  color: var(--danger);
+  border-color: rgba(255, 77, 109, 0.5);
+}
+
+.key-count {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-error {
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  text-align: center;
+}
+
+.key-error.has-error {
+  color: #ffd24a;
+}
+
+.key-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.key-actions .back-button,
+.key-actions .ghost-button {
+  margin: 0;
+}
+
 /* ============ 难度界面 ============ */
 /*
  * 4 档**纵排**（旧版是并排 4 个 chip，4 个必然换行成 2×2 顶出横屏手机）。
@@ -892,6 +1062,52 @@ body {
   .home-link {
     margin: 2px 0 0;
     padding: 6px 16px;
+    font-size: 12px;
+  }
+
+  /* 按键设置：两列压扁，保证横屏手机也能一屏放下（入口本身在触屏上隐藏） */
+  .key-intro {
+    display: none;
+  }
+  .key-lanes {
+    gap: 8px;
+    margin: 4px 0 0;
+    width: min(94vw, 560px);
+  }
+  .key-lane {
+    gap: 4px;
+    padding: 6px 10px;
+  }
+  .key-lane-name {
+    font-size: 12px;
+  }
+  .key-lane-note {
+    display: none;
+  }
+  .key-btn,
+  .key-add {
+    min-width: 58px;
+    min-height: 30px;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+  .key-btn.listening {
+    font-size: 10px;
+  }
+  .key-clear {
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+  }
+  .key-count {
+    font-size: 9px;
+  }
+  .key-error {
+    min-height: 14px;
+    font-size: 10px;
+  }
+  .key-actions .ghost-button {
+    padding: 7px 16px;
     font-size: 12px;
   }
 

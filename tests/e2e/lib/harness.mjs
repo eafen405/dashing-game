@@ -286,19 +286,24 @@ export function readPhase(page) {
   return page.evaluate(() => {
     if (globalThis.document.querySelector('#gameOver')) return 'over';
     if (globalThis.document.querySelector('#pause')) return 'paused';
-    // 菜单态有三个屏（主页面 / 难度 / 玩法说明）—— 都处于规则层的 `idle`。
-    if (globalThis.document.querySelector('#startScreen, #difficultyScreen, #helpScreen')) {
+    // 菜单态有四个屏（主页面 / 难度 / 玩法说明 / 按键设置）—— 都处于规则层的 `idle`。
+    if (
+      globalThis.document.querySelector(
+        '#startScreen, #difficultyScreen, #helpScreen, #keyBindingsScreen',
+      )
+    ) {
       return 'idle';
     }
     return 'running';
   });
 }
 
-/** 页面当前停在哪个菜单屏：`home | difficulty | help`（非菜单态返回 `null`）。 */
+/** 页面当前停在哪个菜单屏：`home | difficulty | help | keys`（非菜单态返回 `null`）。 */
 export function readMenuRoute(page) {
   return page.evaluate(() => {
     if (globalThis.document.querySelector('#difficultyScreen')) return 'difficulty';
     if (globalThis.document.querySelector('#helpScreen')) return 'help';
+    if (globalThis.document.querySelector('#keyBindingsScreen')) return 'keys';
     if (globalThis.document.querySelector('#startScreen')) return 'home';
     return null;
   });

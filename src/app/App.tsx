@@ -17,6 +17,7 @@ import type { Effect } from '../game/effects';
 import { computeLayout } from '../game/layout';
 import type { Difficulty, Lane, Layout, Phase } from '../game/types';
 import { LANE_HINT, type ControlMode } from '../input/mapping';
+import { loadKeyBindings, saveKeyBindings, type KeyBindings } from '../input/keyBindings';
 import { attachKeyboardInput } from '../input/keyboard';
 import { attachOrientationWatcher, detectLandscape } from '../input/orientation';
 import { attachPointerInput } from '../input/pointer';
@@ -31,6 +32,7 @@ import { transition as menuTransition, type MenuAction, type MenuRoute } from '.
 import { DifficultyScreen } from './screens/DifficultyScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 import { HelpScreen } from './screens/HelpScreen';
+import { KeyBindingsScreen } from './screens/KeyBindingsScreen';
 import { PauseScreen } from './screens/PauseScreen';
 import { RotatePrompt } from './screens/RotatePrompt';
 import { StartScreen } from './screens/StartScreen';
@@ -94,6 +96,7 @@ export function GameApp({
   const [route, setRoute] = useState<MenuRoute>('home');
   const [diff, setDiff] = useState<Difficulty>(diffLevel);
   const [controlMode, setControlMode] = useState<ControlMode>(() => loadControlMode());
+  const [keyBindings, setKeyBindings] = useState<KeyBindings>(() => loadKeyBindings());
   const [landscape, setLandscape] = useState<boolean>(() => detectLandscape(window));
   const [best, setBest] = useState<number>(() => loadBest());
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -110,6 +113,7 @@ export function GameApp({
   const bestRef = useRef<number>(best);
   const diffRef = useRef<Difficulty>(diff);
   const controlModeRef = useRef<ControlMode>(controlMode);
+  const keyBindingsRef = useRef<KeyBindings>(keyBindings);
   const phaseListenerRef = useRef<((phase: Phase) => void) | undefined>(onPhaseChange);
   const seqRef = useRef(0);
 
@@ -144,6 +148,7 @@ export function GameApp({
 
   const handleOpenDifficulty = (): void => handleMenu('openDifficulty');
   const handleOpenHelp = (): void => handleMenu('openHelp');
+  const handleOpenKeys = (): void => handleMenu('openKeys');
   const handleMenuBack = (): void => handleMenu('backHome');
 
   /** 难度屏上选定一档 —— 选定并回主页面。 */
@@ -322,6 +327,7 @@ export function GameApp({
       onMenuMove: (delta) => menuMoveRef.current(delta),
       onMenuConfirm: () => menuBackRef.current(),
       onMenuBack: () => menuBackRef.current(),
+      getKeyBindings: () => keyBindingsRef.current,
     });
 
     const detachOrientation = attachOrientationWatcher({
@@ -354,6 +360,12 @@ export function GameApp({
     setControlMode(next);
     saveControlMode(next);
     renderer.setControlMode?.(next);
+  };
+
+  const handleKeyBindingsChange = (next: KeyBindings): void => {
+    keyBindingsRef.current = next;
+    setKeyBindings(next);
+    saveKeyBindings(next);
   };
 
   const handlePause = (): void => sessionRef.current?.pause();
@@ -425,11 +437,18 @@ export function GameApp({
               />
             ) : route === 'help' ? (
               <HelpScreen controlMode={controlMode} onBack={handleMenuBack} />
+            ) : route === 'keys' ? (
+              <KeyBindingsScreen
+                bindings={keyBindings}
+                onChange={handleKeyBindingsChange}
+                onBack={handleMenuBack}
+              />
             ) : (
               <StartScreen
                 diffLevel={diff}
                 onOpenDifficulty={handleOpenDifficulty}
                 onOpenHelp={handleOpenHelp}
+                onOpenKeys={handleOpenKeys}
                 controlMode={controlMode}
                 onControlModeChange={handleControlModeChange}
               />

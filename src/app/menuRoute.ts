@@ -10,10 +10,10 @@
  * 规则层的 `Phase` 一行没动（见 `docs/adr/0006-menu-route-decoupled-from-rules-phase.md`）。
  *
  * ```
- *        openDifficulty        openHelp
- *   home ─────────────► difficulty   help
- *    ▲                    │          │
- *    └────────────────────┴──────────┘
+ *        openDifficulty        openHelp          openKeys
+ *   home ─────────────► difficulty   help        keys
+ *    ▲                    │          │            │
+ *    └────────────────────┴──────────┴────────────┘
  *              backHome / confirmDifficulty
  * ```
  *
@@ -21,7 +21,7 @@
  */
 
 /** 菜单态下的屏。 */
-export type MenuRoute = 'home' | 'difficulty' | 'help';
+export type MenuRoute = 'home' | 'difficulty' | 'help' | 'keys';
 
 /** 菜单能响应的动作。 */
 export type MenuAction =
@@ -29,6 +29,8 @@ export type MenuAction =
   | 'openDifficulty'
   /** 进「玩法说明」屏。 */
   | 'openHelp'
+  /** 进「按键设置」屏（电脑端）。 */
+  | 'openKeys'
   /** 回主页面。 */
   | 'backHome'
   /** 选定某档难度后回主页面。 */
@@ -43,12 +45,16 @@ const TRANSITIONS: Record<MenuRoute, Partial<Record<MenuAction, MenuRoute>>> = {
   home: {
     openDifficulty: 'difficulty',
     openHelp: 'help',
+    openKeys: 'keys',
   },
   difficulty: {
     backHome: 'home',
     confirmDifficulty: 'home',
   },
   help: {
+    backHome: 'home',
+  },
+  keys: {
     backHome: 'home',
   },
 };
