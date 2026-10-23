@@ -21,7 +21,7 @@
  * 这里查这个标记 —— 语义与旧代码的 `closest(...)` 排除列表一一对应。
  */
 
-import { laneForY, pointerInputId } from './mapping';
+import { laneForPoint, pointerInputId, type ControlMode } from './mapping';
 import type { InputSink } from './types';
 
 /** 「不要触发出刀」标记 —— 旧代码排除列表（暂停 / 结算 / 重开 / 难度选择 / 顶栏按钮）的等价物。 */
@@ -37,6 +37,11 @@ export interface PointerInputOptions {
   isStartScreen: () => boolean;
   /** 开始界面上的「点击开始」。 */
   onStartFromTap: () => void;
+  /**
+   * 当前手法。默认 `vertical`（旧版上下半屏），
+   * 手机端可在开始界面切成 `horizontal`（左右半屏）。
+   */
+  getControlMode?: () => ControlMode;
   /** 事件所在的 window（默认 `window`；测试时注入假实现）。 */
   win?: Window;
 }
@@ -55,7 +60,7 @@ export function isExcludedTarget(target: EventTarget | null): boolean {
  * @returns 解绑函数（组件卸载时调用）。
  */
 export function attachPointerInput(options: PointerInputOptions): () => void {
-  const { stage, sink, isStartScreen, onStartFromTap } = options;
+  const { stage, sink, isStartScreen, onStartFromTap, getControlMode } = options;
   const win = options.win ?? window;
 
   const onPointerDown = (event: PointerEvent): void => {
@@ -68,7 +73,7 @@ export function attachPointerInput(options: PointerInputOptions): () => void {
     }
 
     const rect = stage.getBoundingClientRect();
-    const lane = laneForY(event.clientY, rect);
+    const lane = laneForPoint(event.clientX, event.clientY, rect, getControlMode?.() ?? 'vertical');
     sink.press(lane, pointerInputId(event.pointerId));
   };
 

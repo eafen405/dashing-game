@@ -59,6 +59,7 @@ describe('BattlefieldRenderer 接口 —— Pixi 实现', () => {
     expect(typeof renderer.unmount).toBe('function');
     expect(typeof renderer.resize).toBe('function');
     expect(typeof renderer.render).toBe('function');
+    expect(typeof renderer.setControlMode).toBe('function');
   });
 
   it('mount() 声明为 async —— Pixi 要等 GPU 初始化，接口才保留 void | Promise<void>', () => {
@@ -92,6 +93,8 @@ describe('BattlefieldRenderer 接口 —— Pixi 实现', () => {
     expect(() => renderer.unmount()).not.toThrow();
     expect(() => renderer.resize(LAYOUT)).not.toThrow();
     expect(() => renderer.render(emptyFrame())).not.toThrow();
+    // 先于 mount 设置手法也必须安全（等 prepare 时按当前手法建标签）
+    expect(() => renderer.setControlMode?.('horizontal')).not.toThrow();
   });
 
   it('render() 不修改传入的 FrameView（渲染层只读快照）', () => {

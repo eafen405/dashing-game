@@ -12,6 +12,7 @@
 import type { ReactElement } from 'react';
 
 import type { Difficulty } from '../../game/types';
+import type { ControlMode } from '../../input/mapping';
 import { LONG_HOLD_TIME } from '../../game/constants';
 
 /** 开始界面属性。 */
@@ -20,21 +21,62 @@ export interface StartScreenProps {
   diffLevel: Difficulty;
   /** 切换难度。 */
   onDiffChange: (diffLevel: Difficulty) => void;
+  /** 当前操作手法（上下 / 左右半屏）。 */
+  controlMode: ControlMode;
+  /** 切换操作手法。 */
+  onControlModeChange: (mode: ControlMode) => void;
 }
 
 /** 开始界面。 */
-export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): ReactElement {
+export function StartScreen({
+  diffLevel,
+  onDiffChange,
+  controlMode,
+  onControlModeChange,
+}: StartScreenProps): ReactElement {
+  const horizontal = controlMode === 'horizontal';
   return (
     <div id="startScreen" className="overlay">
       <h2>双轨打怪</h2>
+
+      <div
+        id="controlPick"
+        className="control-pick"
+        data-no-strike=""
+        role="group"
+        aria-label="操作手法"
+      >
+        <span className="control-label">手法</span>
+        <button
+          type="button"
+          className={horizontal ? 'control-btn' : 'control-btn active'}
+          data-control="vertical"
+          aria-pressed={!horizontal}
+          title="点击上半屏 → 上轨，下半屏 → 下轨"
+          onClick={() => onControlModeChange('vertical')}
+        >
+          上下
+        </button>
+        <button
+          type="button"
+          className={horizontal ? 'control-btn active' : 'control-btn'}
+          data-control="horizontal"
+          aria-pressed={horizontal}
+          title="点击左半屏 → 上轨，右半屏 → 下轨"
+          onClick={() => onControlModeChange('horizontal')}
+        >
+          左右
+        </button>
+      </div>
+
       <div className="legend">
         <div style={{ color: 'var(--p1)' }}>
           <i className="dot" />
-          上半屏 → 上轨打击点
+          {horizontal ? '左半屏 → 上轨打击点' : '上半屏 → 上轨打击点'}
         </div>
         <div style={{ color: 'var(--p2)' }}>
           <i className="dot" />
-          下半屏 → 下轨打击点
+          {horizontal ? '右半屏 → 下轨打击点' : '下半屏 → 下轨打击点'}
         </div>
       </div>
       <div className="sub">

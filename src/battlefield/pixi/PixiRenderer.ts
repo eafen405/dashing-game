@@ -34,7 +34,7 @@
 
 import { Application, Container, Graphics, Rectangle } from 'pixi.js';
 import type { Layout, Monster } from '../../game/types';
-import type { BattlefieldRenderer, FrameView } from '../types';
+import type { BattlefieldRenderer, FrameView, LaneHintMode } from '../types';
 import { BackgroundView } from './background';
 import { FrameContext } from './context';
 import { DefenseLineView } from './defense-line';
@@ -278,6 +278,10 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.particle.destroy();
     this.floater.destroy();
     this.frenzy.destroy();
+  }
+
+  setControlMode(mode: LaneHintMode): void {
+    this.hitZone.setControlMode(mode);
   }
 
   resize(layout: Layout): void {

@@ -23,6 +23,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { FillGradient } from 'pixi.js';
 import type { Lane } from '../../game/types';
+import type { LaneHintMode } from '../types';
 import type { FrameContext } from './context';
 import { destroyGradient, radialGradient } from './gradient';
 import { circlePath, setFill, setFillGradient, setStroke } from './gfx';
@@ -57,12 +58,32 @@ export class HitZoneView {
   private readonly critLabels: Text[] = [];
   /** 「普攻」标签（每轨一个）。 */
   private readonly normalLabels: Text[] = [];
-  /** 「打击点 · 点击上半屏 / 下半屏」标签（每轨一个）。 */
-  private readonly hitLabels: Text[] = [];
+  /**
+   * 「打击点 · 点击…」标签。
+   *
+   * 两种手法各预建一套，切换时只切显隐 —— 不在运行时改 `Text.text`
+   * （Pixi 的 Canvas 文本管线在部分环境下不会重排已渲染的文字纹理）。
+   */
+  private readonly hitLabels: Record<LaneHintMode, Text[]> = {
+    vertical: [],
+    horizontal: [],
+  };
+
+  /** 当前操作手法 —— 只影响判定区的提示文字。 */
+  private controlMode: LaneHintMode = 'vertical';
 
   constructor() {
     this.container.addChild(this.gfx);
     this.container.addChild(this.textLayer);
+  }
+
+  /** 切换判定区提示（上下半屏 / 左右半屏）。 */
+  setControlMode(mode: LaneHintMode): void {
+    if (mode === this.controlMode) return;
+    this.controlMode = mode;
+    for (const key of ['vertical', 'horizontal'] as const) {
+      for (const label of this.hitLabels[key]) label.visible = key === mode;
+    }
   }
 
   prepare(): void {
@@ -70,17 +91,16 @@ export class HitZoneView {
       for (const lane of ['top', 'bottom'] as const) {
         const crit = createLabel('暴击', 10, '600');
         const normal = createLabel('普攻', 10, '600');
-        const hit = createLabel(
-          lane === 'top' ? '打击点 · 点击上半屏' : '打击点 · 点击下半屏',
-          11,
-          '600',
-        );
         this.critLabels.push(crit);
         this.normalLabels.push(normal);
-        this.hitLabels.push(hit);
         this.textLayer.addChild(crit);
         this.textLayer.addChild(normal);
-        this.textLayer.addChild(hit);
+        for (const mode of ['vertical', 'horizontal'] as const) {
+          const hit = createLabel(this.hitLabelText(lane, mode), 11, '600');
+          hit.visible = mode === this.controlMode;
+          this.hitLabels[mode].push(hit);
+          this.textLayer.addChild(hit);
+        }
       }
     }
   }
@@ -103,6 +123,14 @@ export class HitZoneView {
   }
 
   // ── 内部 ──────────────────────────────────────────────────
+
+  /** 判定区提示文案 —— 两种手法各一套。 */
+  private hitLabelText(lane: Lane, mode: LaneHintMode): string {
+    if (mode === 'horizontal') {
+      return lane === 'top' ? '打击点 · 点击左半屏' : '打击点 · 点击右半屏';
+    }
+    return lane === 'top' ? '打击点 · 点击上半屏' : '打击点 · 点击下半屏';
+  }
 
   /**
    * 外圈光晕（径向渐变）—— 画在 `glow` 层（票 07：参与 bloom）。
@@ -163,7 +191,7 @@ export class HitZoneView {
     const idx = lane === 'top' ? 0 : 1;
     const critLabel = this.critLabels[idx];
     const normalLabel = this.normalLabels[idx];
-    const hitLabel = this.hitLabels[idx];
+    const hitLabel = this.hitLabels[this.controlMode][idx];
     if (critLabel) {
       critLabel.tint = critCol;
       critLabel.alpha = 0.9;

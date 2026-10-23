@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { ControlMode } from '../mapping';
 import { attachPointerInput, isExcludedTarget } from '../pointer';
 import type { InputSink } from '../types';
 import { FakeElement, FakeWindow, makeEvent, SOME_ELEMENT } from './fakes';
@@ -190,6 +191,69 @@ describe('指针输入接线', () => {
     expect(sink.calls).toEqual([]);
     expect(stage.listenerCount('pointerdown')).toBe(0);
     expect(win.listenerCount('pointerup')).toBe(0);
+  });
+});
+
+describe('指针输入接线 · 操作手法', () => {
+  /** 舞台在视口 (50, 100)，800×400 —— 用来同时验证左边界与上边界偏移。 */
+  function setup(getMode: () => ControlMode): {
+    stage: FakeElement;
+    sink: ReturnType<typeof makeSink>;
+  } {
+    const stage = new FakeElement({ top: 100, left: 50, width: 800, height: 400 });
+    const win = new FakeWindow();
+    const sink = makeSink();
+    attachPointerInput({
+      stage: stage as unknown as HTMLElement,
+      sink,
+      isStartScreen: () => false,
+      onStartFromTap: () => undefined,
+      getControlMode: getMode,
+      win: win as unknown as Window,
+    });
+    return { stage, sink };
+  }
+
+  it('左右模式：左半屏 → 上轨（即使点在纵向下半）', () => {
+    const { stage, sink } = setup(() => 'horizontal');
+
+    stage.dispatch('pointerdown', makeEvent({ clientX: 100, clientY: 450, pointerId: 1 }));
+
+    expect(sink.calls).toEqual(['press:top:p1']);
+  });
+
+  it('左右模式：右半屏 → 下轨（即使点在纵向上半）', () => {
+    const { stage, sink } = setup(() => 'horizontal');
+
+    stage.dispatch('pointerdown', makeEvent({ clientX: 800, clientY: 120, pointerId: 2 }));
+
+    expect(sink.calls).toEqual(['press:bottom:p2']);
+  });
+
+  it('左右模式以舞台左边界换算半屏', () => {
+    const { stage, sink } = setup(() => 'horizontal');
+
+    // 视口 x=60 → 舞台内 x=10 → 左半
+    stage.dispatch('pointerdown', makeEvent({ clientX: 60, clientY: 120, pointerId: 3 }));
+    // 视口 x=849 → 舞台内 x=799 → 右半
+    stage.dispatch('pointerdown', makeEvent({ clientX: 849, clientY: 450, pointerId: 4 }));
+
+    expect(sink.calls).toEqual(['press:top:p3', 'press:bottom:p4']);
+  });
+
+  it('每次按下重新读取当前手法', () => {
+    let mode: ControlMode = 'vertical';
+    const { stage, sink } = setup(() => mode);
+
+    // 上下：下半 → 下轨
+    stage.dispatch('pointerdown', makeEvent({ clientX: 100, clientY: 450, pointerId: 1 }));
+    mode = 'horizontal';
+    // 左右：右半 → 下轨（若仍按上下会得到上轨）
+    stage.dispatch('pointerdown', makeEvent({ clientX: 800, clientY: 120, pointerId: 2 }));
+    // 左右：左半 → 上轨（若仍按上下会得到下轨）
+    stage.dispatch('pointerdown', makeEvent({ clientX: 100, clientY: 450, pointerId: 3 }));
+
+    expect(sink.calls).toEqual(['press:bottom:p1', 'press:bottom:p2', 'press:top:p3']);
   });
 });
 

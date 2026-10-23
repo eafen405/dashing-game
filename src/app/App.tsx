@@ -16,11 +16,13 @@ import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
 import type { Effect } from '../game/effects';
 import { computeLayout } from '../game/layout';
 import type { Difficulty, Lane, Layout, Phase } from '../game/types';
+import { LANE_HINT, type ControlMode } from '../input/mapping';
 import { attachKeyboardInput } from '../input/keyboard';
 import { attachOrientationWatcher, detectLandscape } from '../input/orientation';
 import { attachPointerInput } from '../input/pointer';
 import { GameSession } from './GameSession';
 import { loadBest, saveBest } from './best';
+import { loadControlMode, saveControlMode } from './controlMode';
 import { toggleFullscreen } from './fullscreen';
 import { Hud } from './hud/Hud';
 import { hudStore } from './hud/hudStore';
@@ -86,6 +88,7 @@ export function GameApp({
 
   const [screen, setScreen] = useState<Phase>('idle');
   const [diff, setDiff] = useState<Difficulty>(diffLevel);
+  const [controlMode, setControlMode] = useState<ControlMode>(() => loadControlMode());
   const [landscape, setLandscape] = useState<boolean>(() => detectLandscape(window));
   const [best, setBest] = useState<number>(() => loadBest());
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -100,6 +103,7 @@ export function GameApp({
   const sessionRef = useRef<GameSession | null>(null);
   const bestRef = useRef<number>(best);
   const diffRef = useRef<Difficulty>(diff);
+  const controlModeRef = useRef<ControlMode>(controlMode);
   const phaseListenerRef = useRef<((phase: Phase) => void) | undefined>(onPhaseChange);
   const seqRef = useRef(0);
 
@@ -214,6 +218,7 @@ export function GameApp({
     });
     sessionRef.current = session;
     void session.mount();
+    renderer.setControlMode?.(controlModeRef.current);
 
     // ── 开发期钩子（`?debug`）──────────────────────────────
     //
@@ -237,6 +242,7 @@ export function GameApp({
       sink: session,
       isStartScreen: () => screenRef.current === 'idle',
       onStartFromTap: () => session.start(),
+      getControlMode: () => controlModeRef.current,
     });
 
     const detachKeyboard = attachKeyboardInput({
@@ -283,6 +289,13 @@ export function GameApp({
     sessionRef.current?.setDifficulty(next);
   };
 
+  const handleControlModeChange = (next: ControlMode): void => {
+    controlModeRef.current = next;
+    setControlMode(next);
+    saveControlMode(next);
+    renderer.setControlMode?.(next);
+  };
+
   const handlePause = (): void => sessionRef.current?.pause();
   const handleResume = (): void => sessionRef.current?.resume();
   const handleRestart = (): void => sessionRef.current?.restart();
@@ -313,7 +326,7 @@ export function GameApp({
             }
             aria-hidden="true"
           >
-            <span className="hint">上半屏 · 上轨</span>
+            <span className="hint">{LANE_HINT[controlMode].top}</span>
           </div>
           <div
             key={`lane-bottom-${laneFlash && laneFlash.lane === 'bottom' ? laneFlash.id : 0}`}
@@ -322,7 +335,7 @@ export function GameApp({
             }
             aria-hidden="true"
           >
-            <span className="hint">下半屏 · 下轨</span>
+            <span className="hint">{LANE_HINT[controlMode].bottom}</span>
           </div>
 
           {frenzyId > 0 ? <div key={frenzyId} className="frenzy-flash show" /> : null}
@@ -333,7 +346,14 @@ export function GameApp({
             </div>
           ) : null}
 
-          {showStart ? <StartScreen diffLevel={diff} onDiffChange={handleDiffChange} /> : null}
+          {showStart ? (
+            <StartScreen
+              diffLevel={diff}
+              onDiffChange={handleDiffChange}
+              controlMode={controlMode}
+              onControlModeChange={handleControlModeChange}
+            />
+          ) : null}
           {showPause ? (
             <PauseScreen
               onResume={handleResume}

@@ -112,6 +112,38 @@ try {
     (await page.locator('.diff-btn[data-diff="1"]').getAttribute('class'))?.includes('active'),
     '默认选中 1 星',
   );
+
+  // 操作手法选择：默认上下；切到左右只改图例，不开始游戏
+  assert(
+    (await page.locator('#controlPick .control-btn').count()) === 2,
+    '操作手法有两个选项（上下 / 左右）',
+  );
+  assert(
+    (await page.locator('#controlPick [data-control="vertical"]').getAttribute('class'))?.includes(
+      'active',
+    ),
+    '默认选中上下手法',
+  );
+  await page.locator('#controlPick [data-control="horizontal"]').click();
+  await page.waitForTimeout(120);
+  assert((await readPhase(page)) === 'idle', '点击手法按钮不会开始游戏');
+  assert(
+    (
+      await page.locator('#controlPick [data-control="horizontal"]').getAttribute('class')
+    )?.includes('active'),
+    '切到左右手法后按钮高亮',
+  );
+  assert(
+    (await page.locator('.legend').textContent())?.includes('左半屏'),
+    '左右手法的图例是左/右半屏',
+  );
+  await shot(page, '01b-control-horizontal.png');
+  await page.locator('#controlPick [data-control="vertical"]').click();
+  await page.waitForTimeout(120);
+  assert(
+    (await page.locator('.legend').textContent())?.includes('上半屏'),
+    '切回上下手法后图例恢复',
+  );
   assert((await readPhase(page)) === 'idle', '当前屏幕是 idle（开始界面）');
   await shot(page, '01-start-screen.png');
 
@@ -332,6 +364,33 @@ try {
     `刷新后 BEST 仍从 localStorage 读回（${reloadedHud.best}）`,
   );
   await shot(page, '14-best-after-reload.png');
+
+  // 操作手法也要能跨刷新保留
+  console.log('── 步骤 8b：操作手法持久化 ──');
+  await page.locator('#controlPick [data-control="horizontal"]').click();
+  await page.waitForTimeout(120);
+  const storedMode = await page.evaluate(() => globalThis.localStorage.getItem('dualrail_control'));
+  assert(
+    storedMode === 'horizontal',
+    `localStorage["dualrail_control"] 记录左右手法（${storedMode}）`,
+  );
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.canvas-host canvas', { timeout: 20_000 });
+  await page.waitForTimeout(200);
+  assert(
+    (
+      await page.locator('#controlPick [data-control="horizontal"]').getAttribute('class')
+    )?.includes('active'),
+    '刷新后仍是左右手法',
+  );
+  assert(
+    (await page.locator('.legend').textContent())?.includes('左半屏'),
+    '刷新后图例是左/右半屏',
+  );
+  await shot(page, '15-control-mode-persisted.png');
+  // 清理，避免影响后续断言
+  await page.locator('#controlPick [data-control="vertical"]').click();
+  await page.waitForTimeout(120);
 
   assert(
     pageErrors.length === 0,

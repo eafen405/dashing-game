@@ -9,6 +9,9 @@
  *
  * | 输入 | 期望 |
  * | --- | --- |
+ * | 开始界面切「左右」手法 | 不开始游戏，图例变为左/右半屏 |
+ * | 点左右手法：左半屏 | 上轨出刀（与纵向位置无关） |
+ * | 点左右手法：右半屏 | 下轨出刀（与纵向位置无关） |
  * | 点上半屏 | 上轨出刀（`.lane-top.hit`） |
  * | 点下半屏 | 下轨出刀（`.lane-bottom.hit`） |
  * | `↑` / `W` | 上轨出刀 |
@@ -21,7 +24,15 @@
  * 所以「上轨有 hit 且下轨没有」就说明这次输入确实被判成了上轨。
  */
 
-import { assert, launchBrowser, openApp, readPhase, shot, strike } from './lib/harness.mjs';
+import {
+  assert,
+  launchBrowser,
+  openApp,
+  readPhase,
+  shot,
+  stageBox,
+  strike,
+} from './lib/harness.mjs';
 
 const browser = await launchBrowser();
 const { page, pageErrors } = await openApp(browser);
@@ -39,11 +50,51 @@ function flashedLane() {
 }
 
 try {
+  // ── 操作手法：开始界面切换 ────────────────────────────────
+  console.log('── 开始界面：操作手法切换 ──');
+  assert(
+    (await page.locator('#controlPick .control-btn').count()) === 2,
+    '开始界面有两个操作手法选项',
+  );
+  assert(
+    (await page.locator('#controlPick [data-control="vertical"]').getAttribute('class'))?.includes(
+      'active',
+    ),
+    '默认选中上下手法',
+  );
+  await page.locator('#controlPick [data-control="horizontal"]').click();
+  await page.waitForTimeout(150);
+  assert((await readPhase(page)) === 'idle', '切换手法不会开始游戏');
+  assert(
+    (
+      await page.locator('#controlPick [data-control="horizontal"]').getAttribute('class')
+    )?.includes('active'),
+    '点击后切换到左右手法',
+  );
+  assert((await page.locator('.legend').textContent())?.includes('左半屏'), '图例同步改成左半屏');
+  await shot(page, 'in-0-control-horizontal.png');
+
   // ── 键盘：开始界面按 Enter / Space 开始 ──────────────────
   console.log('── 开始界面：Enter / Space 开始 ──');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'running', '开始界面按 Enter 开始游戏');
+
+  // ── 鼠标（左右手法）：左/右半屏 ──────────────────────────
+  console.log('── 鼠标：左右手法点左半屏 / 右半屏 ──');
+  const hbox = await stageBox(page);
+  if (!hbox) throw new Error('拿不到舞台矩形');
+  // 故意用「纵向相反」的位置：左下点应走上轨，右上点应走下轨
+  await page.mouse.click(hbox.x + hbox.width * 0.25, hbox.y + hbox.height * 0.75);
+  await page.waitForTimeout(120);
+  assert((await flashedLane()) === 'top', '左右手法：点左下 → 上轨出刀');
+  await shot(page, 'in-0-horizontal-left-top.png');
+
+  await page.mouse.click(hbox.x + hbox.width * 0.75, hbox.y + hbox.height * 0.25);
+  await page.waitForTimeout(120);
+  assert((await flashedLane()) === 'bottom', '左右手法：点右上 → 下轨出刀');
+  await shot(page, 'in-0-horizontal-right-bottom.png');
+
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(200);
   assert((await readPhase(page)) === 'paused', '游戏中按 P 暂停');
@@ -51,12 +102,21 @@ try {
   await page.waitForTimeout(200);
   assert((await readPhase(page)) === 'running', '暂停中按 P 恢复');
 
-  // 回主页面，再测 Space 开始
+  // 回主页面，切回上下手法，再测 Space 开始
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(200);
   await page.locator('#btnHome').click();
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'idle', '「回主页面」回到开始界面');
+  await page.locator('#controlPick [data-control="vertical"]').click();
+  await page.waitForTimeout(150);
+  assert(
+    (await page.locator('#controlPick [data-control="vertical"]').getAttribute('class'))?.includes(
+      'active',
+    ),
+    '切回上下手法',
+  );
+  assert((await page.locator('.legend').textContent())?.includes('上半屏'), '图例恢复上/下半屏');
   await page.keyboard.press('Space');
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'running', '开始界面按 Space 开始游戏');

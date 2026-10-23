@@ -43,6 +43,7 @@ export class FakeEventTarget {
 
 /** 假的事件对象（够 `pointer.ts` / `keyboard.ts` 用）。 */
 export interface FakeEvent {
+  clientX?: number;
   clientY?: number;
   pointerId?: number;
   code?: string;

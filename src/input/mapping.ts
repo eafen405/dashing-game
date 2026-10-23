@@ -24,6 +24,14 @@ export const KEY_INPUT_ID: Record<Lane, string> = {
 };
 
 /**
+ * 手机端的点击手法。
+ *
+ * - `vertical` —— 点上半屏打上轨、点下半屏打下轨（默认 / 旧版行为）
+ * - `horizontal` —— 点左半屏打上轨、点右半屏打下轨
+ */
+export type ControlMode = 'vertical' | 'horizontal';
+
+/**
  * 半屏 → 轨道 —— `source.html:2548-2551`。
  *
  * 以舞台矩形为基准：上半（含）走上轨，下半走下轨。
@@ -31,6 +39,36 @@ export const KEY_INPUT_ID: Record<Lane, string> = {
 export function laneForY(clientY: number, rect: { top: number; height: number }): Lane {
   return clientY - rect.top < rect.height / 2 ? 'top' : 'bottom';
 }
+
+/**
+ * 按当前手法把点击位置换算成轨道。
+ *
+ * `vertical` 沿用旧版的上下半屏；`horizontal` 改为左右半屏。
+ * 中线统一归下半 / 右半（与旧版「正中间算下半」一致）。
+ */
+export function laneForPoint(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  mode: ControlMode,
+): Lane {
+  if (mode === 'horizontal') {
+    return clientX - rect.left < rect.width / 2 ? 'top' : 'bottom';
+  }
+  return laneForY(clientY, rect);
+}
+
+/** 游戏内轨道提示文案（跟随手法切换）。 */
+export const LANE_HINT: Record<ControlMode, Record<Lane, string>> = {
+  vertical: {
+    top: '上半屏 · 上轨',
+    bottom: '下半屏 · 下轨',
+  },
+  horizontal: {
+    top: '左半屏 · 上轨',
+    bottom: '右半屏 · 下轨',
+  },
+};
 
 /** 键盘动作。 */
 export type KeyAction =

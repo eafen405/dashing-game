@@ -247,6 +247,11 @@ export interface FrameView {
 }
 
 /**
+ * 判定区操作提示的两种手法（只影响文案，不参与规则）。
+ */
+export type LaneHintMode = 'vertical' | 'horizontal';
+
+/**
  * 战场渲染器。
  *
  * 当前实现：PixiJS v8（`src/battlefield/pixi/`）。
@@ -261,4 +266,10 @@ export interface BattlefieldRenderer {
   resize(layout: Layout): void;
   /** 画一帧。 */
   render(frame: FrameView): void;
+  /**
+   * 更新判定区的操作提示文案（上下半屏 / 左右半屏）。
+   *
+   * 只影响表现文字，不参与规则；先于 `mount()` 调用也必须生效。
+   */
+  setControlMode?(mode: LaneHintMode): void;
 }

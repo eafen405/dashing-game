@@ -6,7 +6,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { KEY_INPUT_ID, laneForY, mapKeyDown, mapKeyUp, pointerInputId } from '../mapping';
+import {
+  KEY_INPUT_ID,
+  laneForPoint,
+  laneForY,
+  mapKeyDown,
+  mapKeyUp,
+  pointerInputId,
+} from '../mapping';
 
 describe('指针输入 id', () => {
   it('沿用旧代码的 "p" + pointerId', () => {
@@ -37,6 +44,30 @@ describe('半屏 → 轨道', () => {
   it('下半屏走下轨', () => {
     expect(laneForY(301, rect)).toBe('bottom');
     expect(laneForY(499, rect)).toBe('bottom');
+  });
+});
+
+describe('操作手法 → 轨道', () => {
+  const rect = { left: 100, top: 50, width: 800, height: 400 };
+
+  it('上下模式只看纵坐标', () => {
+    expect(laneForPoint(900, 60, rect, 'vertical')).toBe('top');
+    expect(laneForPoint(150, 400, rect, 'vertical')).toBe('bottom');
+  });
+
+  it('左右模式只看横坐标（即使纵向位置指向另一条轨）', () => {
+    // 这两个点的纵坐标本身会得出相反结果，证明左右模式确实按 X 判定
+    expect(laneForPoint(150, 400, rect, 'horizontal')).toBe('top');
+    expect(laneForPoint(900, 60, rect, 'horizontal')).toBe('bottom');
+  });
+
+  it('左右模式以舞台左边界为基准', () => {
+    expect(laneForPoint(100, 300, rect, 'horizontal')).toBe('top');
+    expect(laneForPoint(499, 300, rect, 'horizontal')).toBe('top');
+  });
+
+  it('左右模式正中间算右半屏（严格小于才是左半）', () => {
+    expect(laneForPoint(500, 300, rect, 'horizontal')).toBe('bottom');
   });
 });
 

@@ -553,6 +553,49 @@ body {
   transform: scale(0.96);
 }
 
+/* 操作手法选择 —— 绝对定位在开始界面右上角，不占纵向排版高度 */
+.control-pick {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  background: rgba(5, 8, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.control-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.control-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cdd8f0;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.control-btn.active {
+  border-color: rgba(79, 209, 255, 0.65);
+  background: linear-gradient(180deg, rgba(79, 209, 255, 0.2), rgba(79, 209, 255, 0.07));
+  color: #eaf8ff;
+  box-shadow: 0 0 10px rgba(79, 209, 255, 0.22);
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
 .go-actions {
   display: flex;
   gap: 12px;
@@ -628,6 +671,17 @@ body {
   }
   .diff-btn .dname {
     font-size: 10px;
+  }
+  .control-pick {
+    top: 4px;
+    right: 6px;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+  .control-btn {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 11px;
   }
   .tap-hint {
     margin-top: 7px;
