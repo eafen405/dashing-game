@@ -1,8 +1,8 @@
 # 交接说明 —— 双轨打怪重构
 
 > 更新时间：2026-10-22
-> 集成分支：`feat/refactor-v2` @ `a5826fa`（票 01–21 已合入，**本地**；
-> `origin/feat/refactor-v2` 仍在 `cf3051b` —— 票 18–21 **尚未推送**）
+> 集成分支：`feat/refactor-v2` @ `5719125`（票 01–21 已合入，**已推送**）
+> PR 分支：`feat/merge-to-main-0.2.0`（同一 tip，专门用来开 PR 到 `main`）
 > 本轮：**`feat/review-fixes`**（两轴代码评审的收口修复，基线 `a5826fa`；
 > **PR 与合并由编排者执行**）
 > 规格：[spec.md](spec.md) · 票：[issues/](issues/) · 差异记账：[CHANGELOG.md](../../CHANGELOG.md)
@@ -25,21 +25,21 @@
 | 核对项 | 结论 |
 | --- | --- |
 | `dashing-game(1).html` 是什么 | 在**票 21 收口时**与 `npm run build` 的产物**逐字节相同**（1,068,167 B）。⚠️ **评审收口那轮之后不再逐字节相同**（1,068,487 B，差 320 B）—— 爆散签名常量搬进规则层、删掉了一个从未被引入的样式表，打包结果自然不同。**行为没变**（golden trace 逐帧一致 · 360 个单测全绿 · 验收拼图不变）。核对完已于 2026-10-22 移入回收站（产物由构建复现，不需要入库；`.gitignore` 已挡住同名文件回流） |
-| 它对应哪一版 | 本地 `feat/refactor-v2` @ `a5826fa`（票 01–21 全部并入）。⚠️ `origin/feat/refactor-v2` 仍在 `cf3051b` —— 票 18 / 19 / 20 / 21 **尚未推送** |
+| 它对应哪一版 | `feat/refactor-v2` @ `5719125`（票 01–21 全部并入，**已推送**；PR 走 `feat/merge-to-main-0.2.0`） |
 | 里面的判定框位置 | `hitX = playerX + playerR * CLUB_REACH_R`（`CLUB_REACH_R = 3.07`）—— 票 17「判定框挪到棒尖」的实现，与源码一致 |
 | CSS / UI 文案 | 与当前源码产物完全一致，无漂移 |
 | 本机门禁 | typecheck ✅ · lint ✅ · 单测 30 文件 / 360 测试 ✅ · build ✅ · verify ✅ · trace ✅（11 条结算路径）· `test:e2e` 六个脚本 ✅ · `test:visual` 六个脚本 ✅ |
-| **CI（`cf3051b`）** | ❌ **红** —— [run 39773140165](https://github.com/eafen405/dashing-game/actions/runs/39773140165) 的 e2e 步骤失败，`npm run trace` 被跳过。根因见票 18 —— **已修并合入集成分支**（`a5826fa`），复跑要等编排者开 PR 后由 GitHub Actions 验证（票 21 不推送） |
-| `main` | 仍停在初始提交 `d2958e2`，**没有任何 PR** —— 票 21 已把 CHANGELOG / README 收口做完，**开 PR 与合并由编排者执行** |
+| **CI（`cf3051b`）** | ❌ **红** —— [run 39773140165](https://github.com/eafen405/dashing-game/actions/runs/39773140165) 的 e2e 步骤失败，`npm run trace` 被跳过。根因见票 18 —— **已修并合入集成分支**（`5719125`），复绿由 PR 上的 GitHub Actions 验证 |
+| `main` | 仍停在初始提交 `d2958e2` —— PR 从 `feat/merge-to-main-0.2.0` 发出，合并由编排者执行 |
 | 「无头 Chromium 没有 WebGL」 | **已过期**。`--enable-unsafe-swiftshader` 之后无头能拿到 WebGL；bloom / 色散 / 冲击波实测全部生效（票 20） |
 | 特效验收脚本 | 5 个特效脚本 + 键盘长按怪已接进 CI（`npm run test:visual`，票 20），验收拼图作为 artifact 留档 |
 
 ## 分支与提交
 
-- 集成分支：`feat/refactor-v2` @ `a5826fa`（**本地**）。
-  ⚠️ 它比 `origin/feat/refactor-v2`（`cf3051b`）**领先 9 个提交** ——
-  票 18 / 19 / 20 / 21 已合进**本地**分支但**还没推送**；远端目前只有 `main` 与 `feat/refactor-v2`。
-  **开 PR 之前先把本地集成分支推上去**（否则 PR 会漏掉票 18–21）。
+- 集成分支：`feat/refactor-v2` @ `5719125`（**已推送**，`cf3051b..5719125` 快进）。
+- PR 分支：`feat/merge-to-main-0.2.0`（同一 tip，**已推送**）——
+  专门开 PR 到 `main` 用，**不**与别人的推送抢同一条分支。
+  远端目前是 `main` + `feat/refactor-v2` + `feat/merge-to-main-0.2.0`。
 - `main` 仍停在初始提交 `d2958e2`（旧版 `source.html` 的存档点），重构成果尚未合并到 `main`。
 - 本轮分支：`feat/review-fixes`（本机 worktree 在 `refactor-wt/23-review-fixes`）——
   它只做**评审收口**：改文档里的**不实陈述**、删死代码、去重复。
