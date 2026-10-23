@@ -29,7 +29,7 @@
 | 里面的判定框位置 | `hitX = playerX + playerR * CLUB_REACH_R`（`CLUB_REACH_R = 3.07`）—— 票 17「判定框挪到棒尖」的实现，与源码一致 |
 | CSS / UI 文案 | 与当前源码产物完全一致，无漂移 |
 | 本机门禁 | typecheck ✅ · lint ✅ · 单测 30 文件 / 360 测试 ✅ · build ✅ · verify ✅ · trace ✅（11 条结算路径）· `test:e2e` 六个脚本 ✅ · `test:visual` 六个脚本 ✅ |
-| **CI（`cf3051b`）** | ❌ **红** —— [run 39773140165](https://github.com/eafen405/dashing-game/actions/runs/39773140165) 的 e2e 步骤失败，`npm run trace` 被跳过。根因见票 18 —— **已修并合入集成分支**（`5719125`），复绿由 PR 上的 GitHub Actions 验证 |
+| **CI（`cf3051b`）** | ✅ **已绿** —— 票 18 修完并合入后，PR #1 上 `verify` job **7m06s 全绿**（含 `npm run trace`，不再被跳过）。`visual` job 第一次跑红在 `fx-moments`（CI 的 `/dev/shm` 只有 64 MB → Chromium 截图失联），已修（`--disable-dev-shm-usage` + 截图重试），见票 20 补记 |
 | `main` | 仍停在初始提交 `d2958e2` —— PR 从 `feat/merge-to-main-0.2.0` 发出，合并由编排者执行 |
 | 「无头 Chromium 没有 WebGL」 | **已过期**。`--enable-unsafe-swiftshader` 之后无头能拿到 WebGL；bloom / 色散 / 冲击波实测全部生效（票 20） |
 | 特效验收脚本 | 5 个特效脚本 + 键盘长按怪已接进 CI（`npm run test:visual`，票 20），验收拼图作为 artifact 留档 |
