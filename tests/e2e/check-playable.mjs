@@ -26,6 +26,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { launchChromium } from '../../scripts/browser.mjs';
+import { captureShot } from './lib/harness.mjs';
 
 const DIST = resolve(process.cwd(), 'dist', 'index.html');
 /**
@@ -84,12 +85,12 @@ try {
   await page.mouse.click(900, 200);
   await page.waitForTimeout(120);
   assert((await page.locator('.lane-top.hit').count()) > 0, '上轨出现受击高亮（输入打通规则层）');
-  await page.screenshot({ path: join(SHOTS, '04b-playing.png') });
+  await captureShot(page, join(SHOTS, '04b-playing.png'));
 
   console.log('── 4. 规则层在推进（等漏怪掉血）──');
   await page.waitForSelector('.toast:has-text("-20")', { timeout: 30_000 });
   assert(true, '出现「-20」受击提示（规则层 → 效果 → DOM 打通）');
-  await page.screenshot({ path: join(SHOTS, '04b-hit.png') });
+  await captureShot(page, join(SHOTS, '04b-hit.png'));
 
   console.log('── 5. 竖屏 → 自动暂停 ──');
   await page.setViewportSize({ width: 500, height: 800 });
@@ -97,14 +98,14 @@ try {
   await page.waitForTimeout(400);
   assert((await page.locator('.pause-card').count()) > 0, '暂停界面出现（竖屏自动暂停）');
   assert(await page.locator('.rotate').isVisible(), '竖屏提示可见');
-  await page.screenshot({ path: join(SHOTS, '04b-portrait-paused.png') });
+  await captureShot(page, join(SHOTS, '04b-portrait-paused.png'));
 
   console.log('── 6. 转回横屏 → 自动恢复 ──');
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => globalThis.dispatchEvent(new globalThis.Event('orientationchange')));
   await page.waitForTimeout(400);
   assert((await page.locator('.pause-card').count()) === 0, '暂停界面消失（自动恢复）');
-  await page.screenshot({ path: join(SHOTS, '04b-resumed.png') });
+  await captureShot(page, join(SHOTS, '04b-resumed.png'));
 
   assert(
     pageErrors.length === 0,
@@ -114,7 +115,7 @@ try {
   console.log(`\n✓ 端到端检查通过，截图 → ${SHOTS}`);
 } catch (err) {
   console.error(`\n✗ 端到端检查失败：${String(err)}`);
-  await page.screenshot({ path: join(SHOTS, '04b-failure.png') }).catch(() => undefined);
+  await captureShot(page, join(SHOTS, '04b-failure.png')).catch(() => undefined);
   process.exitCode = 1;
 } finally {
   await browser.close();

@@ -63,17 +63,48 @@ export async function shot(page, name) {
  *
  * @param {import('playwright').Page} page 页面。
  * @param {string} path 目标文件路径。
- * @param {{attempts?: number, delayMs?: number}} [options] 重试次数与间隔。
+ * @param {{attempts?: number, delayMs?: number, clip?: {x: number, y: number, width: number, height: number}}} [options]
+ *   重试次数、间隔，以及传给 `page.screenshot` 的其他参数（比如 `clip`）。
  */
 export async function captureShot(page, path, options = {}) {
   const attempts = options.attempts ?? 3;
   const delayMs = options.delayMs ?? 800;
+  const shotOptions = {};
+  if (options.clip) shotOptions.clip = options.clip;
   let lastError = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      await page.screenshot({ path });
+      await page.screenshot({ path, ...shotOptions });
       console.log(`  📷 ${path}`);
       return path;
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts) {
+        console.log(`  ↻ 截图失败（第 ${attempt} 次），${delayMs}ms 后重试：${String(err)}`);
+        await page.waitForTimeout(delayMs);
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * 截一张图并返回 Buffer（不落盘）—— 供逐像素统计用。
+ *
+ * 同样带重试：CI 上截图是**瞬时**失联的（见 `captureShot` 的说明）。
+ *
+ * @param {import('playwright').Page} page 页面。
+ * @param {object} [options] 传给 `page.screenshot` 的参数（比如 `clip`）。
+ * @param {{attempts?: number, delayMs?: number}} [retry] 重试次数与间隔。
+ * @returns {Promise<Buffer>} PNG 字节。
+ */
+export async function captureBuffer(page, options = {}, retry = {}) {
+  const attempts = retry.attempts ?? 3;
+  const delayMs = retry.delayMs ?? 800;
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await page.screenshot(options);
     } catch (err) {
       lastError = err;
       if (attempt < attempts) {

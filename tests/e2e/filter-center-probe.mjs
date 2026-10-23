@@ -37,7 +37,7 @@
 
 import { join, resolve } from 'node:path';
 
-import { assert, launchBrowser, openApp } from './lib/harness.mjs';
+import { assert, captureShot, launchBrowser, openApp } from './lib/harness.mjs';
 
 const OUT = process.env.E2E_SHOTS_DIR
   ? resolve(process.env.E2E_SHOTS_DIR)
@@ -153,7 +153,7 @@ try {
   const base = await page.evaluate(READ_PIXELS);
   const frameA = await trigger(A.x, A.y);
   const frameB = await trigger(B.x, B.y);
-  await page.screenshot({ path: join(OUT, 'shockwave-center-probe.png') });
+  await captureShot(page, join(OUT, 'shockwave-center-probe.png'));
 
   const cA = diffCentroid(base, frameA);
   const cB = diffCentroid(base, frameB);
