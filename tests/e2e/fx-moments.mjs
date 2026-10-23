@@ -207,8 +207,34 @@ const AUTO_PLAY = ({ hitX, laneYs, zoneHalf, durationMs, canvasSel, stageSel, co
 
 const browser = await launchBrowser();
 
-/** 并排合成 —— 用浏览器排版两张图再截图（没有装图像处理库）。 */
+/**
+ * 排队等着合成的并排图。
+ *
+ * **为什么要排队、放到最后再合成**：合成要**新开一个页面**（2624 宽）再截图。
+ * 在 CI 那种 2 核 runner 上，游戏那两个带 bloom 的 WebGL 页面还开着的时候，
+ * 新页面往往拿不到合成图 —— 报
+ * `Protocol error (Page.captureScreenshot): Unable to capture screenshot`。
+ * （本机 32 核 + 9.8 GB `/dev/shm`，永远复现不出来。）
+ * 所以：**游戏阶段只负责把两边的单图拍下来，合成阶段等游戏浏览器关掉之后再做**，
+ * 用一个干净的浏览器，不跟任何 WebGL 页面抢资源。
+ *
+ * @type {{title: string, left: string, right: string, out: string, imageHeight: number}[]}
+ */
+const pendingComposes = [];
+
+/** 并排合成 —— 排队，最后统一做（见 `pendingComposes` 的说明）。 */
 async function compose(title, left, right, out, imageHeight = VIEWPORT.height) {
+  pendingComposes.push({ title, left, right, out, imageHeight });
+}
+
+/**
+ * 真的排版 + 截图（用一个**干净的**浏览器，游戏页面已经关掉了）。
+ *
+ * @param {import('playwright').Browser} composeBrowser 合成用的浏览器。
+ * @param {{title: string, left: string, right: string, out: string, imageHeight: number}} item
+ */
+async function composeIn(composeBrowser, item) {
+  const { title, left, right, out, imageHeight } = item;
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -228,13 +254,43 @@ async function compose(title, left, right, out, imageHeight = VIEWPORT.height) {
 </body></html>`;
   const htmlPath = out.replace(/\.png$/, '.html');
   writeFileSync(htmlPath, html);
-  const page = await browser.newPage({
+  const page = await composeBrowser.newPage({
     viewport: { width: VIEWPORT.width * 2 + 64, height: imageHeight + 120 },
   });
   await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' });
-  await page.screenshot({ path: out, fullPage: true });
+  await captureShot(page, out, { attempts: 3 });
   await page.close();
-  console.log(`  📷 ${out}`);
+}
+
+/**
+ * 合成阶段 —— 游戏浏览器关掉之后，用一个**干净的**浏览器排版并排图。
+ *
+ * @param {{title: string, left: string, right: string, out: string, imageHeight: number}[]} items
+ * @returns {Promise<number>} 合成成功了几张。
+ */
+async function composeAll(items) {
+  if (items.length === 0) return 0;
+  console.log('\n── 合成并排图（游戏页面已关闭，单独一个浏览器）──');
+  let composeBrowser = await launchBrowser();
+  let ok = 0;
+  try {
+    for (const item of items) {
+      try {
+        await composeIn(composeBrowser, item);
+        ok += 1;
+      } catch (err) {
+        // 单张并排图合不出来**不判红**：两边的单图还在（那才是证据），
+        // 并排图只是给人看的。真正硬的判据在下面 —— 新版至少截到 1 个瞬间。
+        console.log(`  ⚠ 这张并排图没合成出来：${String(err)}`);
+        // 渲染进程可能已经死了 —— 换个干净的浏览器再试一次后面的图。
+        await composeBrowser.close().catch(() => {});
+        composeBrowser = await launchBrowser();
+      }
+    }
+  } finally {
+    await composeBrowser.close().catch(() => {});
+  }
+  return ok;
 }
 
 /** 读一个页面到目前为止的 toast 记录。 */
@@ -495,4 +551,12 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
+}
+
+// ── 合成阶段 ───────────────────────────────────────────────
+// 游戏浏览器已经关掉了 —— 现在用一个干净的浏览器排版并排图，
+// 不跟任何还开着的 WebGL 页面抢资源（见 `pendingComposes` 的说明）。
+if (pendingComposes.length > 0) {
+  const composed = await composeAll(pendingComposes);
+  console.log(`\n✓ 并排图合成 ${composed}/${pendingComposes.length} 张 → ${OUT}`);
 }

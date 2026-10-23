@@ -276,30 +276,54 @@ Pixi 不回退 Canvas2D，bloom / 色散 / 冲击波全部生效。
 **挂在第 5 个 `fx-moments.mjs`**：它同时开着**旧版 + 新版两个带 bloom 的页面**，
 截到「瞬间 1 · 暴击」之后，下一张截图就再也截不出来了。
 
-### 根因：CI 的 `/dev/shm` 只有 64 MB
+### 根因：合成并排图的那个新页面，在游戏页面还开着的时候拿不到画面
 
-Chromium 默认把 WebGL 的共享内存缓冲放在 `/dev/shm`。GitHub runner 的 `/dev/shm`
-**只有 64 MB**（本机 WSL2 是 9.8 GB —— 所以**本机永远复现不出来，只有 CI 会红**）。
-两个带 bloom 的页面一起跑，共享内存被撑爆，渲染进程在截图那一刻失联，
-`Page.captureScreenshot` 就报「Unable to capture screenshot」。
+失败点**不是**拍瞬间的那两张单图（`legacy-crit.png` / `new-crit.png` 都拍到了），
+而是紧接着的**合成**步骤 —— 它要**新开一个页面**（2624 宽）把两张图并排排版再截图。
+在 CI 那种 **2 核 runner** 上，游戏那两个带 bloom 的 WebGL 页面还开着的时候，
+新页面的 `Page.captureScreenshot` 直接报「Unable to capture screenshot」。
 
-### 修法（两处，都在判据之外）
+排查过程中排除掉的两条：
 
-1. **`scripts/browser.mjs` 的 `CHROMIUM_ARGS` 加 `--disable-dev-shm-usage`**
-   —— 让 Chromium 改用 `/tmp`，绕开那块 64 MB。这是根因修复。
-2. **`tests/e2e/fx-moments.mjs` 加固**（脚本本来就「容忍一边没等到」）：
-   - `harness.mjs` 新增 `captureShot()` —— 截图失败重试 3 次（这种失败是**瞬时的**，
-     渲染进程没死，等一下再截常常就成功）；
-   - 截不出来的那一边按「这一边没等到」处理，不再让整个脚本崩；
-   - 渲染进程真死的那一页标记为 `dead`，**不再对它 `evaluate`**（否则整个循环被带崩），
-     另一页继续跑完剩下的瞬间；
-   - **硬判据保留并加强**：新版至少要截到 1 个瞬间（`captured.modern > 0`）——
-     一个都没截到就说明这个脚本白跑了，仍然红。
+- **`/dev/shm` 只有 64 MB**（本机 WSL2 是 9.8 GB）：确实是 runner 的限制，
+  所以给 `CHROMIUM_ARGS` 加了 `--disable-dev-shm-usage`（**该留** —— 它本来就该带），
+  但**光靠它不够**，加上之后同一个点照样红。
+- **Chromium 版本**：本机缓存的是 153，CI 装的是 156。装了 156 本机复跑 —— 照样过，
+  **不是版本问题**。
+
+结论：这是 **runner 资源（2 核 / 软件光栅）下「合成页面与两个 WebGL 游戏页面抢资源」**
+导致的一次性失败，不是判据的问题，也不是游戏的问题。
+
+### 修法（三处，都在判据之外）
+
+1. **合成阶段与游戏阶段分开**（`tests/e2e/fx-moments.mjs`）——
+   游戏阶段只负责把两边的单图拍下来；**游戏浏览器关掉之后**，再用一个**干净的浏览器**
+   排版合成并排图。这样合成页面不跟任何 WebGL 页面抢资源。
+2. **`harness.mjs` 新增 `captureShot()`** —— 截图失败重试 3 次（这种失败常常是**瞬时的**，
+   渲染进程没死，等一下再截常常就成功）。
+3. **渲染进程真死时不带崩整套**：截不出来的那一边按「这一边没等到」处理；
+   页面真死了就标记为 `dead`，**不再对它 `evaluate`**（否则整个循环被带崩），
+   另一页继续跑完剩下的瞬间；合成那张图失败则换个干净的浏览器重试。
+   **硬判据保留并加强**：新版至少要截到 1 个瞬间（`captured.modern > 0`）——
+   一个都没截到就说明这个脚本白跑了，仍然红。
+
+另外把 `scripts/browser.mjs` 的 `CHROMIUM_ARGS` 加上 `--disable-dev-shm-usage`
+（CI 的 `/dev/shm` 只有 64 MB，这个参数本来就该带，虽然它不是这次的根因）。
 
 判据一个字没改 —— 改的是**跑机器的资源限制**和**失败传播路径**，
 不是把门禁放松成「永远绿」。
 
 ### 验证
 
-- 本机 `npm run test:visual` 全绿：6/6 脚本，瞬时 3/3 两边都截到（旧版 3 个 / 新版 3 个）。
+- 本机 `npm run test:visual` 全绿：6/6 脚本，瞬时 3/3 两边都截到（旧版 3 个 / 新版 3 个），
+  并排图 3/3 合成成功（合成阶段已独立成一个浏览器）。
+- 本机用 **CI 同款 Chromium 156**（`npx playwright install chromium` 装 1248）复跑也绿 ——
+  确认不是浏览器版本差异。
 - CI 的 `verify` job 已绿（7m06s，含 `npm run trace`）；`visual` job 重跑结果见下。
+
+### 给下一个人的提醒
+
+**本机复现不了 CI 的失败**：本机 32 核 / 19 GB / `/dev/shm` 9.8 GB，CI 是 2 核 / 7 GB /
+`/dev/shm` 64 MB，而且本机装过旧版 Chromium。要验 CI 行为，先
+`npx playwright install chromium` 把版本对齐（默认 CDN 在国内要配
+`PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright`）。
