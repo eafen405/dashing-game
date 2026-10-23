@@ -325,7 +325,7 @@ export class GameSession implements InputSink {
         burnCarry: 0,
       };
       this.presentation.apply([
-        { type: 'toast', text: '燃魂！得分 ×2', color: '#ff7ac0' },
+        { type: 'toast', text: '燃魂！得分 ×2', color: '#ff3b5c' },
         { type: 'vibrate', pattern: [0, 30, 40, 60] },
       ]);
     } else {
@@ -336,7 +336,7 @@ export class GameSession implements InputSink {
         burning: false,
         burnCarry: 0,
       };
-      this.presentation.apply([{ type: 'toast', text: '燃魂结束', color: '#ff9ad5' }]);
+      this.presentation.apply([{ type: 'toast', text: '燃魂结束', color: '#ff6a8a' }]);
     }
   }
 

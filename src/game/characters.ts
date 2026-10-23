@@ -120,14 +120,14 @@ export function healOnHit(state: GameState, x: number, y: number): HealResult {
   const hp = Math.min(state.maxHp, state.hp + cfg.healPerHit);
   const healed = hp - state.hp;
   let s: GameState = { ...state, hp };
-  const effects: Effect[] = [{ type: 'floater', x, y, text: '+' + healed, color: '#ff9ad5' }];
+  const effects: Effect[] = [{ type: 'floater', x, y, text: '+' + healed, color: '#ff6a8a' }];
 
   let startedBurn = false;
   if (hp >= state.maxHp && cfg.burnFloor !== null) {
     startedBurn = true;
     s = { ...s, burning: true, burnCarry: 0 };
-    effects.push({ type: 'ring', x, y, life: 0.5, r0: 10, r1: 92, color: '#ff4d8d' });
-    effects.push({ type: 'toast', text: '燃魂！得分 ×2', color: '#ff7ac0' });
+    effects.push({ type: 'ring', x, y, life: 0.5, r0: 10, r1: 92, color: '#ff2d4a' });
+    effects.push({ type: 'toast', text: '燃魂！得分 ×2', color: '#ff3b5c' });
     effects.push({ type: 'vibrate', pattern: [0, 30, 40, 60] });
   }
 
@@ -155,7 +155,7 @@ export function stepBurn(state: GameState, step: number): BurnResult {
 
   const endBurn = (s: GameState): BurnResult => ({
     state: { ...s, burning: false, burnCarry: 0 },
-    effects: [{ type: 'toast', text: '燃魂结束', color: '#ff9ad5' }],
+    effects: [{ type: 'toast', text: '燃魂结束', color: '#ff6a8a' }],
   });
 
   if (state.hp <= floor) return endBurn(state);
