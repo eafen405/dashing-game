@@ -35,7 +35,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { assert, launchBrowser, openApp } from './lib/harness.mjs';
+import { assert, captureShot, launchBrowser, openApp } from './lib/harness.mjs';
 
 const OUT = process.env.E2E_SHOTS_DIR
   ? resolve(process.env.E2E_SHOTS_DIR)
@@ -63,7 +63,7 @@ try {
 
   const shot = async (name) => {
     const path = join(OUT, `new-${name}.png`);
-    await page.screenshot({ path });
+    await captureShot(page, path);
     console.log(`  📷 ${path}`);
     return path;
   };
@@ -290,7 +290,7 @@ try {
   const sheet = await browser.newPage({ viewport: { width: 1300, height: 1000 } });
   await sheet.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' });
   const sheetPath = join(OUT, 'acceptance-09.png');
-  await sheet.locator('#sheet').screenshot({ path: sheetPath });
+  await captureShot(sheet.locator('#sheet'), sheetPath);
   console.log(`  📷 ${sheetPath}`);
 
   assert(

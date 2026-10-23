@@ -36,7 +36,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { assert, launchBrowser, openApp } from './lib/harness.mjs';
+import { assert, captureShot, launchBrowser, openApp } from './lib/harness.mjs';
 
 const OUT = process.env.E2E_SHOTS_DIR
   ? resolve(process.env.E2E_SHOTS_DIR)
@@ -122,7 +122,7 @@ try {
     );
     await page.waitForTimeout(200);
     const path = join(OUT, `bloom-${name}.png`);
-    await page.screenshot({ path });
+    await captureShot(page, path);
     await page.close();
     return path;
   }

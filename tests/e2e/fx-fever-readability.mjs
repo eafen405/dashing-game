@@ -21,7 +21,7 @@
 
 import { join, resolve } from 'node:path';
 
-import { assert, launchBrowser, openApp } from './lib/harness.mjs';
+import { assert, captureBuffer, captureShot, launchBrowser, openApp } from './lib/harness.mjs';
 
 const OUT = process.env.E2E_SHOTS_DIR
   ? resolve(process.env.E2E_SHOTS_DIR)
@@ -100,7 +100,7 @@ const MEASURE_PNG = async ([dataUrl, layout]) => {
 async function measureZone(page, layout) {
   const box = await page.locator('.canvas-host canvas').boundingBox();
   if (!box || box.width < 2 || box.height < 2) throw new Error('找不到画布区域');
-  const png = await page.screenshot({
+  const png = await captureBuffer(page, {
     clip: {
       x: Math.round(box.x),
       y: Math.round(box.y),
@@ -145,7 +145,7 @@ try {
     `  差异：描边连续性 ${((after.outlineKeep - before.outlineKeep) * 100).toFixed(1)} 个百分点 · 最大红蓝差 +${after.maxFringe - before.maxFringe}`,
   );
 
-  await page.screenshot({ path: join(OUT, 'fever-readability.png') });
+  await captureShot(page, join(OUT, 'fever-readability.png'));
   console.log(`  📷 ${join(OUT, 'fever-readability.png')}`);
 
   assert(

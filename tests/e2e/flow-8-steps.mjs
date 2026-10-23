@@ -22,7 +22,9 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  SHOTS,
   assert,
+  captureShot,
   isGameOver,
   lastToast,
   launchBrowser,
@@ -30,7 +32,6 @@ import {
   readHud,
   readPhase,
   readStoredBest,
-  SHOTS,
   shot,
   strike,
   toastCount,
@@ -117,8 +118,7 @@ try {
   const stage = await page.locator('.stage').boundingBox();
   await strike(page, 'top');
   mkdirSync(SHOTS, { recursive: true });
-  await page.screenshot({
-    path: join(SHOTS, '04-slash-detail.png'),
+  await captureShot(page, join(SHOTS, '04-slash-detail.png'), {
     clip: { x: stage.x + 120, y: stage.y, width: 560, height: 380 },
   });
   await shot(page, '04-slash.png');

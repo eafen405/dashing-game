@@ -327,3 +327,28 @@ Pixi 不回退 Canvas2D，bloom / 色散 / 冲击波全部生效。
 `/dev/shm` 64 MB，而且本机装过旧版 Chromium。要验 CI 行为，先
 `npx playwright install chromium` 把版本对齐（默认 CDN 在国内要配
 `PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright`）。
+
+### 补记 2（2026-10-23）· 同一个坑又出现在 `compare-legacy.mjs`
+
+PR #1 合并到 `main` 之后，`main` 分支自己的 CI 又红了一次 —— 这次挂在 **`verify` job**
+的 `compare-legacy.mjs`：
+
+```
+✗ 并排对比失败：Error: page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot
+```
+
+**同一个根因**：`compare-legacy.mjs` 也是「旧版 + 新版两个页面开着 → 再新开一个 2624 宽的
+页面排版并排图 → 截图」。之前只修了 `fx-moments.mjs`，漏了它。
+
+**这次改成面上的修法**（不再一个脚本一个脚本地打补丁）：
+
+1. **`harness.mjs` 的 `captureShot()` / `captureBuffer()`** —— 所有截图统一走带重试的
+   助手（瞬时失联重试 3 次）；`captureBuffer()` 给需要逐像素统计的脚本用。
+2. **两个「并排图」脚本（`fx-moments.mjs` / `compare-legacy.mjs`）统一改成两阶段**：
+   游戏阶段只拍两边的单图 → **游戏浏览器关掉之后**，用**一个干净的浏览器**排版合成。
+   合成失败只记 ⚠，不判红（两边的单图才是证据，并排图只是给人看的）。
+3. **其余脚本的截图全部换成 `captureShot()`**（`check-playable` / `bloom-ab` /
+   `fx-acceptance` / `fx-fever-readability` / `filter-center-probe` / `flow-8-steps`）——
+   同一个 CI 环境下，任何一次截图都可能瞬时失联，重试比逐个排查便宜得多。
+
+**判据一个字没改**：文案 / 布局 / 像素判据全部照旧，只是「截图这一步」不再一次性定生死。

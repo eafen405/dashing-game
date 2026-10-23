@@ -22,7 +22,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { assert, launchBrowser, SHOTS } from './lib/harness.mjs';
+import { assert, captureShot, launchBrowser, SHOTS } from './lib/harness.mjs';
 
 /** 旧版页面（只读参照）—— 与仓库根同目录。 */
 const LEGACY = resolve(process.cwd(), 'source.html');
@@ -35,7 +35,14 @@ const VIEWPORT = { width: 1280, height: 720 };
 const browser = await launchBrowser();
 
 /**
- * 并排合成 —— 用浏览器排版两张图再截图。
+ * 排队等着合成的并排图 —— 合成阶段放到最后、单独一个浏览器里做（见 `composeAll`）。
+ *
+ * @type {{title: string, left: string, right: string, out: string, imageHeight: number}[]}
+ */
+const pendingComposes = [];
+
+/**
+ * 并排合成 —— 排队（真正排版见 `composeIn`）。
  *
  * @param title 标题。
  * @param left 旧版截图路径。
@@ -43,6 +50,16 @@ const browser = await launchBrowser();
  * @param out 输出的并排图路径。
  */
 async function compose(page, title, left, right, out, imageHeight = VIEWPORT.height) {
+  pendingComposes.push({ title, left, right, out, imageHeight });
+}
+
+/**
+ * 真的排版 + 截图（用一个**干净的**浏览器，游戏页面已经关掉了）。
+ *
+ * @param {{title: string, left: string, right: string, out: string, imageHeight: number}} item
+ */
+async function composeIn(composeBrowser, item) {
+  const { title, left, right, out, imageHeight } = item;
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -62,13 +79,47 @@ async function compose(page, title, left, right, out, imageHeight = VIEWPORT.hei
 </body></html>`;
   const htmlPath = out.replace(/\.png$/, '.html');
   writeFileSync(htmlPath, html);
-  const composePage = await browser.newPage({
+  const composePage = await composeBrowser.newPage({
     viewport: { width: VIEWPORT.width * 2 + 64, height: imageHeight + 120 },
   });
   await composePage.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' });
-  await composePage.screenshot({ path: out, fullPage: true });
+  await captureShot(composePage, out, { attempts: 3 });
   await composePage.close();
-  console.log(`  📷 ${out}`);
+}
+
+/**
+ * 合成阶段 —— 游戏浏览器关掉之后，用一个**干净的**浏览器排版并排图。
+ *
+ * **为什么要单独一个浏览器**：合成要新开一个页面（2624 宽）再截图。在 CI 那种
+ * 2 核 runner 上，游戏那两个页面还开着的时候，新页面经常拿不到画面 ——
+ * `Protocol error (Page.captureScreenshot): Unable to capture screenshot`。
+ * 本机 32 核 + 9.8 GB `/dev/shm`，永远复现不出来。
+ *
+ * @param {{title: string, left: string, right: string, out: string, imageHeight: number}[]} items
+ * @returns {Promise<number>} 合成成功了几张。
+ */
+async function composeAll(items) {
+  if (items.length === 0) return 0;
+  console.log('\n── 合成并排图（游戏页面已关闭，单独一个浏览器）──');
+  let composeBrowser = await launchBrowser();
+  let ok = 0;
+  try {
+    for (const item of items) {
+      try {
+        await composeIn(composeBrowser, item);
+        ok += 1;
+      } catch (err) {
+        // 单张并排图合不出来**不判红**：两边的单图还在（那才是证据），
+        // 并排图只是给人看的。真正的硬判据是上面那些文案 / 布局断言。
+        console.log(`  ⚠ 这张并排图没合成出来：${String(err)}`);
+        await composeBrowser.close().catch(() => {});
+        composeBrowser = await launchBrowser();
+      }
+    }
+  } finally {
+    await composeBrowser.close().catch(() => {});
+  }
+  return ok;
 }
 
 try {
@@ -91,8 +142,8 @@ try {
   console.log('── 1. 开始界面 ──');
   const legacyStart = join(SHOTS, 'cmp-legacy-1-start.png');
   const modernStart = join(SHOTS, 'cmp-new-1-start.png');
-  await legacy.screenshot({ path: legacyStart });
-  await modern.screenshot({ path: modernStart });
+  await captureShot(legacy, legacyStart);
+  await captureShot(modern, modernStart);
   console.log(`  📷 ${legacyStart}`);
   console.log(`  📷 ${modernStart}`);
   await compose(
@@ -126,8 +177,8 @@ try {
   }
   const legacyHud = join(SHOTS, 'cmp-legacy-2-hud.png');
   const modernHud = join(SHOTS, 'cmp-new-2-hud.png');
-  await legacy.screenshot({ path: legacyHud, clip: { x: 0, y: 0, width: 1280, height: 60 } });
-  await modern.screenshot({ path: modernHud, clip: { x: 0, y: 0, width: 1280, height: 60 } });
+  await captureShot(legacy, legacyHud, { clip: { x: 0, y: 0, width: 1280, height: 60 } });
+  await captureShot(modern, modernHud, { clip: { x: 0, y: 0, width: 1280, height: 60 } });
   console.log(`  📷 ${legacyHud}`);
   console.log(`  📷 ${modernHud}`);
   await compose(
@@ -163,8 +214,8 @@ try {
   assert((await modern.locator('#pause').count()) === 1, '新版进入暂停');
   const legacyPause = join(SHOTS, 'cmp-legacy-3-pause.png');
   const modernPause = join(SHOTS, 'cmp-new-3-pause.png');
-  await legacy.screenshot({ path: legacyPause });
-  await modern.screenshot({ path: modernPause });
+  await captureShot(legacy, legacyPause);
+  await captureShot(modern, modernPause);
   console.log(`  📷 ${legacyPause}`);
   console.log(`  📷 ${modernPause}`);
   await compose(
@@ -204,8 +255,8 @@ try {
   await modern.waitForSelector('#gameOver', { timeout: 120_000 });
   const legacyOver = join(SHOTS, 'cmp-legacy-4-gameover.png');
   const modernOver = join(SHOTS, 'cmp-new-4-gameover.png');
-  await legacy.screenshot({ path: legacyOver });
-  await modern.screenshot({ path: modernOver });
+  await captureShot(legacy, legacyOver);
+  await captureShot(modern, modernOver);
   console.log(`  📷 ${legacyOver}`);
   console.log(`  📷 ${modernOver}`);
   await compose(
@@ -260,4 +311,12 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
+}
+
+// ── 合成阶段 ───────────────────────────────────────────────
+// 游戏浏览器已经关掉了 —— 用一个干净的浏览器排版并排图，
+// 不跟任何还开着的页面抢资源（见 `composeAll` 的说明）。
+if (pendingComposes.length > 0) {
+  const composed = await composeAll(pendingComposes);
+  console.log(`✓ 并排图合成 ${composed}/${pendingComposes.length} 张`);
 }
