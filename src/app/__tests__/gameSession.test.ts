@@ -270,6 +270,50 @@ describe('GameSession', () => {
     session.dispose();
   });
 
+  it('连续空挥触发输入硬直：硬直内换轨也被拒绝', async () => {
+    const { session, clock } = makeSession();
+    await session.mount();
+    session.start();
+
+    session.press('top', 'p1');
+    expect(session.getState().attackLane).toBe('top');
+
+    clock.advance(100);
+    session.press('bottom', 'p2');
+    expect(session.getState().attackLane).toBe('bottom');
+
+    // 第二次空挥触发硬直：此时换回上轨应被输入风控直接丢掉。
+    clock.advance(50);
+    session.press('top', 'p3');
+    expect(session.getState().attackLane).toBe('bottom');
+
+    clock.advance(200);
+    session.press('top', 'p4');
+    expect(session.getState().attackLane).toBe('top');
+
+    session.dispose();
+  });
+
+  it('重开一局会清空输入风控状态', async () => {
+    const { session, clock } = makeSession();
+    await session.mount();
+    session.start();
+
+    session.press('top', 'p1');
+    clock.advance(100);
+    session.press('bottom', 'p2'); // 第二次空挥 → 进入硬直
+    clock.advance(50);
+    session.press('top', 'p3');
+    expect(session.getState().attackLane).toBe('bottom');
+
+    session.pause();
+    session.restart();
+    session.press('top', 'p4');
+    expect(session.getState().attackLane).toBe('top');
+
+    session.dispose();
+  });
+
   it('resize 会更新布局并通知渲染器', async () => {
     const { session, renderer } = makeSession();
     await session.mount();
