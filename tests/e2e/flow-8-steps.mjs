@@ -277,13 +277,14 @@ try {
   await page.waitForFunction(
     () => {
       const raw = globalThis.document.querySelector('#hpText')?.textContent ?? '';
-      return Number(raw.split('/')[0].trim()) < 250;
+      const [hp, maxHp] = raw.split('/').map((part) => Number(part.trim()));
+      return Number.isFinite(hp) && Number.isFinite(maxHp) && hp < maxHp;
     },
     undefined,
     { timeout: 40_000 },
   );
   const hurtHud = await readHud(page);
-  assert(hurtHud.hp < 250, `漏怪后血量下降（hp=${hurtHud.hpText}）`);
+  assert(hurtHud.hp < hurtHud.maxHp, `漏怪后血量下降（hp=${hurtHud.hpText}）`);
   await shot(page, '07-hp-drop.png');
 
   // 3e 命中提示确实会出现在 toast 里（不是靠猜）

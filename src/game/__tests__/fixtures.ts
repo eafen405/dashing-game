@@ -11,15 +11,38 @@
 import { computeLayout } from '../layout';
 import type { Rng } from '../rng';
 import { createGameState } from '../state';
-import type { GameState, HoldMonster, Layout, NormalMonster, TwinMonster } from '../types';
+import type {
+  CharacterId,
+  GameState,
+  HoldMonster,
+  Layout,
+  NormalMonster,
+  TwinMonster,
+} from '../types';
 
 /** 测试用的标准布局。 */
 export const LAYOUT: Layout = computeLayout(900, 500, 1);
 
-/** 造一个开局状态（`phase: 'running'`）。 */
+/**
+ * 造一个开局状态（`phase: 'running'`）。
+ *
+ * **固定走旧版基线**（`characterId: null` → 250 血、无被动）：
+ * 这一层夹具服务于旧规则的单测，角色系统另走 {@link makeCharacterState}。
+ */
 export function makeState(overrides: Partial<GameState> = {}): GameState {
   return {
-    ...createGameState({ diffLevel: 1, seed: 1, layout: LAYOUT }),
+    ...createGameState({ diffLevel: 1, seed: 1, layout: LAYOUT, characterId: null }),
+    ...overrides,
+  };
+}
+
+/** 造一个指定角色的开局状态（生命 / 上限 / 燃魂字段按角色配置初始化）。 */
+export function makeCharacterState(
+  characterId: CharacterId,
+  overrides: Partial<GameState> = {},
+): GameState {
+  return {
+    ...createGameState({ diffLevel: 1, seed: 1, layout: LAYOUT, characterId }),
     ...overrides,
   };
 }

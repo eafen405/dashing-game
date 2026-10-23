@@ -286,10 +286,10 @@ export function readPhase(page) {
   return page.evaluate(() => {
     if (globalThis.document.querySelector('#gameOver')) return 'over';
     if (globalThis.document.querySelector('#pause')) return 'paused';
-    // 菜单态有四个屏（主页面 / 难度 / 玩法说明 / 按键设置）—— 都处于规则层的 `idle`。
+    // 菜单态有五个屏（主页面 / 难度 / 角色 / 玩法说明 / 按键设置）—— 都处于规则层的 `idle`。
     if (
       globalThis.document.querySelector(
-        '#startScreen, #difficultyScreen, #helpScreen, #keyBindingsScreen',
+        '#startScreen, #difficultyScreen, #characterScreen, #helpScreen, #keyBindingsScreen',
       )
     ) {
       return 'idle';
@@ -298,10 +298,11 @@ export function readPhase(page) {
   });
 }
 
-/** 页面当前停在哪个菜单屏：`home | difficulty | help | keys`（非菜单态返回 `null`）。 */
+/** 页面当前停在哪个菜单屏：`home | difficulty | characters | help | keys`（非菜单态返回 `null`）。 */
 export function readMenuRoute(page) {
   return page.evaluate(() => {
     if (globalThis.document.querySelector('#difficultyScreen')) return 'difficulty';
+    if (globalThis.document.querySelector('#characterScreen')) return 'characters';
     if (globalThis.document.querySelector('#helpScreen')) return 'help';
     if (globalThis.document.querySelector('#keyBindingsScreen')) return 'keys';
     if (globalThis.document.querySelector('#startScreen')) return 'home';

@@ -32,6 +32,8 @@ export interface ComboBadgeProps {
   normalCount: number;
   /** FEVER 是否生效。 */
   frenzyActive: boolean;
+  /** 凛的燃魂是否生效。 */
+  burning?: boolean;
 }
 
 /** 脉冲时长（秒）—— 与旧 CSS 的 `frenzyPulse 0.8s` 一致。 */
@@ -46,24 +48,45 @@ export function ComboBadge({
   critCount,
   normalCount,
   frenzyActive,
+  burning = false,
 }: ComboBadgeProps): ReactElement {
+  const hot = frenzyActive || burning;
+  const comboClass = burning
+    ? frenzyActive
+      ? 'combo-value fever burning'
+      : 'combo-value burning'
+    : frenzyActive
+      ? 'combo-value frenzy'
+      : 'combo-value';
+
   return (
     <>
       <div className="stat">
         <motion.b
           id="comboText"
           data-motion="combo-pulse"
-          className={frenzyActive ? 'combo-value frenzy' : 'combo-value'}
-          animate={frenzyActive ? { scale: [1, PULSE_SCALE, 1] } : { scale: 1 }}
+          className={comboClass}
+          animate={hot ? { scale: [1, PULSE_SCALE, 1] } : { scale: 1 }}
           transition={
-            frenzyActive
+            hot
               ? { duration: PULSE_DURATION, repeat: Infinity, ease: 'easeInOut' }
               : { duration: 0.25, ease: 'easeOut' }
           }
         >
           {combo}
         </motion.b>
-        <span id="comboLabel" className={frenzyActive ? 'combo-label fever' : 'combo-label'}>
+        <span
+          id="comboLabel"
+          className={
+            burning
+              ? frenzyActive
+                ? 'combo-label fever burning'
+                : 'combo-label burning'
+              : frenzyActive
+                ? 'combo-label fever'
+                : 'combo-label'
+          }
+        >
           {comboLabel}
         </span>
       </div>

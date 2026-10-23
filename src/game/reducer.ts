@@ -22,7 +22,7 @@ import { createGameState } from './state';
 import { cancelHold, releaseHold } from './rules/resolve';
 import { pressLane } from './rules/strike';
 import { tick } from './rules/tick';
-import type { Difficulty, GameState, Lane, Layout } from './types';
+import type { CharacterId, Difficulty, GameState, Lane, Layout } from './types';
 
 /**
  * 规则层能接受的全部事件。
@@ -37,7 +37,14 @@ import type { Difficulty, GameState, Lane, Layout } from './types';
  * - `SetDifficulty` —— 切换难度星级
  */
 export type GameEvent =
-  | { type: 'Start'; diffLevel: Difficulty; seed: number; layout: Layout }
+  | {
+      type: 'Start';
+      diffLevel: Difficulty;
+      seed: number;
+      layout: Layout;
+      /** 本局角色；省略 = 旧版 250 血基线（trace / 旧测试）。 */
+      characterId?: CharacterId | null;
+    }
   | { type: 'Tick'; dt: number }
   | { type: 'Press'; lane: Lane; inputId: string }
   | { type: 'Release'; inputId: string }
@@ -69,6 +76,7 @@ export function reduce(state: GameState, event: GameEvent, rng: Rng): ReduceResu
           diffLevel: event.diffLevel,
           seed: event.seed,
           layout: event.layout,
+          characterId: event.characterId ?? null,
         }),
         effects: [],
       };

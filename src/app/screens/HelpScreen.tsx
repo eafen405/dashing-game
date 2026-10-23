@@ -58,7 +58,12 @@ export function HelpScreen({ controlMode, onBack }: HelpScreenProps): ReactEleme
           <br />
           点击手法可在主页面切换（上下 / 左右）。
           <br />
-          漏掉一次，角色失去 20 点血量（初始 250）。
+          漏掉一次，角色失去 20 点血量；生命上限与被动由角色决定。
+          <br />
+          <span style={{ color: '#ff7ac0' }}>
+            角色：哲 300 / 300；凛 125 / 250，命中 +5 血，满血进入燃魂（得分 ×2，烧到 125
+            退出）。镰刀与球棒判定完全相同。
+          </span>
           <br />
           <span style={{ color: '#ffd24a' }}>
             每次命中 200 分，命中中心暴击区 300 分；每累计 50 连击进入 FEVER 10 秒，期间得分 ×1.5。

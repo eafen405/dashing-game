@@ -16,6 +16,7 @@
  *     `triggerFever` / `endFever` / `tick`
  */
 
+export * from './characters';
 export * from './constants';
 export * from './effects';
 export * from './kinds';

@@ -16,8 +16,9 @@
  *   - `vt`（视觉时钟）/ 粒子 / 命中火花 / 冲击环 / 飘字 / 震动 —— 表现层
  */
 
-import { FEVER_COMBO, MAX_HP } from './constants';
-import type { Difficulty, GameState, Layout } from './types';
+import { characterOf } from './characters';
+import { FEVER_COMBO } from './constants';
+import type { CharacterId, Difficulty, GameState, Layout } from './types';
 
 /** 初始刷新倒计时（`source.html:655`）。 */
 export const INITIAL_SPAWN_TIMER = 1.3;
@@ -37,9 +38,13 @@ export function createGameState(options: {
   diffLevel: Difficulty;
   seed: number;
   layout: Layout;
+  /** 本局角色；省略 = 旧版基线（250 血、无被动），供 trace / 旧夹具使用。 */
+  characterId?: CharacterId | null;
   legacyClearLane?: boolean;
   legacyCollision?: boolean;
 }): GameState {
+  const characterId = options.characterId ?? null;
+  const character = characterOf(characterId);
   return {
     phase: 'running',
     seed: options.seed,
@@ -49,7 +54,11 @@ export function createGameState(options: {
     legacyCollision: options.legacyCollision ?? false,
 
     now: 0,
-    hp: MAX_HP,
+    characterId,
+    maxHp: character.maxHp,
+    hp: character.startHp,
+    burning: false,
+    burnCarry: 0,
     score: 0,
     combo: 0,
     maxCombo: 0,

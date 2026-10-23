@@ -26,6 +26,10 @@ import { hudStats } from './hudStats';
 export interface HudValues {
   /** 剩余生命值。 */
   hp: number;
+  /** 生命值上限（角色被动不同）。 */
+  maxHp: number;
+  /** 凛的燃魂是否生效。 */
+  burning: boolean;
   /** 当前分数。 */
   score: number;
   /** 当前连击。 */
@@ -48,7 +52,7 @@ export interface HudValues {
 
 /** HUD 的完整快照 —— 数值 + 派生出来的标签。 */
 export interface HudSnapshot extends HudValues {
-  /** 连击标签：`COMBO` 或 `FEVER 3s`。 */
+  /** 连击标签：`COMBO` / `FEVER 3s` / `燃魂 ×2`。 */
   comboLabel: string;
 }
 
@@ -65,6 +69,8 @@ export interface HudStore {
 /** 默认值。 */
 const INITIAL_VALUES: HudValues = {
   hp: MAX_HP,
+  maxHp: MAX_HP,
+  burning: false,
   score: 0,
   combo: 0,
   maxCombo: 0,
@@ -76,8 +82,11 @@ const INITIAL_VALUES: HudValues = {
   best: 0,
 };
 
-/** 连击标签 —— `source.html:628-632`。 */
-export function comboLabelOf(frenzyActive: boolean, feverSeconds: number): string {
+/** 连击标签 —— 燃魂优先显示倍率，FEVER 可叠加在右边。 */
+export function comboLabelOf(frenzyActive: boolean, feverSeconds: number, burning = false): string {
+  if (burning) {
+    return frenzyActive ? `燃魂 ×2 · FEVER ${feverSeconds}s` : '燃魂 ×2';
+  }
   return frenzyActive ? `FEVER ${feverSeconds}s` : 'COMBO';
 }
 
@@ -85,6 +94,8 @@ export function comboLabelOf(frenzyActive: boolean, feverSeconds: number): strin
 function sameValues(a: HudValues, b: HudValues): boolean {
   return (
     a.hp === b.hp &&
+    a.maxHp === b.maxHp &&
+    a.burning === b.burning &&
     a.score === b.score &&
     a.combo === b.combo &&
     a.maxCombo === b.maxCombo &&
@@ -108,7 +119,7 @@ export function createHudStore(initial: Partial<HudValues> = {}): HudStore {
 
   let snapshot: HudSnapshot = {
     ...values,
-    comboLabel: comboLabelOf(values.frenzyActive, values.feverT),
+    comboLabel: comboLabelOf(values.frenzyActive, values.feverT, values.burning),
   };
 
   const getSnapshot = (): HudSnapshot => snapshot;
@@ -130,7 +141,7 @@ export function createHudStore(initial: Partial<HudValues> = {}): HudStore {
     Object.assign(values, normalized);
     snapshot = {
       ...values,
-      comboLabel: comboLabelOf(values.frenzyActive, values.feverT),
+      comboLabel: comboLabelOf(values.frenzyActive, values.feverT, values.burning),
     };
     // 统计：值真的变了才通知 —— 这个计数是「HUD 真正需要重渲染的次数」。
     hudStats.notifications += 1;

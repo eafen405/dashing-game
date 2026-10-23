@@ -392,7 +392,10 @@ export class PixiRenderer implements BattlefieldRenderer {
     fc.now = frame.now;
     fc.scrollSpeed = frame.scrollSpeed;
     fc.frenzyActive = frame.frenzyActive;
+    fc.characterId = frame.characterId;
+    fc.maxHp = frame.maxHp;
     fc.hp = frame.hp;
+    fc.burning = frame.burning;
     fc.playerFlash = frame.playerFlash;
     fc.attackT = frame.attackT;
     fc.attackLane = frame.attackLane;

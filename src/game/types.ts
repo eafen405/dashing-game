@@ -23,6 +23,9 @@ export type Phase = 'idle' | 'running' | 'paused' | 'over';
 /** 难度星级（1 星标准，2 星更快更密，3 星刷新 ×3 但移速不变，4 星刷新 ×2.5、移速 ×2）。 */
 export type Difficulty = 1 | 2 | 3 | 4;
 
+/** 可选角色：哲（棒球棍）/ 凛（镰刀）。 */
+export type CharacterId = 'zhe' | 'rin';
+
 /**
  * 战场几何布局（`source.html:534-577` 的纯函数化结果）。
  *
@@ -141,8 +144,20 @@ export interface GameState {
 
   /** 游戏时间（秒），只在 `running` 阶段累加。 */
   now: number;
+  /**
+   * 本局角色；`null` 是**旧版基线**（250 血、无被动）。
+   *
+   * golden trace 与旧单测夹具固定走 `null`，角色系统因此不改变旧规则的逐帧结果。
+   */
+  characterId: CharacterId | null;
+  /** 生命上限（哲 300 / 凛 250 / 旧版 250）。 */
+  maxHp: number;
   /** 剩余生命值。 */
   hp: number;
+  /** 凛的燃魂是否生效（得分 ×2，持续烧血）。 */
+  burning: boolean;
+  /** 燃魂烧血的小数进位（生命是整数，每秒烧 12.5）。 */
+  burnCarry: number;
   score: number;
   combo: number;
   maxCombo: number;

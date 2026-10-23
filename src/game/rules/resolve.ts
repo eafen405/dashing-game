@@ -18,7 +18,6 @@ import {
   BASE_GAIN,
   CRIT_GAIN,
   FEVER_COMBO,
-  FEVER_MULT,
   GOLD,
   HIT_DAMAGE,
   LONG_COLOR,
@@ -33,6 +32,7 @@ import {
   laneColorOf,
 } from '../constants';
 import { BURST, type Effect } from '../effects';
+import { healOnHit, scoreMultiplierOf } from '../characters';
 import type { GameState, HoldMonster, Monster } from '../types';
 import { triggerFever } from './fever';
 
@@ -95,9 +95,14 @@ export function killMonster(
   s = fever.state;
   const effects: Effect[] = [...fever.effects];
 
-  // 中心暴击区 300 分，外围普攻 200 分；FEVER 期间 ×1.5
-  const gain = Math.round((crit ? CRIT_GAIN : BASE_GAIN) * (s.frenzyActive ? FEVER_MULT : 1));
+  // 中心暴击区 300 分，外围普攻 200 分；FEVER ×1.5，凛燃魂再 ×2
+  const gain = Math.round((crit ? CRIT_GAIN : BASE_GAIN) * scoreMultiplierOf(s));
   s = { ...s, score: s.score + gain };
+
+  // 真实命中才回血 —— 回满的那一击按命中前的倍率计分，下一击开始燃魂 ×2。
+  const healed = healOnHit(s, m.x, m.y);
+  s = healed.state;
+  effects.push(...healed.effects);
 
   const critCol = s.frenzyActive ? '#ffffff' : GOLD;
   const c = crit ? critCol : laneColorOf(m.lane, s.frenzyActive);
@@ -238,10 +243,13 @@ export function killPair(
   s = fever.state;
   const effects: Effect[] = [...fever.effects];
 
-  const gain = Math.round(
-    (critPair ? PAIR_CRIT_GAIN : PAIR_GAIN) * (s.frenzyActive ? FEVER_MULT : 1),
-  );
+  const gain = Math.round((critPair ? PAIR_CRIT_GAIN : PAIR_GAIN) * scoreMultiplierOf(s));
   s = { ...s, score: s.score + gain };
+
+  // 补齐的那一轨也是一次真实命中；双生整组只回一次（第一击已在 strike 里回过）。
+  const healed = healOnHit(s, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  s = healed.state;
+  effects.push(...healed.effects);
 
   const col = critPair ? (s.frenzyActive ? '#ffffff' : GOLD) : PAIR_COLOR;
   const burst = critPair ? BURST.twinCrit : BURST.twin;
@@ -396,9 +404,11 @@ export function longAward(
 ): { state: GameState; effects: Effect[]; gain: number } {
   const m = findMonster(state.monsters, monsterId);
   if (!m) return { state, effects: [], gain: 0 };
-  const gain = Math.round(points * (state.frenzyActive ? FEVER_MULT : 1));
-  const s: GameState = { ...state, score: state.score + gain };
+  const gain = Math.round(points * scoreMultiplierOf(state));
   const y = atY != null ? atY : m.y - m.h * 0.85;
+  const scored: GameState = { ...state, score: state.score + gain };
+  const healed = healOnHit(scored, atX, y);
+  const s = healed.state;
   const effects: Effect[] = [
     {
       type: 'floater',
@@ -409,6 +419,7 @@ export function longAward(
     },
     { type: 'burst', x: atX, y: m.y, color: LONG_COLOR, count: 10, power: 0.8 },
     { type: 'ring', x: atX, y: m.y, life: 0.3, r0: 5, r1: 28, color: LONG_COLOR },
+    ...healed.effects,
   ];
   return { state: s, effects, gain };
 }
@@ -715,7 +726,7 @@ export function gameOver(state: GameState): { state: GameState; effects: Effect[
   if (state.phase === 'over') return { state, effects: [] };
   const cancelled = cancelHold(state);
   return {
-    state: { ...cancelled.state, phase: 'over' },
+    state: { ...cancelled.state, phase: 'over', burning: false, burnCarry: 0 },
     effects: [{ type: 'game-over' }],
   };
 }

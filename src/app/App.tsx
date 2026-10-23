@@ -13,9 +13,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 
 import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
+import { CHARACTER_IDS } from '../game/characters';
 import type { Effect } from '../game/effects';
 import { computeLayout } from '../game/layout';
-import type { Difficulty, Lane, Layout, Phase } from '../game/types';
+import type { CharacterId, Difficulty, Lane, Layout, Phase } from '../game/types';
 import { LANE_HINT, type ControlMode } from '../input/mapping';
 import { loadKeyBindings, saveKeyBindings, type KeyBindings } from '../input/keyBindings';
 import { attachKeyboardInput } from '../input/keyboard';
@@ -23,12 +24,14 @@ import { attachOrientationWatcher, detectLandscape } from '../input/orientation'
 import { attachPointerInput } from '../input/pointer';
 import { GameSession } from './GameSession';
 import { loadBest, saveBest } from './best';
+import { loadCharacterId, saveCharacterId } from './character';
 import { loadControlMode, saveControlMode } from './controlMode';
 import { stepDifficulty } from './difficultyMeta';
 import { toggleFullscreen } from './fullscreen';
 import { Hud } from './hud/Hud';
 import { hudStore } from './hud/hudStore';
 import { transition as menuTransition, type MenuAction, type MenuRoute } from './menuRoute';
+import { CharacterScreen } from './screens/CharacterScreen';
 import { DifficultyScreen } from './screens/DifficultyScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 import { HelpScreen } from './screens/HelpScreen';
@@ -95,6 +98,7 @@ export function GameApp({
   const [screen, setScreen] = useState<Phase>('idle');
   const [route, setRoute] = useState<MenuRoute>('home');
   const [diff, setDiff] = useState<Difficulty>(diffLevel);
+  const [characterId, setCharacterId] = useState<CharacterId>(() => loadCharacterId());
   const [controlMode, setControlMode] = useState<ControlMode>(() => loadControlMode());
   const [keyBindings, setKeyBindings] = useState<KeyBindings>(() => loadKeyBindings());
   const [landscape, setLandscape] = useState<boolean>(() => detectLandscape(window));
@@ -112,6 +116,7 @@ export function GameApp({
   const sessionRef = useRef<GameSession | null>(null);
   const bestRef = useRef<number>(best);
   const diffRef = useRef<Difficulty>(diff);
+  const characterIdRef = useRef<CharacterId>(characterId);
   const controlModeRef = useRef<ControlMode>(controlMode);
   const keyBindingsRef = useRef<KeyBindings>(keyBindings);
   const phaseListenerRef = useRef<((phase: Phase) => void) | undefined>(onPhaseChange);
@@ -147,6 +152,7 @@ export function GameApp({
   };
 
   const handleOpenDifficulty = (): void => handleMenu('openDifficulty');
+  const handleOpenCharacters = (): void => handleMenu('openCharacters');
   const handleOpenHelp = (): void => handleMenu('openHelp');
   const handleOpenKeys = (): void => handleMenu('openKeys');
   const handleMenuBack = (): void => handleMenu('backHome');
@@ -157,15 +163,37 @@ export function GameApp({
     handleMenu('confirmDifficulty');
   };
 
+  /** 角色屏上选定一名 —— 立即保存，下一局生效，回主页面。 */
+  const applyCharacter = (next: CharacterId): void => {
+    characterIdRef.current = next;
+    setCharacterId(next);
+    saveCharacterId(next);
+    sessionRef.current?.setCharacter(next);
+  };
+
+  const handlePickCharacter = (next: CharacterId): void => {
+    applyCharacter(next);
+    handleMenu('confirmCharacter');
+  };
+
   /**
    * 菜单里上下移动 —— 在难度屏上就是**换一档**。
    *
    * 难度即光标：上下移动即改选中档，不另设一个光标状态
    * （难度本来就是跨局保留的全局选择，改了不影响当前局面）。
+   * 角色屏同理：上下移动直接在哲 / 凛之间循环。
    */
   const handleMenuMove = (delta: -1 | 1): void => {
-    if (routeRef.current !== 'difficulty') return;
-    handleDiffChange(stepDifficulty(diffRef.current, delta));
+    if (routeRef.current === 'difficulty') {
+      handleDiffChange(stepDifficulty(diffRef.current, delta));
+      return;
+    }
+    if (routeRef.current === 'characters') {
+      const index = CHARACTER_IDS.indexOf(characterIdRef.current);
+      const next =
+        CHARACTER_IDS[(index + delta + CHARACTER_IDS.length) % CHARACTER_IDS.length] ?? 'zhe';
+      applyCharacter(next);
+    }
   };
 
   useEffect(() => {
@@ -198,6 +226,8 @@ export function GameApp({
       // HUD 快照：每帧发布，但**只有值变了**才通知订阅者（hudStore 的脏检查）。
       hudStore.publish({
         hp: frame.hp,
+        maxHp: frame.maxHp,
+        burning: frame.burning,
         score: frame.score,
         combo: frame.combo,
         maxCombo: frame.maxCombo,
@@ -272,6 +302,7 @@ export function GameApp({
       renderer,
       host,
       diffLevel: diffRef.current,
+      characterId: characterIdRef.current,
       seed,
       layout: measure(),
       onFrame: handleFrame,
@@ -295,6 +326,8 @@ export function GameApp({
         layout: () => session.getState().layout,
         /** 强制 FEVER（规则状态 + 表现层一起）。 */
         fever: (on: boolean) => session.setDebugFever(on),
+        /** 强制燃魂（规则状态 + 表现层一起）。 */
+        burn: (on: boolean) => session.setDebugBurn(on),
       };
     }
 
@@ -435,6 +468,12 @@ export function GameApp({
                 onPick={handlePickDifficulty}
                 onBack={handleMenuBack}
               />
+            ) : route === 'characters' ? (
+              <CharacterScreen
+                characterId={characterId}
+                onPick={handlePickCharacter}
+                onBack={handleMenuBack}
+              />
             ) : route === 'help' ? (
               <HelpScreen controlMode={controlMode} onBack={handleMenuBack} />
             ) : route === 'keys' ? (
@@ -447,8 +486,10 @@ export function GameApp({
               <StartScreen
                 diffLevel={diff}
                 onOpenDifficulty={handleOpenDifficulty}
+                onOpenCharacters={handleOpenCharacters}
                 onOpenHelp={handleOpenHelp}
                 onOpenKeys={handleOpenKeys}
+                characterId={characterId}
                 controlMode={controlMode}
                 onControlModeChange={handleControlModeChange}
               />

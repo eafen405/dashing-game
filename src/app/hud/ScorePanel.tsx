@@ -29,13 +29,19 @@ export interface ScorePanelProps {
   score: number;
   /** FEVER 是否生效。 */
   frenzyActive: boolean;
+  /** 凛的燃魂是否生效（紫红分数）。 */
+  burning?: boolean;
 }
 
 /** 滚动时长（秒）。 */
 const ROLL_DURATION = 0.45;
 
 /** 分数。 */
-export function ScorePanel({ score, frenzyActive }: ScorePanelProps): ReactElement {
+export function ScorePanel({
+  score,
+  frenzyActive,
+  burning = false,
+}: ScorePanelProps): ReactElement {
   // 分数的「当前显示值」—— 动画直接写它，不经过 React state。
   const scoreValue = useMotionValue(score);
   // 显示文本：Motion 直接写进 DOM 文本节点（不触发 React 渲染）。
@@ -55,7 +61,9 @@ export function ScorePanel({ score, frenzyActive }: ScorePanelProps): ReactEleme
       */}
       <b
         id="scoreText"
-        className={frenzyActive ? 'stat-value frenzy' : 'stat-value'}
+        className={
+          burning ? 'stat-value burning' : frenzyActive ? 'stat-value frenzy' : 'stat-value'
+        }
         data-value={score}
       >
         <motion.span data-motion="score-roll">{scoreText}</motion.span>

@@ -46,7 +46,8 @@ try {
   await page.waitForFunction(
     () => {
       const raw = globalThis.document.querySelector('#hpText')?.textContent ?? '';
-      return Number(raw.split('/')[0].trim()) < 250;
+      const [hp, maxHp] = raw.split('/').map((part) => Number(part.trim()));
+      return Number.isFinite(hp) && Number.isFinite(maxHp) && hp < maxHp;
     },
     undefined,
     { timeout: 60_000 },
@@ -74,11 +75,12 @@ try {
       const text = (sel) => globalThis.document.querySelector(sel)?.textContent?.trim() ?? null;
       const raw = text('#hpText') ?? '';
       const hp = Number(raw.split('/')[0].trim());
+      const maxHp = Number(raw.split('/')[1].trim());
       // 分数读 `data-value`（目标值），不读滚动中的显示文本 —— 见 `ScorePanel`。
       const scoreEl = globalThis.document.querySelector('#scoreText');
       const score = Number(scoreEl?.getAttribute('data-value') ?? scoreEl?.textContent ?? NaN);
       const combo = Number(text('#comboText'));
-      if (!(score > 0 && combo > 0 && hp < 250)) return false;
+      if (!(score > 0 && combo > 0 && hp < maxHp)) return false;
       return {
         hpText: raw,
         hp,

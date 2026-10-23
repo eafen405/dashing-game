@@ -21,13 +21,22 @@
 
 import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
 import type { Effect } from '../game/effects';
+import { characterOf } from '../game/characters';
 import { FEVER_TIME, GOLD } from '../game/constants';
 import { createRng, type Rng } from '../game/rng';
 import { reduce } from '../game/reducer';
 import { speedNow } from '../game/rules/difficulty';
 import { MAX_DT } from '../game/rules/tick';
 import { createGameState } from '../game/state';
-import type { Difficulty, GameState, Lane, Layout, Monster, Phase } from '../game/types';
+import type {
+  CharacterId,
+  Difficulty,
+  GameState,
+  Lane,
+  Layout,
+  Monster,
+  Phase,
+} from '../game/types';
 import type { InputSink } from '../input/types';
 import { canTransition } from './screenMachine';
 import { createEffectSink, createPresentation, type PresentationPort } from './presentation';
@@ -40,6 +49,8 @@ export interface GameSessionOptions {
   host: HTMLElement;
   /** 难度星级。 */
   diffLevel: Difficulty;
+  /** 本局角色（默认哲）。菜单里换人只影响下一局。 */
+  characterId?: CharacterId;
   /** 本局种子（PRNG 用；同一颗种子必得同一局）。 */
   seed: number;
   /** 初始布局。 */
@@ -75,6 +86,7 @@ export class GameSession implements InputSink {
   private state: GameState;
   private rng: Rng;
   private diffLevel: Difficulty;
+  private characterId: CharacterId;
   private readonly seed: number;
 
   /** 视觉时钟（旧代码的 `vt`）—— 所有阶段都推进。 */
@@ -93,6 +105,7 @@ export class GameSession implements InputSink {
     this.renderer = options.renderer;
     this.host = options.host;
     this.diffLevel = options.diffLevel;
+    this.characterId = options.characterId ?? 'zhe';
     this.seed = options.seed;
     this.presentation =
       options.presentation ??
@@ -107,8 +120,18 @@ export class GameSession implements InputSink {
     this.presentation.setLayout(options.layout);
   }
 
-  private initialStateOptions(): { diffLevel: Difficulty; seed: number; layout: Layout } {
-    return { diffLevel: this.diffLevel, seed: this.seed, layout: this.options.layout };
+  private initialStateOptions(): {
+    diffLevel: Difficulty;
+    seed: number;
+    layout: Layout;
+    characterId: CharacterId;
+  } {
+    return {
+      diffLevel: this.diffLevel,
+      seed: this.seed,
+      layout: this.options.layout,
+      characterId: this.characterId,
+    };
   }
 
   // ── 生命周期 ──────────────────────────────────────────────
@@ -230,6 +253,29 @@ export class GameSession implements InputSink {
   }
 
   /**
+   * 切换角色 —— **下一局生效**。
+   *
+   * 菜单只在 `idle` 打开，所以实际效果就是「回主页面选人 → 点屏开打」。
+   * 若在 running / paused 调用，只改字段，不碰当前局的 `hp / maxHp`（不能中途换血）。
+   * `idle` 下同步重建待机状态，让主页面背景 / HUD 立刻显示新角色。
+   */
+  setCharacter(characterId: CharacterId): void {
+    if (this.characterId === characterId) return;
+    this.characterId = characterId;
+    if (this.state.phase === 'idle') {
+      this.state = {
+        ...createGameState({
+          diffLevel: this.diffLevel,
+          seed: this.seed,
+          layout: this.state.layout,
+          characterId: this.characterId,
+        }),
+        phase: 'idle',
+      };
+    }
+  }
+
+  /**
    * 开发期钩子：把一批效果事件**直接灌进表现层**（`?debug` 专用）。
    *
    * 绕过规则层 —— 用来在端到端测试里**稳定复现**某个瞬间
@@ -264,6 +310,36 @@ export class GameSession implements InputSink {
     }
   }
 
+  /**
+   * 开发期钩子：强制燃魂开关（`?debug` 专用）。
+   *
+   * 与 `setDebugFever` 同形：只改会话层持有的状态快照，用来稳定截出紫红燃魂画面。
+   * 生产路径不可达。
+   */
+  setDebugBurn(on: boolean): void {
+    if (on) {
+      this.state = {
+        ...this.state,
+        hp: this.state.maxHp,
+        burning: true,
+        burnCarry: 0,
+      };
+      this.presentation.apply([
+        { type: 'toast', text: '燃魂！得分 ×2', color: '#ff7ac0' },
+        { type: 'vibrate', pattern: [0, 30, 40, 60] },
+      ]);
+    } else {
+      const floor = characterOf(this.state.characterId).burnFloor ?? this.state.hp;
+      this.state = {
+        ...this.state,
+        hp: Math.min(this.state.hp, floor),
+        burning: false,
+        burnCarry: 0,
+      };
+      this.presentation.apply([{ type: 'toast', text: '燃魂结束', color: '#ff9ad5' }]);
+    }
+  }
+
   // ── 内部 ─────────────────────────────────────────────────
 
   private beginRound(): void {
@@ -273,6 +349,7 @@ export class GameSession implements InputSink {
       diffLevel: this.diffLevel,
       seed: this.seed,
       layout: this.state.layout,
+      characterId: this.characterId,
     });
     this.presentation.reset();
     this.lastT = 0;
@@ -364,7 +441,10 @@ export class GameSession implements InputSink {
     const frame: FrameView = {
       layout: s.layout,
       phase: s.phase,
+      characterId: s.characterId,
+      maxHp: s.maxHp,
       hp: s.hp,
+      burning: s.burning,
       score: s.score,
       combo: s.combo,
       maxCombo: s.maxCombo,

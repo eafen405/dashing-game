@@ -14,6 +14,7 @@
  */
 
 import { LONG_1S_GAIN, LONG_HOLD_TIME, PAIR_COLOR } from '../constants';
+import { stepBurn } from '../characters';
 import type { Effect } from '../effects';
 import type { Rng } from '../rng';
 import type { GameState, HoldMonster, Monster } from '../types';
@@ -245,6 +246,12 @@ export function tick(
       s = ended.state;
       effects.push(...ended.effects);
     }
+  }
+  // 凛的燃魂：持续烧血，烧到下限（125）自动退出。
+  if (s.burning) {
+    const burned = stepBurn(s, step);
+    s = burned.state;
+    effects.push(...burned.effects);
   }
   s = { ...s, attackT: Math.max(0, s.attackT - step) };
 

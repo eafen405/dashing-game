@@ -19,8 +19,9 @@
 
 import type { MouseEvent, ReactElement } from 'react';
 
-import type { Difficulty } from '../../game/types';
+import type { Difficulty, CharacterId } from '../../game/types';
 import type { ControlMode } from '../../input/mapping';
+import { CHARACTERS } from '../../game/characters';
 import { difficultyMeta } from '../difficultyMeta';
 
 /** 开始界面属性。 */
@@ -29,10 +30,14 @@ export interface StartScreenProps {
   diffLevel: Difficulty;
   /** 进「难度」界面。 */
   onOpenDifficulty: () => void;
+  /** 进「角色」界面。 */
+  onOpenCharacters: () => void;
   /** 进「玩法说明」界面。 */
   onOpenHelp: () => void;
   /** 进「按键设置」界面（电脑端）。 */
   onOpenKeys: () => void;
+  /** 当前角色。 */
+  characterId: CharacterId;
   /** 当前操作手法（上下 / 左右半屏）。 */
   controlMode: ControlMode;
   /** 切换操作手法。 */
@@ -43,12 +48,15 @@ export interface StartScreenProps {
 export function StartScreen({
   diffLevel,
   onOpenDifficulty,
+  onOpenCharacters,
   onOpenHelp,
   onOpenKeys,
+  characterId,
   controlMode,
   onControlModeChange,
 }: StartScreenProps): ReactElement {
   const meta = difficultyMeta(diffLevel);
+  const character = CHARACTERS[characterId];
   const horizontal = controlMode === 'horizontal';
 
   /**
@@ -111,26 +119,31 @@ export function StartScreen({
         <span className="home-summary-more">调整 ›</span>
       </button>
 
-      <button
-        id="btnHelp"
-        type="button"
-        className="home-link"
-        data-no-strike=""
-        onClick={onOpenHelp}
-      >
-        玩法说明 ›
-      </button>
+      <div className="home-links" data-no-strike="">
+        <button
+          id="btnCharacter"
+          type="button"
+          className="home-link home-link-character"
+          aria-label={`角色：${character.name}，点击更换`}
+          onClick={onOpenCharacters}
+        >
+          角色 · {character.name} ›
+        </button>
 
-      <button
-        id="btnKeys"
-        type="button"
-        className="home-link"
-        data-no-strike=""
-        aria-label="按键设置（电脑端）"
-        onClick={onOpenKeys}
-      >
-        按键设置 ›
-      </button>
+        <button id="btnHelp" type="button" className="home-link" onClick={onOpenHelp}>
+          玩法说明 ›
+        </button>
+
+        <button
+          id="btnKeys"
+          type="button"
+          className="home-link"
+          aria-label="按键设置（电脑端）"
+          onClick={onOpenKeys}
+        >
+          按键设置 ›
+        </button>
+      </div>
 
       <div className="tap-hint">点击屏幕开始</div>
     </div>

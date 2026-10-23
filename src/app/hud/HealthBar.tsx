@@ -15,22 +15,24 @@ export interface HealthBarProps {
   hp: number;
   /** 生命值上限。 */
   maxHp?: number;
+  /** 凛的燃魂是否生效（紫红血条）。 */
+  burning?: boolean;
 }
 
 /** 血条。 */
-export function HealthBar({ hp, maxHp = MAX_HP }: HealthBarProps): ReactElement {
+export function HealthBar({ hp, maxHp = MAX_HP, burning = false }: HealthBarProps): ReactElement {
   const ratio = maxHp > 0 ? Math.max(0, hp) / maxHp : 0;
   const low = ratio <= 0.3;
 
   return (
-    <div className="hp-wrap">
+    <div className={burning ? 'hp-wrap burning' : 'hp-wrap'}>
       <span className="hp-icon" aria-hidden="true">
         ❤
       </span>
       <div className="hp-bar">
         <div
           id="hpFill"
-          className={low ? 'hp-fill low' : 'hp-fill'}
+          className={burning ? 'hp-fill burning' : low ? 'hp-fill low' : 'hp-fill'}
           style={{ transform: `scaleX(${ratio})` }}
         />
       </div>

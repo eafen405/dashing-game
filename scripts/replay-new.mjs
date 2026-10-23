@@ -67,6 +67,8 @@ export function replayTrace(options = {}) {
     diffLevel: diff,
     seed,
     layout,
+    // 旧版没有角色被动：golden trace 固定走 250 血基线。
+    characterId: null,
     legacyClearLane,
     // 旧版没有上下轨触碰判定：golden trace 只比较规则核心。
     legacyCollision: true,

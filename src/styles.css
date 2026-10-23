@@ -224,6 +224,23 @@ body {
   animation: lowPulse 1s infinite;
 }
 
+/* 凛的燃魂：紫红血条 + 呼吸光 */
+.hp-fill.burning {
+  background: linear-gradient(90deg, #ff4d8d, #b13cff);
+  animation: burnPulse 1.1s ease-in-out infinite;
+}
+
+.hp-wrap.burning .hp-text {
+  color: #ffc2e2;
+}
+
+@keyframes burnPulse {
+  50% {
+    filter: brightness(1.45);
+    opacity: 0.82;
+  }
+}
+
 @keyframes lowPulse {
   50% {
     opacity: 0.55;
@@ -273,6 +290,11 @@ body {
   text-shadow: 0 0 14px rgba(255, 210, 74, 0.9);
 }
 
+.stat-value.burning {
+  color: #ff6ec7;
+  text-shadow: 0 0 16px rgba(255, 77, 141, 0.95);
+}
+
 /* 连击数 —— 旧代码里只有 `#comboText` 会脉动，分数只变色不变形 */
 .combo-value {
   transition:
@@ -287,6 +309,12 @@ body {
      CSS 动画的优先级高于内联样式，两边都写会打架，所以这里不再声明 animation。 */
 }
 
+/* 燃魂同时压过 FEVER 的金色（写在后面，同权重覆盖） */
+.combo-value.burning {
+  color: #ff6ec7;
+  text-shadow: 0 0 16px rgba(255, 77, 141, 0.95);
+}
+
 .combo-label {
   display: inline-block;
   min-width: 66px;
@@ -299,6 +327,12 @@ body {
 .combo-label.fever {
   color: #ffd24a;
   text-shadow: 0 0 10px rgba(255, 210, 74, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+
+.combo-label.burning {
+  color: #ff8fd3;
+  text-shadow: 0 0 12px rgba(255, 77, 141, 0.9);
   font-variant-numeric: tabular-nums;
 }
 
@@ -659,6 +693,26 @@ body {
   transform: scale(0.96);
 }
 
+/* 角色 / 玩法 / 按键三个入口并排，避免竖着堆三层把横屏手机顶出屏幕 */
+.home-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.home-links .home-link {
+  margin: 0;
+}
+
+.home-link-character {
+  border-color: rgba(255, 122, 192, 0.42);
+  background: linear-gradient(180deg, rgba(255, 122, 192, 0.16), rgba(122, 60, 255, 0.08));
+  color: #ffe6f5;
+}
+
 /* 「按键设置」只对电脑端有意义 —— 触屏设备直接收起入口。 */
 @media (pointer: coarse) {
   #btnKeys {
@@ -946,7 +1000,117 @@ body {
   background: linear-gradient(90deg, #ff8a4f, #ffd24a);
 }
 
-/* 返回键（难度 / 玩法说明界面） */
+/* ============ 角色界面 ============ */
+.char-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(11px, 1.8vw, 13px);
+}
+
+.char-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(86vw, 520px);
+  margin: 8px 0 2px;
+}
+
+.char-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cdd8f0;
+  font-family: inherit;
+  text-align: left;
+}
+
+.char-row:active {
+  transform: scale(0.985);
+}
+
+.char-row.active {
+  border-color: rgba(255, 122, 192, 0.62);
+  background: linear-gradient(180deg, rgba(255, 122, 192, 0.18), rgba(122, 60, 255, 0.08));
+  color: #ffeaf7;
+  box-shadow: 0 0 16px rgba(255, 77, 141, 0.22);
+}
+
+.char-badge {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(160deg, #ff7a5f, #3d6cff);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.char-rin .char-badge {
+  background: linear-gradient(160deg, #ff4d8d, #7a3cff);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 14px rgba(255, 77, 141, 0.45);
+}
+
+.char-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.char-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.char-name {
+  font-size: clamp(14px, 2.2vw, 16px);
+  font-weight: 700;
+}
+
+.char-weapon {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.char-active {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #ffd1ea;
+}
+
+.char-passive {
+  font-size: clamp(10px, 1.7vw, 12px);
+  color: #cdd8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.char-hp {
+  font-size: clamp(11px, 1.8vw, 13px);
+  color: #ffd9e0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 返回键（难度 / 角色 / 玩法说明界面） */
 .back-button {
   margin-top: 10px;
   padding: 9px 22px;
@@ -1063,6 +1227,35 @@ body {
     margin: 2px 0 0;
     padding: 6px 16px;
     font-size: 12px;
+  }
+  .home-links {
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .home-links .home-link {
+    margin: 0;
+  }
+
+  /* 角色界面：两张卡压扁，保证横屏手机一屏放下 */
+  .char-intro {
+    display: none;
+  }
+  .char-list {
+    gap: 5px;
+    margin: 4px 0 0;
+  }
+  .char-row {
+    padding: 6px 12px;
+    gap: 10px;
+  }
+  .char-badge {
+    width: 34px;
+    height: 34px;
+    font-size: 17px;
+    border-radius: 10px;
+  }
+  .char-passive {
+    font-size: 10px;
   }
 
   /* 按键设置：两列压扁，保证横屏手机也能一屏放下（入口本身在触屏上隐藏） */

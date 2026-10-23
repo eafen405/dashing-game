@@ -18,7 +18,7 @@
  * 这条边界保证「渲染层改动不应影响规则层」，由票 03 的 golden trace 门禁兜底。
  */
 
-import type { Lane, Layout, Monster, Phase } from '../game/types';
+import type { CharacterId, Lane, Layout, Monster, Phase } from '../game/types';
 
 /**
  * 表现层的可变状态快照。
@@ -188,8 +188,14 @@ export interface FrameView {
   readonly layout: Layout;
   /** 局面阶段。 */
   readonly phase: Phase;
+  /** 本局角色；`null` = 旧版基线（渲染层回退到默认外观）。 */
+  readonly characterId: CharacterId | null;
+  /** 生命上限（血条 / 生命环的比例基准）。 */
+  readonly maxHp: number;
   /** 剩余生命值。 */
   readonly hp: number;
+  /** 凛的燃魂是否生效（紫红aura / 刀光）。 */
+  readonly burning: boolean;
   /** 当前分数。 */
   readonly score: number;
   /** 当前连击。 */

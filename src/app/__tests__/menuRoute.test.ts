@@ -26,6 +26,16 @@ describe('菜单子路由', () => {
     expect(transition('home', 'openKeys')).toBe('keys');
   });
 
+  it('home → characters：进角色屏', () => {
+    expect(canTransition('home', 'openCharacters')).toBe(true);
+    expect(transition('home', 'openCharacters')).toBe('characters');
+  });
+
+  it('characters → home：选定角色 / 返回都回主页面', () => {
+    expect(transition('characters', 'confirmCharacter')).toBe('home');
+    expect(transition('characters', 'backHome')).toBe('home');
+  });
+
   it('keys → home：返回', () => {
     expect(transition('keys', 'backHome')).toBe('home');
   });
@@ -47,15 +57,22 @@ describe('菜单子路由', () => {
     const illegal: readonly (readonly [MenuRoute, MenuAction])[] = [
       ['home', 'backHome'],
       ['home', 'confirmDifficulty'],
+      ['home', 'confirmCharacter'],
       ['difficulty', 'openDifficulty'],
       ['difficulty', 'openHelp'],
+      ['difficulty', 'openCharacters'],
+      ['characters', 'openCharacters'],
+      ['characters', 'openHelp'],
+      ['characters', 'openDifficulty'],
       ['help', 'openDifficulty'],
       ['help', 'openHelp'],
       ['help', 'confirmDifficulty'],
       ['help', 'openKeys'],
+      ['help', 'openCharacters'],
       ['keys', 'openDifficulty'],
       ['keys', 'openHelp'],
       ['keys', 'openKeys'],
+      ['keys', 'openCharacters'],
       ['keys', 'confirmDifficulty'],
     ];
 
@@ -68,13 +85,15 @@ describe('菜单子路由', () => {
   });
 
   it('从任意路由都到不了表外的路由（无隐藏边）', () => {
-    const all: readonly MenuRoute[] = ['home', 'difficulty', 'help', 'keys'];
+    const all: readonly MenuRoute[] = ['home', 'difficulty', 'characters', 'help', 'keys'];
     const actions: readonly MenuAction[] = [
       'openDifficulty',
+      'openCharacters',
       'openHelp',
       'openKeys',
       'backHome',
       'confirmDifficulty',
+      'confirmCharacter',
     ];
     for (const from of all) {
       for (const action of actions) {

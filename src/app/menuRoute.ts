@@ -12,21 +12,25 @@
  * ```
  *        openDifficulty        openHelp          openKeys
  *   home ─────────────► difficulty   help        keys
+ *    │  openCharacters
+ *    ├───────────────► characters
  *    ▲                    │          │            │
  *    └────────────────────┴──────────┴────────────┘
- *              backHome / confirmDifficulty
+ *              backHome / confirmDifficulty / confirmCharacter
  * ```
  *
  * 与 `screenMachine.ts` 同样的形状：纯函数、非法转换被静默拒绝、可直接单测。
  */
 
 /** 菜单态下的屏。 */
-export type MenuRoute = 'home' | 'difficulty' | 'help' | 'keys';
+export type MenuRoute = 'home' | 'difficulty' | 'characters' | 'help' | 'keys';
 
 /** 菜单能响应的动作。 */
 export type MenuAction =
   /** 进「难度」屏。 */
   | 'openDifficulty'
+  /** 进「角色」屏。 */
+  | 'openCharacters'
   /** 进「玩法说明」屏。 */
   | 'openHelp'
   /** 进「按键设置」屏（电脑端）。 */
@@ -34,7 +38,9 @@ export type MenuAction =
   /** 回主页面。 */
   | 'backHome'
   /** 选定某档难度后回主页面。 */
-  | 'confirmDifficulty';
+  | 'confirmDifficulty'
+  /** 选定角色后回主页面。 */
+  | 'confirmCharacter';
 
 /**
  * 合法转换表。
@@ -44,12 +50,17 @@ export type MenuAction =
 const TRANSITIONS: Record<MenuRoute, Partial<Record<MenuAction, MenuRoute>>> = {
   home: {
     openDifficulty: 'difficulty',
+    openCharacters: 'characters',
     openHelp: 'help',
     openKeys: 'keys',
   },
   difficulty: {
     backHome: 'home',
     confirmDifficulty: 'home',
+  },
+  characters: {
+    backHome: 'home',
+    confirmCharacter: 'home',
   },
   help: {
     backHome: 'home',

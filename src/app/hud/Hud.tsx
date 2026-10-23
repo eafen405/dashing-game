@@ -42,6 +42,8 @@ export interface HudProps {
 /** HUD 内容视图的属性 —— 全是原始值 + 两个稳定回调（`memo` 靠浅比较生效）。 */
 interface HudViewProps {
   hp: number;
+  maxHp: number;
+  burning: boolean;
   score: number;
   combo: number;
   comboLabel: string;
@@ -62,6 +64,8 @@ interface HudViewProps {
  */
 const HudView = memo(function HudView({
   hp,
+  maxHp,
+  burning,
   score,
   combo,
   comboLabel,
@@ -85,16 +89,17 @@ const HudView = memo(function HudView({
 
   return (
     <div id="hud" className="hud" ref={rootRef}>
-      <HealthBar hp={hp} />
+      <HealthBar hp={hp} maxHp={maxHp} burning={burning} />
 
       <div className="hud-right">
-        <ScorePanel score={score} frenzyActive={frenzyActive} />
+        <ScorePanel score={score} frenzyActive={frenzyActive} burning={burning} />
         <ComboBadge
           combo={combo}
           comboLabel={comboLabel}
           critCount={critCount}
           normalCount={normalCount}
           frenzyActive={frenzyActive}
+          burning={burning}
         />
         <BestStat best={best} />
 
@@ -162,6 +167,8 @@ export function Hud({ onPause, onToggleFullscreen }: HudProps): ReactElement {
   return (
     <HudView
       hp={hud.hp}
+      maxHp={hud.maxHp}
+      burning={hud.burning}
       score={hud.score}
       combo={hud.combo}
       comboLabel={hud.comboLabel}

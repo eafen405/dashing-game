@@ -7,7 +7,15 @@
  * 这个对象在渲染器构造时建一次，每帧只**改字段**。
  */
 
-import type { HoldMonster, Lane, Layout, Monster, Phase, TwinMonster } from '../../game/types';
+import type {
+  CharacterId,
+  HoldMonster,
+  Lane,
+  Layout,
+  Monster,
+  Phase,
+  TwinMonster,
+} from '../../game/types';
 import type { Effects } from '../types';
 
 /** 空效果集（没有效果时的占位）。 */
@@ -41,8 +49,14 @@ export class FrameContext {
   scrollSpeed = 0;
   /** FEVER 是否生效。 */
   frenzyActive = false;
+  /** 本局角色；`null` = 旧版基线（默认外观）。 */
+  characterId: CharacterId | null = null;
+  /** 生命上限。 */
+  maxHp = 0;
   /** 剩余生命值。 */
   hp = 0;
+  /** 凛的燃魂是否生效。 */
+  burning = false;
   /** 角色受击红闪强度。 */
   playerFlash = 0;
   /** 出招动作剩余时间（> 0 表示正在挥击）。 */

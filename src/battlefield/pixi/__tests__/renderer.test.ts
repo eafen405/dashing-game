@@ -25,7 +25,10 @@ function emptyFrame(overrides: Partial<FrameView> = {}): FrameView {
   return {
     layout: LAYOUT,
     phase: 'running',
-    hp: 250,
+    characterId: 'zhe',
+    maxHp: 300,
+    hp: 300,
+    burning: false,
     score: 0,
     combo: 0,
     maxCombo: 0,

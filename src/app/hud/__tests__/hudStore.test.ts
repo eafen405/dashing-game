@@ -9,6 +9,8 @@ import { comboLabelOf, createHudStore, type HudValues } from '../hudStore';
 function values(overrides: Partial<HudValues> = {}): HudValues {
   return {
     hp: 250,
+    maxHp: 250,
+    burning: false,
     score: 0,
     combo: 0,
     maxCombo: 0,
@@ -69,6 +71,8 @@ describe('hudStore', () => {
 
     const fields: readonly (keyof HudValues)[] = [
       'hp',
+      'maxHp',
+      'burning',
       'score',
       'combo',
       'maxCombo',
@@ -86,6 +90,12 @@ describe('hudStore', () => {
       switch (field) {
         case 'hp':
           changed.hp = 200;
+          break;
+        case 'maxHp':
+          changed.maxHp = 300;
+          break;
+        case 'burning':
+          changed.burning = true;
           break;
         case 'score':
           changed.score = 100;
@@ -159,6 +169,8 @@ describe('hudStore', () => {
   it('初始快照带默认值与标签', () => {
     const store = createHudStore();
     expect(store.getSnapshot().hp).toBe(250);
+    expect(store.getSnapshot().maxHp).toBe(250);
+    expect(store.getSnapshot().burning).toBe(false);
     expect(store.getSnapshot().comboLabel).toBe('COMBO');
   });
 
@@ -177,5 +189,13 @@ describe('连击标签', () => {
 
   it('FEVER 时带剩余秒数', () => {
     expect(comboLabelOf(true, 3)).toBe('FEVER 3s');
+  });
+
+  it('燃魂时标签是 燃魂 ×2', () => {
+    expect(comboLabelOf(false, 0, true)).toBe('燃魂 ×2');
+  });
+
+  it('燃魂 + FEVER 同时显示', () => {
+    expect(comboLabelOf(true, 3, true)).toBe('燃魂 ×2 · FEVER 3s');
   });
 });

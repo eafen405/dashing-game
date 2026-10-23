@@ -13,6 +13,7 @@
  */
 
 import { ATTACK_DUR, LANE, PAIR_COLOR, PAIR_WINDOW, TOP_AIR_TIME } from '../constants';
+import { healOnHit } from '../characters';
 import type { Effect } from '../effects';
 import { isHoldMonster, isTwinMonster } from '../kinds';
 import type { GameState, Lane, Monster } from '../types';
@@ -134,6 +135,10 @@ function resolveLane(state: GameState, lane: Lane): LaneOutcome {
       color: PAIR_COLOR,
     });
     effects.push({ type: 'vibrate', pattern: 18 });
+    // 第一击也是一次真实命中（补齐时 killPair 会再回一次）。
+    const healed = healOnHit(s, target.x, target.y);
+    s = healed.state;
+    effects.push(...healed.effects);
     return { state: s, effects, hit: true, crit: pairCrit };
   }
 

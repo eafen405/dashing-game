@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BattlefieldRenderer, FrameView } from '../../battlefield/types';
 import { computeLayout } from '../../game/layout';
-import type { Phase } from '../../game/types';
+import type { CharacterId, Phase } from '../../game/types';
 import { GameSession } from '../GameSession';
 import { createPresentation } from '../presentation';
 
@@ -79,7 +79,7 @@ function makeClock(): {
 }
 
 /** 造一个会话。 */
-function makeSession(): {
+function makeSession(characterId?: CharacterId): {
   session: GameSession;
   renderer: StubRenderer;
   clock: ReturnType<typeof makeClock>;
@@ -97,6 +97,7 @@ function makeSession(): {
     seed: 20240601,
     layout: computeLayout(800, 400, 1),
     presentation,
+    ...(characterId ? { characterId } : {}),
     onPhaseChange: (phase) => phases.push(phase),
     scheduleFrame: clock.schedule,
     cancelFrame: clock.cancel,
@@ -278,6 +279,72 @@ describe('GameSession', () => {
 
     expect(session.getState().layout.width).toBe(1024);
     expect(renderer.resizedTo).toBe(1024);
+    session.dispose();
+  });
+
+  it('默认角色是哲：300 / 300，帧里带角色字段', async () => {
+    const { session, renderer, clock } = makeSession();
+    await session.mount();
+    clock.advance(16);
+
+    expect(session.getState().characterId).toBe('zhe');
+    expect(session.getState().hp).toBe(300);
+    expect(session.getState().maxHp).toBe(300);
+    expect(renderer.last.characterId).toBe('zhe');
+    expect(renderer.last.hp).toBe(300);
+    expect(renderer.last.maxHp).toBe(300);
+    expect(renderer.last.burning).toBe(false);
+    session.dispose();
+  });
+
+  it('idle 切换角色：立即按新角色重建待机状态，开局沿用', async () => {
+    const { session, renderer, clock } = makeSession();
+    await session.mount();
+    session.setCharacter('rin');
+
+    expect(session.getState().characterId).toBe('rin');
+    expect(session.getState().hp).toBe(125);
+    expect(session.getState().maxHp).toBe(250);
+
+    session.start();
+    clock.advance(16);
+    expect(renderer.last.characterId).toBe('rin');
+    expect(renderer.last.hp).toBe(125);
+    expect(renderer.last.maxHp).toBe(250);
+    session.dispose();
+  });
+
+  it('running 中切换角色只影响下一局，不中途换血', async () => {
+    const { session, clock } = makeSession();
+    await session.mount();
+    session.start();
+    session.setCharacter('rin');
+
+    expect(session.getState().characterId).toBe('zhe');
+    expect(session.getState().hp).toBe(300);
+
+    session.pause();
+    session.quitToHome();
+    expect(session.getState().characterId).toBe('rin');
+    expect(session.getState().hp).toBe(125);
+    session.start();
+    clock.advance(16);
+    expect(session.getState().hp).toBe(125);
+    session.dispose();
+  });
+
+  it('调试燃魂：满血进入，关闭后回到下限', async () => {
+    const { session } = makeSession('rin');
+    await session.mount();
+    session.start();
+
+    session.setDebugBurn(true);
+    expect(session.getState().burning).toBe(true);
+    expect(session.getState().hp).toBe(250);
+
+    session.setDebugBurn(false);
+    expect(session.getState().burning).toBe(false);
+    expect(session.getState().hp).toBe(125);
     session.dispose();
   });
 });
