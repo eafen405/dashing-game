@@ -176,6 +176,7 @@
 | **GitHub Actions（`cf3051b`）** | ❌ **红**（历史记录）—— e2e 步骤失败，`npm run trace` 被跳过；票 18 已修并合入集成分支，**待编排者开 PR 后由 Actions 复跑确认** |
 | **GitHub Actions（PR #1 @ `641bf89`）** | ✅ **绿** —— `verify` 7m07s（**`npm run trace` 不再被跳过**）+ `visual` 11m15s 全过；跑两遍都是绿的 |
 | **GitHub Actions（`main` @ `c7df4fc`）** | ❌ **红**（一次）—— `verify` job 的 `compare-legacy` 偶发 `Unable to capture screenshot`；**同一个坑**（CI 2 核 runner 上「合成并排图」与两个游戏页面抢资源）。已改成面上的修法：截图统一走带重试的 `captureShot()`，并排图合成与游戏阶段分开 —— 见票 20 补记 2 |
+| **GitHub Actions（`main` @ `33a34c7`）** | ✅ **绿** —— PR #3 合并后 `main` 的两个 job 都过（`verify` 12m00s / `visual` 9m48s） |
 
 `test:e2e` / `test:visual` 跑的都是 `dist/`，**必须先 `npm run build`**；
 `hud-stats` 单脚本约 70 秒；`test:visual` 整套本机 **3.5–8 分钟**
