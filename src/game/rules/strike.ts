@@ -19,22 +19,10 @@ import type { GameState, Lane, Monster } from '../types';
 import { findLongInLane } from './spawn';
 import { completePair, findMonster, killMonster, longHeadX, missLong, startHold } from './resolve';
 
-/**
- * 一次按下的结果分类 —— 供输入风控层判断「这次按下是否值得计入异常」。
- *
- * - `hit` —— 真正命中（含双生挂起 / 补齐、灵魂代打）
- * - `whiff` —— 空挥：挥刀但判定区内没有目标
- * - `hold` —— 成功起手 / 续按长按怪
- * - `neutral` —— 规则层没有出刀（太早、漏过长按、重复按同一轨等）
- */
-export type StrikeOutcome = 'hit' | 'whiff' | 'hold' | 'neutral';
-
 /** 命中某只怪物的结果。 */
 export interface StrikeResult {
   state: GameState;
   effects: Effect[];
-  /** 本次按下的结果分类（不参与规则状态与黄金回放快照）。 */
-  outcome: StrikeOutcome;
 }
 
 /** 灵魂分身动画时长（秒）。 */
@@ -160,7 +148,7 @@ function resolveLane(state: GameState, lane: Lane): LaneOutcome {
  * 不消耗 PRNG。
  */
 export function strike(state: GameState, lane: Lane): StrikeResult {
-  if (state.phase !== 'running') return { state, effects: [], outcome: 'neutral' };
+  if (state.phase !== 'running') return { state, effects: [] };
 
   const { layout } = state;
   const effects: Effect[] = [];
@@ -203,11 +191,7 @@ export function strike(state: GameState, lane: Lane): StrikeResult {
     });
   }
 
-  return {
-    state: outcome.state,
-    effects: [...effects, ...outcome.effects],
-    outcome: outcome.hit ? 'hit' : 'whiff',
-  };
+  return { state: outcome.state, effects: [...effects, ...outcome.effects] };
 }
 
 /**
@@ -270,11 +254,7 @@ function soulStrike(state: GameState, lane: Lane): StrikeResult {
   // 本体在长按时不能播「跳起下砸」，双生同破的冲击仍由灵魂与粒子表达。
   const soulEffects = outcome.effects.filter((e) => e.type !== 'pair-smash');
 
-  return {
-    state: outcome.state,
-    effects: [...effects, ...soulEffects],
-    outcome: outcome.hit ? 'hit' : 'whiff',
-  };
+  return { state: outcome.state, effects: [...effects, ...soulEffects] };
 }
 
 /**
@@ -283,7 +263,7 @@ function soulStrike(state: GameState, lane: Lane): StrikeResult {
  * 优先级：**长按怪优先**，没有长按怪才挥刀。
  */
 export function pressLane(state: GameState, lane: Lane, inputId: string): StrikeResult {
-  if (state.phase !== 'running') return { state, effects: [], outcome: 'neutral' };
+  if (state.phase !== 'running') return { state, effects: [] };
 
   const m = findLongInLane(state.monsters, lane);
   if (!m) {
@@ -292,20 +272,18 @@ export function pressLane(state: GameState, lane: Lane, inputId: string): Strike
     return strike(state, lane);
   }
 
-  if (state.holdMonsterId !== null || m.escaped) {
-    return { state, effects: [], outcome: 'neutral' };
-  }
+  if (state.holdMonsterId !== null || m.escaped) return { state, effects: [] };
 
   if (m.anchored) {
     // 暂停后重新起手
-    return withHoldOutcome(startHold(state, m.id, inputId), m.id);
+    return startHold(state, m.id, inputId);
   }
 
   const headX = longHeadX(m);
   const { hitX, zoneHalf } = state.layout;
   if (headX < hitX - zoneHalf) {
     // 头已越过判定区 → 漏怪
-    return { ...missLong(state, m.id), outcome: 'neutral' };
+    return missLong(state, m.id);
   }
   if (headX > hitX + zoneHalf) {
     // 头还没进圈：不挥空刀
@@ -320,19 +298,9 @@ export function pressLane(state: GameState, lane: Lane, inputId: string): Strike
         effects: [
           { type: 'floater', x: headX, y: m.y - m.h * 1.45, text: '太早', color: '#9fb0cf' },
         ],
-        outcome: 'neutral',
       };
     }
-    return { state, effects: [], outcome: 'neutral' };
+    return { state, effects: [] };
   }
-  return withHoldOutcome(startHold(state, m.id, inputId), m.id);
-}
-
-/** 起手成功才记 `hold`；规则层拒收（例如已被别的长按占用）记 `neutral`。 */
-function withHoldOutcome(
-  result: { state: GameState; effects: Effect[] },
-  monsterId: number,
-): StrikeResult {
-  const started = result.state.holdMonsterId === monsterId;
-  return { ...result, outcome: started ? 'hold' : 'neutral' };
+  return startHold(state, m.id, inputId);
 }

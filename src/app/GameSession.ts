@@ -23,12 +23,11 @@ import type { BattlefieldRenderer, FrameView } from '../battlefield/types';
 import type { Effect } from '../game/effects';
 import { FEVER_TIME, GOLD } from '../game/constants';
 import { createRng, type Rng } from '../game/rng';
-import { reduce, type ReduceResult } from '../game/reducer';
+import { reduce } from '../game/reducer';
 import { speedNow } from '../game/rules/difficulty';
 import { MAX_DT } from '../game/rules/tick';
 import { createGameState } from '../game/state';
 import type { Difficulty, GameState, Lane, Layout, Monster, Phase } from '../game/types';
-import { StrikeGuard } from '../input/strikeGuard';
 import type { InputSink } from '../input/types';
 import { canTransition } from './screenMachine';
 import { createEffectSink, createPresentation, type PresentationPort } from './presentation';
@@ -77,8 +76,6 @@ export class GameSession implements InputSink {
   private rng: Rng;
   private diffLevel: Difficulty;
   private readonly seed: number;
-  /** 出刀输入风控（令牌桶 / 同轨锁 / 空挥连击锁）。 */
-  private readonly strikeGuard = new StrikeGuard();
 
   /** 视觉时钟（旧代码的 `vt`）—— 所有阶段都推进。 */
   private visualTime = 0;
@@ -196,19 +193,9 @@ export class GameSession implements InputSink {
 
   // ── 输入 ─────────────────────────────────────────────────
 
-  /** 按下半屏。非 running 时直接忽略（不占用风控令牌）。 */
+  /** 按下半屏。非 running 时由规则层拒绝（`pressLane` 首行判断）。 */
   press(lane: Lane, inputId: string): void {
-    // 非 running 的按下原本就无效果；提前返回避免占用风控令牌 / 污染锁定计时。
-    if (this.state.phase !== 'running') return;
-
-    const now = this.state.now;
-    if (!this.strikeGuard.allow(now, lane)) return;
-
-    const result = this.applyEvent({ type: 'Press', lane, inputId });
-    const locked = this.strikeGuard.record(now, lane, result.pressOutcome);
-    if (locked) {
-      this.presentation.apply([{ type: 'toast', text: '手滑了 · 缓一下', color: '#9fb0cf' }]);
-    }
+    this.applyEvent({ type: 'Press', lane, inputId });
   }
 
   /** 松开输入。只有松开发起长按的那根输入才判定长按中断。 */
@@ -287,7 +274,6 @@ export class GameSession implements InputSink {
       seed: this.seed,
       layout: this.state.layout,
     });
-    this.strikeGuard.reset();
     this.presentation.reset();
     this.lastT = 0;
     this.notifyPhase();
@@ -296,21 +282,19 @@ export class GameSession implements InputSink {
   private resetToIdle(): void {
     this.rng = createRng(this.seed);
     this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
-    this.strikeGuard.reset();
     this.presentation.reset();
     this.lastT = 0;
     this.notifyPhase();
   }
 
   /** 归约一个规则层事件，并把产生的效果交给表现层与上层。 */
-  private applyEvent(event: Parameters<typeof reduce>[1]): ReduceResult {
+  private applyEvent(event: Parameters<typeof reduce>[1]): void {
     const previousPhase = this.state.phase;
-    const result = reduce(this.state, event, this.rng);
-    this.state = result.state;
+    const { state, effects } = reduce(this.state, event, this.rng);
+    this.state = state;
     // 表现层消费效果事件；DOM 副作用由表现层的 `EffectSink` 转交给 `onEffect`。
-    if (result.effects.length > 0) this.presentation.apply(result.effects);
-    if (result.state.phase !== previousPhase) this.notifyPhase();
-    return result;
+    if (effects.length > 0) this.presentation.apply(effects);
+    if (state.phase !== previousPhase) this.notifyPhase();
   }
 
   private notifyPhase(): void {

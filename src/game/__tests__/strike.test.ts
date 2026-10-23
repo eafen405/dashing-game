@@ -169,35 +169,6 @@ describe('按下半屏', () => {
   });
 });
 
-describe('按下结果分类（输入风控用）', () => {
-  it('命中记 hit，空挥记 whiff', () => {
-    const hit = strike(makeState({ monsters: [normalMonster({ x: HIT_X })] }), 'top');
-    const whiff = strike(makeState({ monsters: [normalMonster({ x: HIT_X + 400 })] }), 'top');
-
-    expect(hit.outcome).toBe('hit');
-    expect(whiff.outcome).toBe('whiff');
-  });
-
-  it('长按起手记 hold，太早记 neutral', () => {
-    const hold = pressLane(makeState({ monsters: [holdMonster()] }), 'top', 'p1');
-    const early = pressLane(
-      makeState({ monsters: [holdMonster({ lane: 'top', x: 600 })] }),
-      'top',
-      'p1',
-    );
-
-    expect(hold.outcome).toBe('hold');
-    expect(early.outcome).toBe('neutral');
-  });
-
-  it('非 running 记 neutral', () => {
-    const paused = makeState({ phase: 'paused' });
-
-    expect(strike(paused, 'top').outcome).toBe('neutral');
-    expect(pressLane(paused, 'top', 'p1').outcome).toBe('neutral');
-  });
-});
-
 describe('灵魂代打（按住长条怪时点另一条轨）', () => {
   /** 正在按住上轨的长条怪，下轨来了一只怪。 */
   function holdingState(bottom: ReturnType<typeof normalMonster>) {

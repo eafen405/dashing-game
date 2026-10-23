@@ -20,7 +20,7 @@ import { refitMonsters } from './layout';
 import type { Rng } from './rng';
 import { createGameState } from './state';
 import { cancelHold, releaseHold } from './rules/resolve';
-import { pressLane, type StrikeOutcome } from './rules/strike';
+import { pressLane } from './rules/strike';
 import { tick } from './rules/tick';
 import type { Difficulty, GameState, Lane, Layout } from './types';
 
@@ -53,13 +53,6 @@ export interface ReduceResult {
   state: GameState;
   /** 本次事件产生的效果事件（视觉副作用的唯一出口）。 */
   effects: Effect[];
-  /**
-   * 仅 `Press` 事件会带：规则层对这次按下的分类。
-   *
-   * 不进入 `GameState`，也不参与黄金回放快照；会话层用它驱动输入风控
-   * （空挥连击 / 输入预算），规则层本身仍然对同一状态 + 同一事件保持纯函数。
-   */
-  pressOutcome?: StrikeOutcome;
 }
 
 /**
@@ -84,10 +77,8 @@ export function reduce(state: GameState, event: GameEvent, rng: Rng): ReduceResu
     case 'Tick':
       return tick(state, event.dt, rng);
 
-    case 'Press': {
-      const result = pressLane(state, event.lane, event.inputId);
-      return { state: result.state, effects: result.effects, pressOutcome: result.outcome };
-    }
+    case 'Press':
+      return pressLane(state, event.lane, event.inputId);
 
     case 'Release':
       return releaseHold(state, event.inputId);
