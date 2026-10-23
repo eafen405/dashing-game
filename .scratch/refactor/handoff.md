@@ -1,8 +1,9 @@
 # 交接说明 —— 双轨打怪重构
 
-> 更新时间：2026-10-22
-> 集成分支：`feat/refactor-v2` @ `5719125`（票 01–21 已合入，**已推送**）
-> PR 分支：`feat/merge-to-main-0.2.0`（同一 tip，专门用来开 PR 到 `main`）
+> 更新时间：2026-10-23
+> 集成分支：`feat/refactor-v2` @ `641bf89`（票 01–21 已合入，**已推送**）
+> **已合并到 `main`** —— PR #1 `feat/merge-to-main-0.2.0` → `main`，合并提交 `c7df4fc`
+> （CI 两个 job 全绿：`verify` 7m07s、`visual` 11m15s）
 > 本轮：**`feat/review-fixes`**（两轴代码评审的收口修复，基线 `a5826fa`；
 > **PR 与合并由编排者执行**）
 > 规格：[spec.md](spec.md) · 票：[issues/](issues/) · 差异记账：[CHANGELOG.md](../../CHANGELOG.md)
@@ -30,7 +31,7 @@
 | CSS / UI 文案 | 与当前源码产物完全一致，无漂移 |
 | 本机门禁 | typecheck ✅ · lint ✅ · 单测 30 文件 / 360 测试 ✅ · build ✅ · verify ✅ · trace ✅（11 条结算路径）· `test:e2e` 六个脚本 ✅ · `test:visual` 六个脚本 ✅ |
 | **CI（`cf3051b`）** | ✅ **verify 已绿** —— 票 18 修完并合入后，PR #1 上 `verify` job **7m06s 全绿**（含 `npm run trace`，不再被跳过）。`visual` job 第一次跑红在 `fx-moments` 的**并排图合成**（CI 2 核 runner 上，合成页面跟两个带 bloom 的 WebGL 页面抢资源）—— 已改成「游戏阶段拍单图 → 关掉游戏浏览器 → 单独一个浏览器合成」，见票 20 补记 |
-| `main` | 仍停在初始提交 `d2958e2` —— PR 从 `feat/merge-to-main-0.2.0` 发出，合并由编排者执行 |
+| `main` | ✅ **已合并** —— [PR #1](https://github.com/eafen405/dashing-game/pull/1) `feat/merge-to-main-0.2.0` → `main`，合并提交 `c7df4fc`（2026-10-23）。CI 两个 job 全绿 |
 | 「无头 Chromium 没有 WebGL」 | **已过期**。`--enable-unsafe-swiftshader` 之后无头能拿到 WebGL；bloom / 色散 / 冲击波实测全部生效（票 20） |
 | 特效验收脚本 | 5 个特效脚本 + 键盘长按怪已接进 CI（`npm run test:visual`，票 20），验收拼图作为 artifact 留档 |
 
@@ -40,7 +41,8 @@
 - PR 分支：`feat/merge-to-main-0.2.0`（同一 tip，**已推送**）——
   专门开 PR 到 `main` 用，**不**与别人的推送抢同一条分支。
   远端目前是 `main` + `feat/refactor-v2` + `feat/merge-to-main-0.2.0`。
-- `main` 仍停在初始提交 `d2958e2`（旧版 `source.html` 的存档点），重构成果尚未合并到 `main`。
+- `main` ✅ **已合并**（PR #1 → `c7df4fc`）：仓库默认分支现在就是新玩法
+  （棒子人 / 地面 / 天空大地双轨 / 棒尖判定框）。旧版存档点仍在 git 历史 `d2958e2`。
 - 本轮分支：`feat/review-fixes`（本机 worktree 在 `refactor-wt/23-review-fixes`）——
   它只做**评审收口**：改文档里的**不实陈述**、删死代码、去重复。
   **不推送、不开 PR、不合并 `main`**（那是编排者在用户确认后做的事）。
@@ -66,7 +68,7 @@
 | **18** | **修复 CI 红：`hud-stats` 的隐含帧率断言** | ✅ resolved |
 | **19** | **修复过期的键盘长按怪脚本** | ✅ resolved |
 | **20** | **把特效视觉验收接进 CI（5 个脚本）** | ✅ resolved（验收拼图作为 artifact 留档） |
-| **21** | **合并到 `main` + 交付收口** | ✅ resolved（文档收口已完成；**PR 与合并由编排者执行**） |
+| **21** | **合并到 `main` + 交付收口** | ✅ resolved（文档收口 + PR #1 已合并进 `main` @ `c7df4fc`） |
 | **22** | **真机验收：60fps / 长按手感 / 浏览器兼容** | ⏸ ready-for-human（本轮已改成「当前状态 + 5 条待签字」；`dist/index.html` 已就绪） |
 | — | **两轴代码评审的收口**（`feat/review-fixes`） | ✅ 本轮完成：13 条发现全部收掉（7 条真相修正 + 4 条代码清理 + 2 条文档补记）；**不推送、不开 PR、不合并 `main`** |
 
@@ -172,6 +174,7 @@
 | `npm run test:e2e` | ✅ 六个脚本全过（票 20 复核；本票只改文档，未动脚本） |
 | `npm run test:visual` | ✅ 六个脚本全过（票 20 复核；同上） |
 | **GitHub Actions（`cf3051b`）** | ❌ **红**（历史记录）—— e2e 步骤失败，`npm run trace` 被跳过；票 18 已修并合入集成分支，**待编排者开 PR 后由 Actions 复跑确认** |
+| **GitHub Actions（PR #1 @ `641bf89`）** | ✅ **绿** —— `verify` 7m07s（**`npm run trace` 不再被跳过**）+ `visual` 11m15s 全过；跑两遍都是绿的 |
 
 `test:e2e` / `test:visual` 跑的都是 `dist/`，**必须先 `npm run build`**；
 `hud-stats` 单脚本约 70 秒；`test:visual` 整套本机 **3.5–8 分钟**
@@ -196,7 +199,7 @@
 ## 接下来怎么做
 
 **功能做完了，剩下的是合 `main` 与真机签字。**
-顺序：**18 / 19 / 20 / 21 / 评审收口 已完成 → 开 PR 合 `main` → 22**。
+顺序：**18 / 19 / 20 / 21 / 评审收口 / 开 PR 合 `main` 全部完成 → 只剩 22**。
 
 1. ~~**票 18**：修 `hud-stats.mjs` 的隐含帧率断言。~~ ✅ 已完成
    （判据改成结构性判据：循环没冻 + 每帧发布一次，绝对下限压到 1fps 量级）。

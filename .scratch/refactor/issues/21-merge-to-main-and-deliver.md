@@ -159,3 +159,37 @@ Prettier 3 会读 `.gitignore`」一条）、「接下来怎么做」四段全�
 2. **开 PR**：→ `main`，标题 / 正文见交接说明；CI 全绿再合。合完后 `main` 上就有票 01–21 的全部成果。
 3. **票 22**：把 `dist/index.html` 交给用户做真机验收（60fps / 长按 2 秒手感 / Firefox / Safari）。
 4. 若 `visual` job 偶发超时：优先查 `fx-moments.mjs`（耗时随这一局有没有碰上 FEVER / 双生而波动）。
+
+---
+
+## 补记（2026-10-23）· PR 已开并合并
+
+PR #1：`feat/merge-to-main-0.2.0` → `main`，合并提交 **`c7df4fc`**。
+
+**为什么另开一条分支而不是直接推 `feat/refactor-v2`**：远端随时可能有别人推上来的东西，
+抢同一条分支容易撞车。`feat/merge-to-main-0.2.0` 是从集成分支 tip 切出来的**同一条历史**，
+PR 走它，两边互不干扰；集成分支 `feat/refactor-v2` 也一并快进推了（`cf3051b..641bf89`）。
+
+**CI 结果**（PR 上跑了两遍，都是绿的）：
+
+| job | 结果 |
+| --- | --- |
+| `verify`（typecheck → lint → test → build → verify-single-file → e2e → **trace**） | ✅ 7m07s / 7m22s |
+| `visual`（6 个特效脚本 + artifact） | ✅ 11m15s / 11m24s |
+
+`npm run trace` **不再被跳过** —— 票 18 的验收项在 GitHub Actions 上确认成立。
+
+### 中途踩的坑：`visual` job 第一次红
+
+`fx-moments.mjs` 的**并排图合成**步骤在 CI 上偶发
+`Protocol error (Page.captureScreenshot): Unable to capture screenshot`。
+
+排查过程（细节见票 20 补记）：先排除了 `/dev/shm`（64 MB，但加参数后照样红）和
+**Chromium 版本**（本机 153 vs CI 156 —— 装上 156 复跑照样绿）。真正的规律是：
+**同一个提交，两个 runner 一个绿一个红** —— 是 runner 资源（2 核 + 软件光栅）下的**偶发**失败。
+
+修法是**把合成阶段与游戏阶段分开**：游戏阶段只拍两边的单图；游戏浏览器关掉之后，
+再用一个干净的浏览器排版并排图 —— 合成页面不跟任何 WebGL 页面抢资源。
+另外给截图加了重试、渲染进程真死时不再带崩整套（硬判据仍是「新版至少截到 1 个瞬间」）。
+
+**判据一个字没改** —— 改的是失败传播路径与资源竞争，不是把门禁放松。
