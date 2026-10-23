@@ -9,7 +9,24 @@
 
 import { join } from 'node:path';
 
-export const CHROMIUM_ARGS = ['--enable-unsafe-swiftshader', '--no-sandbox'];
+/**
+ * Chromium 启动参数。
+ *
+ * - `--enable-unsafe-swiftshader` —— 无头环境要拿到 WebGL（bloom / 色散 / 冲击波
+ *   全靠它），否则 Pixi 回退 Canvas2D，视觉验收脚本就废了。
+ * - `--no-sandbox` —— CI 里没配 user namespace sandbox。
+ * - `--disable-dev-shm-usage` —— **CI 上必须带**：GitHub runner 的 `/dev/shm` 只有
+ *   64 MB，Chromium 默认把 WebGL 的共享内存缓冲放那儿。两个带 bloom 的页面一起跑时
+ *   会把它撑爆，症状是 `page.screenshot` 报
+ *   `Protocol error (Page.captureScreenshot): Unable to capture screenshot`。
+ *   本机 `/dev/shm` 有 9.8 GB，所以**本机永远复现不出来** —— 只有 CI 会红。
+ *   这个参数让 Chromium 改用 `/tmp`，绕开那块小内存。
+ */
+export const CHROMIUM_ARGS = [
+  '--enable-unsafe-swiftshader',
+  '--no-sandbox',
+  '--disable-dev-shm-usage',
+];
 
 /** 候选可执行文件（`undefined` = 用 Playwright 自带的）。 */
 export function chromiumCandidates() {

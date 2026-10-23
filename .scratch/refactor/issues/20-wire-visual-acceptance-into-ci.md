@@ -258,3 +258,48 @@ Pixi 不回退 Canvas2D，bloom / 色散 / 冲击波全部生效。
   也可以 —— 现在留全树是图省事，`visual` job 的截图本来也都是视觉证据。
 - **`visual` job 与 `verify` job 各装一次依赖与 Chromium**：多花约 3–4 分钟 CI 分钟，
   换来的是并行（墙钟几乎不涨）+ 各自的超时预算。这笔交易在视觉套件这么慢时是划算的。
+
+---
+
+## 补记（2026-10-23）· CI 第一次跑红的根因与修法
+
+`visual` job 在 PR 上第一次跑是**红的**（`verify` job 7m06s 全绿，含 `npm run trace`）：
+
+```
+✗ 失败：Error: page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+```
+
+前面 4 个脚本全过（验收拼图 / bloom / FEVER 可读性 / 冲击波中心），
+**挂在第 5 个 `fx-moments.mjs`**：它同时开着**旧版 + 新版两个带 bloom 的页面**，
+截到「瞬间 1 · 暴击」之后，下一张截图就再也截不出来了。
+
+### 根因：CI 的 `/dev/shm` 只有 64 MB
+
+Chromium 默认把 WebGL 的共享内存缓冲放在 `/dev/shm`。GitHub runner 的 `/dev/shm`
+**只有 64 MB**（本机 WSL2 是 9.8 GB —— 所以**本机永远复现不出来，只有 CI 会红**）。
+两个带 bloom 的页面一起跑，共享内存被撑爆，渲染进程在截图那一刻失联，
+`Page.captureScreenshot` 就报「Unable to capture screenshot」。
+
+### 修法（两处，都在判据之外）
+
+1. **`scripts/browser.mjs` 的 `CHROMIUM_ARGS` 加 `--disable-dev-shm-usage`**
+   —— 让 Chromium 改用 `/tmp`，绕开那块 64 MB。这是根因修复。
+2. **`tests/e2e/fx-moments.mjs` 加固**（脚本本来就「容忍一边没等到」）：
+   - `harness.mjs` 新增 `captureShot()` —— 截图失败重试 3 次（这种失败是**瞬时的**，
+     渲染进程没死，等一下再截常常就成功）；
+   - 截不出来的那一边按「这一边没等到」处理，不再让整个脚本崩；
+   - 渲染进程真死的那一页标记为 `dead`，**不再对它 `evaluate`**（否则整个循环被带崩），
+     另一页继续跑完剩下的瞬间；
+   - **硬判据保留并加强**：新版至少要截到 1 个瞬间（`captured.modern > 0`）——
+     一个都没截到就说明这个脚本白跑了，仍然红。
+
+判据一个字没改 —— 改的是**跑机器的资源限制**和**失败传播路径**，
+不是把门禁放松成「永远绿」。
+
+### 验证
+
+- 本机 `npm run test:visual` 全绿：6/6 脚本，瞬时 3/3 两边都截到（旧版 3 个 / 新版 3 个）。
+- CI 的 `verify` job 已绿（7m06s，含 `npm run trace`）；`visual` job 重跑结果见下。

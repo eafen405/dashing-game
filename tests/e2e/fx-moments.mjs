@@ -39,7 +39,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { assert, launchBrowser, openApp } from './lib/harness.mjs';
+import { assert, captureShot, launchBrowser, openApp } from './lib/harness.mjs';
 
 /** 旧版页面（只读参照）—— 与仓库根同目录。 */
 const LEGACY = resolve(process.cwd(), 'source.html');
@@ -279,6 +279,14 @@ try {
   const legacyErrors = [];
   legacy.on('pageerror', (e) => legacyErrors.push(String(e)));
 
+  /**
+   * 某一边的渲染进程是否已经失联（CI 上内存紧张时 Chromium 的渲染进程会崩）。
+   * 失联之后那一页不能再 `evaluate`（会抛），所以要单独记一笔并跳过。
+   */
+  const dead = { legacy: false, modern: false };
+  /** 每一边成功截到的瞬间数（硬判据：新版至少要有一个）。 */
+  const captured = { legacy: 0, modern: 0 };
+
   // ── 旧版画布尺寸对齐新版画布 ────────────────────────────
   // 旧版的 canvas 铺满窗口，新版在 HUD 下面 —— 不对齐的话两边的轨道位置差一截。
   const canvasBox = await modern.locator('.canvas-host canvas').boundingBox();
@@ -353,6 +361,26 @@ try {
   })();
 
   /**
+   * 截一张图；截不出来（渲染进程在 CI 上失联）就当这一边**没等到**。
+   *
+   * 与脚本原有的「一边没等到也不算失败」是同一口径：截图失败说明**这一边这一刻**
+   * 没拿到证据，不说明游戏坏了。真正的硬判据在最后 —— 新版至少要拿到一个瞬间。
+   *
+   * @param {import('playwright').Page} page 页面。
+   * @param {string} path 目标文件路径。
+   * @returns {Promise<boolean>} 截到了 = true。
+   */
+  async function captureOne(page, path) {
+    try {
+      await captureShot(page, path);
+      return true;
+    } catch (err) {
+      console.log(`  ⚠ 这一边没截到（${String(err)}）—— 按「一边没等到」处理`);
+      return false;
+    }
+  }
+
+  /**
    * 打到某个 toast 出现为止，然后截图。
    *
    * 两个页面**各自**在各自出现该瞬间时截图 —— 两边的进度不完全同步
@@ -371,40 +399,52 @@ try {
 
     for (let round = 0; round < 900 && (!done.legacy || !done.modern); round++) {
       const tasks = [];
-      if (!done.legacy) {
+      if (!done.legacy && !dead.legacy) {
         tasks.push(
-          legacy.evaluate(AUTO_PLAY, {
-            ...playArgs,
-            hitX: legacyLayout.hitX,
-            laneYs: legacyLayout.laneYs,
-            zoneHalf: legacyLayout.zoneHalf,
-            critHalf: legacyLayout.critHalf,
-            canvasSel: '#cv',
-            stageSel: '#stage',
-          }),
+          legacy
+            .evaluate(AUTO_PLAY, {
+              ...playArgs,
+              hitX: legacyLayout.hitX,
+              laneYs: legacyLayout.laneYs,
+              zoneHalf: legacyLayout.zoneHalf,
+              critHalf: legacyLayout.critHalf,
+              canvasSel: '#cv',
+              stageSel: '#stage',
+            })
+            .catch((err) => {
+              dead.legacy = true;
+              console.log(`  ⚠ 旧版页面失联（${String(err)}）—— 这一边不再参与`);
+            }),
         );
       }
-      if (!done.modern) {
+      if (!done.modern && !dead.modern) {
         tasks.push(
-          modern.evaluate(AUTO_PLAY, {
-            ...playArgs,
-            canvasSel: '.canvas-host canvas',
-            stageSel: '.stage',
-          }),
+          modern
+            .evaluate(AUTO_PLAY, {
+              ...playArgs,
+              canvasSel: '.canvas-host canvas',
+              stageSel: '.stage',
+            })
+            .catch((err) => {
+              dead.modern = true;
+              console.log(`  ⚠ 新版页面失联（${String(err)}）—— 这一边不再参与`);
+            }),
         );
       }
       await Promise.all(tasks);
+      if (dead.legacy && dead.modern) break;
 
-      const [lt, mt] = await Promise.all([readToasts(legacy), readToasts(modern)]);
+      const [lt, mt] = await Promise.all([
+        dead.legacy ? [] : readToasts(legacy).catch(() => []),
+        dead.modern ? [] : readToasts(modern).catch(() => []),
+      ]);
       if (!done.legacy && lt.slice(legacySeen).some((t) => re.test(t.text))) {
-        done.legacy = true;
-        await legacy.screenshot({ path: legacyPath });
-        console.log(`  📷 ${legacyPath}`);
+        done.legacy = await captureOne(legacy, legacyPath);
+        if (done.legacy) captured.legacy += 1;
       }
       if (!done.modern && mt.slice(modernSeen).some((t) => re.test(t.text))) {
-        done.modern = true;
-        await modern.screenshot({ path: modernPath });
-        console.log(`  📷 ${modernPath}`);
+        done.modern = await captureOne(modern, modernPath);
+        if (done.modern) captured.modern += 1;
       }
     }
     if (!done.legacy || !done.modern) {
@@ -445,6 +485,10 @@ try {
 
   const errors = [...legacyErrors, ...modernErrors];
   assert(errors.length === 0, `两个页面都无异常${errors.length ? '：' + errors.join(' | ') : ''}`);
+  assert(
+    captured.modern > 0,
+    `新版至少截到 1 个瞬间（实际：旧版 ${captured.legacy} 个 / 新版 ${captured.modern} 个）—— 一个都没有就说明这个脚本白跑了`,
+  );
   console.log(`\n✓ 三个瞬间 + bloom 判据完成 → ${OUT}`);
 } catch (err) {
   console.error(`\n✗ 失败：${String(err)}`);

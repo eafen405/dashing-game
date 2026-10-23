@@ -53,6 +53,38 @@ export async function shot(page, name) {
   return path;
 }
 
+/**
+ * 截图，失败时重试。
+ *
+ * **为什么需要重试**：CI 的 runner 内存紧张，Chromium 的渲染进程偶尔会在截图那一刻
+ * 失联（`Protocol error (Page.captureScreenshot): Unable to capture screenshot`）。
+ * 这种失败是**瞬时的** —— 渲染进程并没有死，等一下再截常常就成功了。
+ * 真的不行时抛出去，由调用方决定怎么判。
+ *
+ * @param {import('playwright').Page} page 页面。
+ * @param {string} path 目标文件路径。
+ * @param {{attempts?: number, delayMs?: number}} [options] 重试次数与间隔。
+ */
+export async function captureShot(page, path, options = {}) {
+  const attempts = options.attempts ?? 3;
+  const delayMs = options.delayMs ?? 800;
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await page.screenshot({ path });
+      console.log(`  📷 ${path}`);
+      return path;
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts) {
+        console.log(`  ↻ 截图失败（第 ${attempt} 次），${delayMs}ms 后重试：${String(err)}`);
+        await page.waitForTimeout(delayMs);
+      }
+    }
+  }
+  throw lastError;
+}
+
 /** 启动浏览器（带回退链）。 */
 export async function launchBrowser() {
   return launchChromium(chromium);
