@@ -108,9 +108,10 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 | `npm run verify` | 校验产物：自包含检查 + `file://` 下可运行检查 |
 | `npm test` | 单元测试（Vitest） |
 | `npm run test:watch` | 单元测试 watch 模式 |
-| `npm run test:e2e` | 端到端检查（Playwright 驱动 `file://` 产物）**需先 `npm run build`** |
-| `npm run test:visual` | 特效视觉验收（5 个特效脚本 + 键盘长按怪，产出验收拼图）**需先 `npm run build`** |
-| `npm run trace` | 黄金轨迹保真门禁：旧版 harness × 新规则层逐帧比对 |
+| `npm run test:smoke` | **冒烟 e2e（20 秒）—— CI 门禁跑的就是它** **需先 `npm run build`** |
+| `npm run test:e2e` | 完整端到端检查（12 个脚本，约 20 分钟）**需先 `npm run build`** |
+| `npm run test:visual` | 特效视觉验收（6 个脚本，约 3.5–8 分钟）**需先 `npm run build`** |
+| `npm run trace` | 黄金轨迹保真比对：旧版 harness × 新规则层逐帧比对 |
 | `npm run typecheck` | TypeScript 类型检查（`tsc --noEmit`） |
 | `npm run lint` | ESLint 检查 |
 | `npm run format` | Prettier 格式化（`prettier --write .`） |
@@ -121,21 +122,34 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 可读写、且没有发起任何外部网络请求。产物体积超过 **1,200 KB**（gzip **380 KB**）时
 会打印告警（不阻断构建），提示检查 Pixi / React 是否被整包引入。
 
-`npm run trace` 是**行为正确性**门禁，不是性能测量：旧版 `source.html` 的 harness 与新规则层
-喂同一种子、同一份事件流，逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
+### CI 门禁
 
-`npm run test:visual` 是**特效视觉验收**门禁（票 20）：6 个脚本定点注入特效并量像素
-（bloom 开/关的亮度与面积、FEVER 判定区描边连续性、冲击波中心、2×2 验收拼图、真实对局并排、
-键盘长按怪）。判据都是**相对 / 结构性**的，不绑机器速度；截图落在 `dist/e2e-shots/`，
-CI 会把它作为 artifact `visual-acceptance-shots` 上传（`dist/` 被 gitignore，不留档就看不见）。
+**push 门禁只有一条，约 2 分钟**：
 
-CI 跑的就是这两条**并行**流水线：
+```
+typecheck → lint → unit test → build → verify（产物自包含）→ 冒烟 e2e（20 秒）
+```
 
-- `verify` job：typecheck → lint → test → build → verify → e2e → trace；
-- `visual` job：build → test:visual → 上传验收截图。
+冒烟（`tests/e2e/smoke.mjs`）走一条路径：开机 → 难度屏 → 玩法说明屏 → 开局 →
+出刀命中 → 暂停 / 恢复 → 结算 → 「选择难度」→ 难度屏 → 回主页面。
+断言全落在可观察的 DOM 状态上。
 
-视觉验收**独立成一个 job**（票 20）—— 视觉脚本在软件光栅下慢，单独一个 job 才不会挤掉
-`verify` 的 30 分钟预算。两个 job 各有 30 分钟上限，失败即红。
+**本地跑、不进 push 门禁的**（脚本一个都没删）：
+
+| 命令 | 跑什么 | 多久 |
+| --- | --- | --- |
+| `npm run test:e2e` | 完整 8 步流程 + 与旧版 `source.html` 的并排对照 | 约 20 分钟 |
+| `npm run test:visual` | 6 个特效脚本：定点注入拼图 / bloom 开关 / FEVER 描边连续性 / 冲击波像素探针 / 真实对局瞬间 / 键盘长按怪 | 约 3.5–8 分钟 |
+| `npm run trace` | 黄金轨迹保真比对（CI 里 `workflow_dispatch` 手动触发） | 约 2 分钟 |
+
+- `npm run trace` 是**行为正确性**校验，不是性能测量：旧版 `source.html` 的 harness
+  与新规则层喂同一种子、同一份事件流，逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
+- `npm run test:visual` 的判据都是**相对 / 结构性**的（亮度比、描边连续性、位移场比值），
+  不绑机器速度 —— 换机器不会飘。但它在软件光栅下慢，且只在「改了视觉」时才有意义。
+
+**为什么这么切**：游戏的复杂度撑不起这套工程的复杂度 —— 逻辑层约 3200 行，
+围着它搭的验收体系也有这个量级。取舍与代价见
+[ADR-0008](docs/adr/0008-ci-gate-slimmed-to-smoke.md)。
 
 ## 技术架构
 

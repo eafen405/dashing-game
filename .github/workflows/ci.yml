@@ -2,17 +2,17 @@ name: CI
 
 on:
   push:
-    # 集成分支 `feat/refactor-v2` 是重构期间的常驻分支，push 就要跑门禁；
-    # 否则只有开 PR 才会验证，长分支很容易带着红测试往前走。
+    # 只跑**门禁**（约 2 分钟）。feature 分支也跑 —— 门禁便宜，早点知道坏了比晚点知道好。
     branches: [main, 'feat/**']
   pull_request:
+  # 手动触发 = 跑**全量验收**（门禁 + 黄金轨迹保真比对）。
   workflow_dispatch:
 
 jobs:
   verify:
-    name: typecheck → lint → test → build → verify-single-file → e2e → trace
+    name: typecheck → lint → test → build → 产物校验 → 冒烟
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - name: 检出代码
@@ -45,26 +45,29 @@ jobs:
       - name: 校验单文件产物（静态检查 + 浏览器检查）
         run: node scripts/verify-single-file.mjs
 
-      - name: 端到端检查（Playwright 驱动 file:// 产物）
-        run: npm run test:e2e
+      - name: 冒烟 e2e（开机 → 难度 → 说明 → 开局 → 命中 → 暂停 → 结算 → 回主页）
+        run: npm run test:smoke
 
-      - name: Golden trace 保真门禁（旧版 harness × 新规则层 逐帧比对）
-        run: npm run trace
+      - name: 上传失败时的截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-shots
+          path: dist/e2e-shots/
+          if-no-files-found: warn
 
-  # 特效视觉验收（票 20）**单独一个 job**，和上面的 verify **并行**跑。
+  # 黄金轨迹保真比对 —— **手动触发**（workflow_dispatch），不做每次 push 的门禁。
   #
-  # 为什么不给它一个「步骤」而是「一个 job」：
-  # 视觉脚本在 SwiftShader 下慢（整套装机约 3.5–8 分钟，fx-moments 的耗时
-  # 还随这一局有没有碰上 FEVER / 双生而波动），串在 verify 后面会把它
-  # 压到 30 分钟作业超时的边缘。独立成 job 有三个好处：
-  #   1. 独立的 30 分钟预算，不占 verify 的；
-  #   2. 与 verify 并行 —— 墙钟时间几乎不涨；
-  #   3. 失败归因更清楚（哪个 job 红就是哪一摊红了），且
-  #      `if: always()` 的 artifact 上传在自己的 job 里跑。
-  visual:
-    name: 特效视觉验收（视觉脚本 + 验收证据）
+  # 为什么降级：它回答的是「重构前后行为是否逐帧一致」，而重构已经结束了
+  # （0.2.0 合进 main）。从今往后它挡的是「我自己改规则层时有没有偷偷改变行为」，
+  # 这件事值得盯，但不值得让每次 push 都多付一遍时间。
+  # 脚本与 golden trace 都还在，`npm run trace` 本地随时能跑。
+  # 决策见 docs/adr/0008-ci-gate-slimmed-to-smoke.md
+  trace:
+    name: 黄金轨迹保真比对（手动触发）
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - name: 检出代码
@@ -79,45 +82,35 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 安装 Chromium（仅浏览器检查需要）
+      - name: 安装 Chromium（回放器要驱动旧版 harness）
         run: npx playwright install --with-deps chromium
 
-      - name: 构建单文件产物
-        run: npm run build
+      - name: Golden trace 保真比对（旧版 harness × 新规则层 逐帧比对）
+        run: npm run trace
 
-      - name: 特效视觉验收（定点注入 + 像素判据 + 真实对局并排）
-        run: npm run test:visual
-
-      - name: 上传特效验收截图（票 09 验收证据）
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-acceptance-shots
-          path: dist/e2e-shots/
-          if-no-files-found: warn
-
-# 端到端检查（`npm run test:e2e`）：
-#   Playwright 打开 `dist/index.html`（file://），走完整条用户流程 ——
-#   开始 → 选难度 → 游戏 → 暂停/恢复 → 结算 → 重开 → 回主页 → 最高分持久化，
-#   并检查 HUD 不做 60fps 重渲染、竖屏自动暂停保留进度、桌面键鼠可用、
-#   以及与旧版 `source.html` 的界面并排一致。
-#   **必须在 build 之后**（它跑的是产物），截图默认落在 `dist/e2e-shots/`。
+# ── 这个门禁守什么 / 不守什么 ──────────────────────────────
 #
-# 特效视觉验收（`npm run test:visual`，票 20）：
-#   6 个特效脚本 —— 定点注入的 2×2 验收拼图、bloom 开/关的像素判据、
-#   FEVER 判定区描边连续性、冲击波中心的像素探针、真实对局三个瞬间并排、
-#   以及键盘长按怪。判据都是**相对 / 结构性**的（亮度比、描边连续性、位移场比值），
-#   不绑机器速度，所以能当门禁。
-#   跑完把 `dist/e2e-shots/` 作为 artifact 上传 —— `dist/` 被 gitignore，
-#   验收拼图 `09/acceptance-09.png` 不留档就对任何后来人不可见。
+# **门禁（每次 push 都跑，约 2 分钟）**
+#   typecheck · lint · 单元测试 · 构建 · 单文件产物校验 · 冒烟 e2e
+#   冒烟（`tests/e2e/smoke.mjs`）走一条 30 秒的路径：
+#   开机 → 难度屏 → 玩法说明屏 → 开局 → 出刀命中 → 暂停 / 恢复
+#        → 结算 → 「选择难度」→ 难度屏 → 回主页面
+#
+# **本地跑，不进 CI**
+#   - `npm run test:e2e` —— 完整 8 步流程 + 与旧版 `source.html` 的并排对照。
+#     旧版对照要等两次血量掉光，约 8 分钟。
+#   - `npm run test:visual` —— 6 个特效脚本（定点注入拼图 / bloom 开关 /
+#     FEVER 描边连续性 / 冲击波像素探针 / 真实对局瞬间 / 键盘长按怪）。
+#     判据是**相对 / 结构性**的（亮度比、描边连续性、位移场比值），
+#     不是绝对像素阈值 —— 换机器不会飘，但 SwiftShader 软件光栅下整套装机
+#     要 3.5–8 分钟，犯不着每次 push 都付。
+#   - `npm run trace` —— 黄金轨迹保真比对（CI 里手动触发）。
 #
 # 说明（ADR-0004）：CI 不做任何性能断言。性能由结构性设计保证，
 # 不建立基准测试套件，也不做反复的实机性能测量。
 # 无头 Chromium 走 SwiftShader 软件光栅，FPS 挂件只有 11–13 ——
-# 那**不是**产品性能指标，视觉脚本的判据也不看 fps。
+# 那**不是**产品性能指标。
 #
-# Golden trace 门禁（票 03）是**行为正确性**校验，不是性能测量：
-# 旧版 `source.html` 的 harness 与新规则层喂同一种子、同一份事件流，
-# 逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
-# 模式 A（两边都修 Bug 1）与模式 B′（两边都保留 Bug 1）必须逐帧完全一致，
-# 任何分叉都让 CI 变红。
+# 无头 Chromium 的帧步长被钳在 50ms（`dt = min(dt, 0.05)`），所以在
+# SwiftShader 下模拟推进只有实时的约 60%。冒烟因此用 **4★** 开局 ——
+# 刷新 ×2.5，血量掉得快，等结算从 46 秒降到 13 秒。
