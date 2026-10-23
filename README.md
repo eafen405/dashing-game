@@ -1,48 +1,187 @@
 # 双轨打怪 (Dual-Rail Monster Slayer)
 
-一款单文件 HTML5 Canvas 动作小游戏：怪物从右侧沿上下两条轨道袭来，进入左侧光门时，在对应的半屏点击出刀。
+一款双轨道点击战斗小游戏：怪物沿上下两条轨道自右侧袭来，一个戴棒球帽、穿红球衣的
+角色在大地上奔跑，在**判定区**内挥棒迎击它们。
 
-**零依赖、零构建** —— 整个游戏就是一个 `source.html`，用浏览器打开即可运行。
+源码是标准的 Vite + React + TypeScript 工程，但**构建产物仍是单个 HTML 文件** ——
+双击 `dist/index.html` 即可离线游玩，不需要服务器、不需要联网。
+
+这次重构把旧版的单文件实现拆成了四层工程；玩家能察觉到的每一处变化
+（修掉的 bug、有意为之的取舍）都记在 [CHANGELOG.md](CHANGELOG.md) 里。
 
 ## 运行
 
-直接用浏览器打开 `source.html`。
+### 玩（发布形态）
 
-- **手机**：仅支持横屏，竖屏会显示旋转提示页；点击屏幕开始。
-- **桌面**：`↑` / `W` 控制上轨，`↓` / `S` 控制下轨，`P` 暂停，`Enter` / `空格` 开始或重开，右上角可切换全屏。
+```bash
+npm install
+npm run build
+```
+
+产物是 `dist/index.html` —— 一个**自包含**的 HTML 文件（JS 与 CSS 全部内联，无任何外部引用）。
+双击用浏览器打开即可离线游玩。
+
+### 开发服务器
+
+```bash
+npm install
+npm run dev
+```
+
+Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新。
+战场由 PixiJS v8 渲染（唯一渲染路径，见[技术架构](#技术架构)）。
+
+### 操作
+
+- **手机**：仅支持横屏，竖屏会显示旋转提示页；点击屏幕开始。**长按不会弹出浏览器的
+  选词 /「标记广告」菜单** —— 舞台上的长按手势被页面接管了（按钮与弹层不受影响），
+  可以放心按住 2 秒贯穿长按怪。
+- **桌面**：`↑` / `W` 控制上轨，`↓` / `S` 控制下轨，`P` 暂停，`Enter` / `空格` 开始或重开，
+  右上角可切换全屏；开始界面上按 `↑` / `W` / `↓` / `S` 也能直接开始。
+
+跨局**最高分**存放在 `localStorage["dualrail_best"]`。
 
 ## 玩法
 
 | 规则 | 说明 |
 | --- | --- |
-| 出刀 | 怪物进入左侧判定框时，点击**上半屏**打下轨，点击**下半屏**打下轨 |
-| 漏怪 | 每次漏掉失去 **20 点血量**，初始 **250** |
-| 失误 | 错过时机或中途松手：连击清零，**不扣血** |
-| 命中 | 外围普攻 **200 分**，命中判定框中心暴击区（约五成宽度）**300 分** |
+| 轨道 | 战场分**上轨**与**下轨**两条通路：**上轨在天空一侧，下轨是大地**；角色默认在下轨的地面上跑，怪物只沿轨道移动 |
+| 出刀 | 怪物进入判定区时，点击**上半屏**打上轨（角色从下轨**起跳**，约 1 秒后受重力落回），点击**下半屏**打下轨（原地抡棒下砸） |
+| 判定区 | 判定框的中心落在**棒尖**够得到的最大水平距离上（木棍加长到 2.55 倍角色半径），不是角色身前 —— 「打中」就是木棍真的敲中了怪 |
+| 普攻 | 出刀击破怪物、但落点不在暴击区内：**200 分** |
+| 暴击 | 出刀击破怪物、且落点位于判定区中央的暴击区（约五成宽度）：**300 分** |
+| 漏怪 | **同轨**漏怪（怪物越过判定区撞上角色）：失去 **20 点血量**，初始 **250**；**另一轨**上擦身而过**不扣血**，但连击 / FEVER 清零 |
+| 失误 | 出刀时机不对或长按未完成：**连击**清零，**不扣血** |
+| 连击 | 连续成功的击破所累积的计数，失误会使其归零 |
 | FEVER | 每累计 **50 连击**触发 FEVER，持续 **10 秒**，期间得分 **×1.5** |
 
 ### 特殊敌人
 
-- **双生**：两只怪物锁链相连，需要同时击破上下轨。成功 **700 分**（两轨都打进暴击区 **1000 分**）；只破一只的话，另一只会自爆并扣 **20 血**。
-- **长按怪**：头部进入判定框时点击起手，按住 **3 秒**贯穿，头部 / 满 1 秒 / 尾部各 **+200** 分。中途松手或切后台中断则连击清零。
+- **双生**：一对锁链相连、分别占据上下两轨的怪物。需要在同一个时间窗（**0.18 秒**）内两轨
+  先后各击中一次（角色会大幅跳起，落下时双砸）：成功 **700 分**（两轨都打进暴击区 **1000 分**）；
+  只破一只的话，另一只会自爆并扣 **20 血**。
+- **长按怪**：一种细长的怪物。头部进入判定区后按住对应半屏**起手**，角色会悬浮在轨道上方
+  连续下砸；持续按住 **2 秒**贯穿，头部 / 按住满 1 秒 / 尾部各 **+200** 分。放弃或按住不足即告失败：
+  **连击**清零、FEVER 中断，**不扣血**。
 
-### 难度
+### 难度星级
 
-- **★☆☆ 1 星** —— 标准节奏
-- **★★☆ 2 星** —— 刷新速度 ×2，移速与最终上限 ×1.5
+难度星级在开局前选择，决定刷新频率与移速倍率。
+
+- **★ 1 星** —— 标准节奏
+- **★★ 2 星** —— 刷新速度 ×2，移速与最终上限 ×1.5
+
+## 开发流程
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm install` | 安装依赖 |
+| `npm run dev` | 启动 Vite 开发服务器（热更新） |
+| `npm run build` | 构建单文件产物 → `dist/index.html` |
+| `npm run preview` | 本地预览构建产物（`http://localhost:4173`） |
+| `npm run verify` | 校验产物：自包含检查 + `file://` 下可运行检查 |
+| `npm test` | 单元测试（Vitest） |
+| `npm run test:watch` | 单元测试 watch 模式 |
+| `npm run test:e2e` | 端到端检查（Playwright 驱动 `file://` 产物）**需先 `npm run build`** |
+| `npm run test:visual` | 特效视觉验收（5 个特效脚本 + 键盘长按怪，产出验收拼图）**需先 `npm run build`** |
+| `npm run trace` | 黄金轨迹保真门禁：旧版 harness × 新规则层逐帧比对 |
+| `npm run typecheck` | TypeScript 类型检查（`tsc --noEmit`） |
+| `npm run lint` | ESLint 检查 |
+| `npm run format` | Prettier 格式化（`prettier --write .`） |
+| `npm run format:check` | Prettier 格式检查（`prettier --check .`） |
+
+`npm run verify` 分两步：先用静态检查确认产物自包含（无外部 `src`/`href`、无裸 `import`），
+再用 Playwright + Chromium 以 `file://` 打开产物，验证画布真的画出了东西、`localStorage`
+可读写、且没有发起任何外部网络请求。产物体积超过 **1,200 KB**（gzip **380 KB**）时
+会打印告警（不阻断构建），提示检查 Pixi / React 是否被整包引入。
+
+`npm run trace` 是**行为正确性**门禁，不是性能测量：旧版 `source.html` 的 harness 与新规则层
+喂同一种子、同一份事件流，逐帧比对快照（离散字段逐位相等，连续字段 1e-9 容差）。
+
+`npm run test:visual` 是**特效视觉验收**门禁（票 20）：6 个脚本定点注入特效并量像素
+（bloom 开/关的亮度与面积、FEVER 判定区描边连续性、冲击波中心、2×2 验收拼图、真实对局并排、
+键盘长按怪）。判据都是**相对 / 结构性**的，不绑机器速度；截图落在 `dist/e2e-shots/`，
+CI 会把它作为 artifact `visual-acceptance-shots` 上传（`dist/` 被 gitignore，不留档就看不见）。
+
+CI 跑的就是这两条**并行**流水线：
+
+- `verify` job：typecheck → lint → test → build → verify → e2e → trace；
+- `visual` job：build → test:visual → 上传验收截图。
+
+视觉验收**独立成一个 job**（票 20）—— 视觉脚本在软件光栅下慢，单独一个 job 才不会挤掉
+`verify` 的 30 分钟预算。两个 job 各有 30 分钟上限，失败即红。
+
+## 技术架构
+
+游戏分四层，边界由接口划定：
+
+```
+React DOM 层   HUD / 菜单 / 结算 / 竖屏提示   低频，订阅 hudStore（脏检查）
+     ▲ 只读快照
+规则层 game/   纯函数 tick(state,dt,rng)，带种子 PRNG，无 DOM 无渲染器    60fps
+     ▲ 事件
+表现层         particles / slashes / rings / floaters / shake，可变      60fps
+     ▲ FrameView
+战场层         BattlefieldRenderer 接口，PixiJS v8 唯一实现                 60fps
+```
+
+- **规则层**（`src/game/`）：血量、分数、连击、FEVER、怪物生命周期与移动、生成与结算。
+  纯函数、状态不可变、随机数来自可注入的带种子 PRNG —— 因此完全可复现、可单测。
+- **表现层**（`src/presentation/`）：粒子、命中特效（火花 / 冲击环）、飘字、屏幕震动。
+  可变对象逐帧原地更新，不进入 React 渲染路径。
+- **战场层**（`src/battlefield/`）：把战斗内容画出来的部分，抽象成 `BattlefieldRenderer` 接口。
+  唯一实现是 PixiJS v8（`src/battlefield/pixi/`），默认带 bloom / 色散 / 冲击波后处理。
+- **React DOM 层**（`src/app/`）：HUD、开始界面、暂停、结算、竖屏提示。
+  只订阅规则层派生出的 HUD 快照，且只在相关数值变化时才通知 —— 不做 60fps 的 React 协调。
+
+### 为什么产物是单文件
+
+`vite-plugin-singlefile` 把打包后的 JS 与 CSS **全部内联**进一个 `dist/index.html`，
+产物没有任何外部引用，双击就能离线玩 —— 这条「发给别人一个文件就能玩」的传播路径
+不能丢。代价是仓库本身不再是「零依赖、零构建」：开发期需要 `npm install` 与一条构建命令。
+这个取舍记在 [ADR-0001](docs/adr/0001-vite-react-build-with-single-file-output.md)。
 
 ## 仓库结构
 
 ```
 .
-├── source.html          # 整个游戏（HTML + CSS + JS 单文件）
-├── README.md
-├── AGENTS.md            # 给编码 agent 的仓库约定
-└── docs/agents/         # issue tracker、triage 标签、领域文档的约定
+├── src/                 # 游戏源码（Vite + React + TypeScript）
+│   ├── app/             # 会话层与 React DOM 界面（HUD / 菜单 / 结算）
+│   ├── game/            # 规则层：纯函数，不碰 DOM 也不碰渲染器
+│   ├── presentation/    # 表现层：粒子 / 命中特效 / 飘字 / 震动
+│   ├── battlefield/     # 战场层：BattlefieldRenderer 接口 + PixiJS v8 实现
+│   ├── input/           # 输入映射：指针 / 键盘 / 屏幕方向
+│   └── styles.css
+├── tests/
+│   ├── e2e/             # Playwright 端到端检查（跑的是构建产物）
+│   └── tooling/         # 工具链自身的约束测试
+├── scripts/             # 产物校验、黄金轨迹门禁、截图对比
+├── docs/adr/            # 架构决策记录
+├── docs/agents/         # issue tracker、triage 标签、领域文档的约定
+├── source.html          # 旧版单文件实现 —— 保真参照物，只读不改
+├── GLOSSARY.md          # 领域词汇
+├── CHANGELOG.md         # 行为差异记账
+└── README.md
 ```
 
-## 开发
+`source.html` 是重构前的单文件实现，定位是**旧版参照物**：
 
-没有构建步骤：改完 `source.html` 刷新页面即可。
+- **只读** —— 绝不改写、也绝不格式化（它在 `.prettierignore` 里）；
+- **不参与构建** —— `dist/index.html` 完全由 `src/` 编译而来，不含它的任何片段；
+- **是黄金轨迹保真门禁的生成源**（`scripts/legacy/patch-legacy.mjs` 现场读它生成旧 harness）
+  与旧版端到端对照的对象（票 10 的裁决：保留，不删）。
 
-Issue 采用本地 markdown 管理（`.scratch/<feature>/`），约定见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)。
+它的初始版本也在 Git 历史里：
+
+```bash
+git show d2958e2:source.html
+```
+
+## 约定文档
+
+- 领域词汇：[GLOSSARY.md](GLOSSARY.md) —— 轨道 / 判定区 / 出刀 / 漏怪 / 失误 / 双生 / 长按怪 …
+- 架构决策：[docs/adr/](docs/adr/) —— 逐条记在 `docs/adr/0001` … `0005`：
+  单文件产物（0001）· PixiJS 渲染（0002）· 规则层 / 表现层分离（0003）·
+  性能以结构保证（0004）· 端到端测试推迟到收口阶段补上（0005）
+- Issue 采用本地 markdown 管理（`.scratch/<feature>/`），约定见
+  [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)

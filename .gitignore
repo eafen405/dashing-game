@@ -34,12 +34,25 @@ out/
 coverage/
 .nyc_output/
 
+# ---- Golden trace 生成物（由 scripts/legacy/patch-legacy.mjs 生成，不入 git）----
+scripts/legacy/legacy-harness-*.html
+traces/
+
 # ---- 本地环境变量 / 密钥（不要提交到公开仓库）----
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+
+# ---- 参考产物（不入库）----
+# 用户给的参考产物：`dashing-game(1).html` 与 `pelican-bicycle.html`。
+# 前者与 `npm run build` 的产物逐字节相同，由构建复现即可，不必入库；
+# 后者是别的项目的页面。两者躺在仓库根会让 `npm run format:check` 变红
+# （Prettier 3 会读 .gitignore），所以在这里挡掉。
+# 注意：`index.html`（Vite 入口）与 `source.html`（旧版参照物）**必须**入库，不在此列。
+/dashing-game(1).html
+/pelican-bicycle.html
 
 # ---- 本地 issue tracker ----
 # 说明：.scratch/ 是本仓库配置的 issue tracker（issue 以 markdown 形式存放），

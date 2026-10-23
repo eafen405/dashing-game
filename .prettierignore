@@ -1,0 +1,13 @@
+# 构建产物与依赖
+dist/
+coverage/
+node_modules/
+package-lock.json
+
+# 保真参照物：source.html 是旧版单文件实现，只读不改，绝不格式化
+source.html
+
+# 文档：手写 Markdown，不交给 Prettier 重排
+*.md
+.scratch/
+docs/
