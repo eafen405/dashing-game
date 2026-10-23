@@ -9,7 +9,8 @@
  * 在**同一浏览器、同一视口、同一界面状态**下的截图。
  *
  * 对比的四个界面状态：
- *   1. 开始界面（标题 / 说明 / 难度星级 / 开始提示）
+ *   1. 开始界面（**新版已改版** —— 规则墙与难度选择搬到了独立屏，不再逐字对齐旧版；
+ *      这里只比**默认选中的难度星级**这个值，详见 `CHANGELOG.md` 的 0.3.0 段）
  *   2. 游戏中的 HUD（血条 / SCORE / COMBO / 暴击普攻 / BEST 的**排列顺序**）
  *   3. 暂停界面
  *   4. 结算界面（GAME OVER / 三个数字 / 历史最高分 / 两个按钮）
@@ -148,18 +149,20 @@ try {
   console.log(`  📷 ${modernStart}`);
   await compose(
     modern,
-    '对比 1 · 开始界面',
+    '对比 1 · 开始界面（新版已改版：规则墙与难度选择搬到了独立屏）',
     legacyStart,
     modernStart,
     join(SHOTS, 'cmp-1-start.png'),
   );
 
-  // 难度星级：两边的默认选中态应当一致（1★）
+  // 难度星级的**默认选中值**仍然一致（1★）。
+  // DOM 结构已经改了（新版开始界面只有一行摘要，难度在独立屏里），
+  // 所以这里比的是**值**，不是选择器 —— 旧版取 chip 的星，新版取摘要的星。
   const legacyActive = await legacy.locator('.diff-btn.active .stars').textContent();
-  const modernActive = await modern.locator('.diff-btn.active .stars').textContent();
+  const modernActive = await modern.locator('#btnDifficulty .home-summary-stars').textContent();
   assert(
     legacyActive === modernActive,
-    `默认选中的难度星级一致（旧「${legacyActive}」/ 新「${modernActive}」）`,
+    `默认选中的难度星级一致（旧「${legacyActive}」/ 新「${modernActive}」)`,
   );
 
   // ── 2. 游戏中的 HUD ─────────────────────────────────────

@@ -9,7 +9,7 @@
  *
  * | 输入 | 期望 |
  * | --- | --- |
- * | 开始界面切「左右」手法 | 不开始游戏，图例变为左/右半屏 |
+ * | 开始界面切「左右」手法 | 不开始游戏，按钮高亮 |
  * | 点左右手法：左半屏 | 上轨出刀（与纵向位置无关） |
  * | 点左右手法：右半屏 | 下轨出刀（与纵向位置无关） |
  * | 点上半屏 | 上轨出刀（`.lane-top.hit`） |
@@ -71,7 +71,6 @@ try {
     )?.includes('active'),
     '点击后切换到左右手法',
   );
-  assert((await page.locator('.legend').textContent())?.includes('左半屏'), '图例同步改成左半屏');
   await shot(page, 'in-0-control-horizontal.png');
 
   // ── 键盘：开始界面按 Enter / Space 开始 ──────────────────
@@ -116,7 +115,6 @@ try {
     ),
     '切回上下手法',
   );
-  assert((await page.locator('.legend').textContent())?.includes('上半屏'), '图例恢复上/下半屏');
   await page.keyboard.press('Space');
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'running', '开始界面按 Space 开始游戏');

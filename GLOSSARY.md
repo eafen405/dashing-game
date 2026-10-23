@@ -27,6 +27,8 @@ _Avoid_: 暴击点, 中心区, 暴击框, critical zone
 
 **难度星级 (Difficulty Star)**:
 开局前选择的难度预设，以星数表示。星级决定刷新频率与移速倍率。
+**星级不是一条单调阶梯** —— 3★ 怪最多但速度不变，4★ 最快但怪比 3★ 少，
+所以界面把「密度」与「移速」画成两条轴给玩家看（见 `docs/adr/0007`）。
 _Avoid_: 难度, 等级, 关卡, level, 难度等级
 
 ## 战斗
@@ -50,6 +52,13 @@ _Avoid_: 双怪, 连体, 对子, pair, twin pair
 **长按怪 (Hold Monster)**:
 一种细长的怪物，击破它需要在其头部进入判定区后按住对应半屏持续一段时间。放弃或按住不足即告失败。
 _Avoid_: 长条怪, 长按敌人, 蓄力怪, hold monster
+
+**灵魂代打 (Soul Proxy)**:
+按住长按怪期间点另一条轨时，**灵魂分身**替本体飞出去出刀、本体留在原地
+继续长按的机制。分身与本体用**同一套判定**（同一个判定区、同一个暴击区），
+所以代打这一下和亲手打没有区别。纯表现层动画 —— 伤害在规则层已经按本体
+判定点结算完了。
+_Avoid_: 灵魂出窍, 灵魂分身（指的是那个动画对象，不是这个机制）, soul out
 
 ## 失败与奖励
 
@@ -80,20 +89,23 @@ _Avoid_: 最好成绩, 最佳纪录, best score, high score
 与规范词不一致。全部为旧版 `source.html` 原文照搬，**不是本次重构引入的**，
 但它们会让人误以为存在第三套叫法，所以记在这里。
 
-| 实际用词 | 应为 | 出现位置 | 是否玩家可见 |
-| --- | --- | --- | --- |
-| 打击点 | 判定区 | 战场标签（`battlefield/pixi/hit-zone.ts`）、开始界面图例（`app/screens/StartScreen.tsx`） | **是** |
-| 判定框 | 判定区 | 开始界面的长按说明（`app/screens/StartScreen.tsx`）、刷怪提示（`game/rules/spawn.ts`） | **是** |
-| 光门 | 判定区 | 开始界面的玩法说明（`app/screens/StartScreen.tsx`） | **是** |
-| 长按敌人 | 长按怪 | 刷怪提示（`game/rules/spawn.ts`） | **是** |
-| 双生敌人 | 双生 | 刷怪提示（`game/rules/spawn.ts`） | **是** |
-| COMBO | 连击 | 连击清零提示（`game/rules/resolve.ts`）、HUD 连击标签（`app/hud/hudStore.ts`） | **是** |
-| 漏掉了 | 漏怪 | 长按怪漏过的惩罚提示（`game/rules/resolve.ts`） | **是** |
-| 判定圈 | 判定区 | 规则层与渲染层的注释 | 否（内部注释） |
-| 出招 | 出刀 | 规则层类型与注释（`ATTACK_DUR`、`attackT`） | 否（内部标识符与注释） |
-| frenzy | FEVER | 内部标识符（`frenzyActive`、`FRENZY_LANE`、`frenzy.ts`） | 否（内部标识符） |
-| player | 角色 | 内部标识符（`playerX`、`playerR`、`player.ts`） | 否（内部标识符） |
-| lane | 轨道 | 内部标识符与类型（`game/types.ts` 的 `Lane`、`game/layout.ts` 的 `laneY`、`game/types.ts` 的 `attackLane` / `playerLane`、`game/rules/spawn.ts` 的 `laneBlocked` / `clearLane`、效果事件 `lane-flash`） | 否（内部标识符） |
+| 实际用词 | 应为 | 出现位置 | 是否玩家可见 | 状态 |
+| --- | --- | --- | --- | --- |
+| 打击点 | 判定区 | 战场标签（`battlefield/pixi/hit-zone.ts`） | **是** | 待清理 |
+| 判定框 | 判定区 | 刷怪提示（`game/rules/spawn.ts`） | **是** | 待清理 |
+| 长按敌人 | 长按怪 | 刷怪提示（`game/rules/spawn.ts`） | **是** | 待清理 |
+| 双生敌人 | 双生 | 刷怪提示（`game/rules/spawn.ts`） | **是** | 待清理 |
+| COMBO | 连击 | 连击清零提示（`game/rules/resolve.ts`）、HUD 连击标签（`app/hud/hudStore.ts`） | **是** | 待清理 |
+| 漏掉了 | 漏怪 | 长按怪漏过的惩罚提示（`game/rules/resolve.ts`） | **是** | 待清理 |
+| 判定圈 | 判定区 | 规则层与渲染层的注释 | 否（内部注释） | 待清理 |
+| 出招 | 出刀 | 规则层类型与注释（`ATTACK_DUR`、`attackT`） | 否（内部标识符与注释） | 待清理 |
+| frenzy | FEVER | 内部标识符（`frenzyActive`、`FRENZY_LANE`、`frenzy.ts`） | 否（内部标识符） | 待清理 |
+| player | 角色 | 内部标识符（`playerX`、`playerR`、`player.ts`） | 否（内部标识符） | 待清理 |
+| lane | 轨道 | 内部标识符与类型（`game/types.ts` 的 `Lane`、`game/layout.ts` 的 `laneY`、`game/types.ts` 的 `attackLane` / `playerLane`、`game/rules/spawn.ts` 的 `laneBlocked` / `clearLane`、效果事件 `lane-flash`） | 否（内部标识符） | 待清理 |
 
-前七条是**玩家可见**的文案偏差，属于待清理项；后五条只出现在内部标识符与注释里，
-不影响玩家，但会污染检索。清理它们会改动产品代码，需另开票处理。
+**已清理的四处**（0.3.0 的界面改造顺带做的）：开始界面那堵规则墙搬进
+「玩法说明」界面（`app/screens/HelpScreen.tsx`）时，里面的
+**打击点 / 光门 / 判定框 → 判定区**、**COMBO → 连击** 一并统一。
+规则层刷怪提示与 HUD 标签上的旧词**没动** —— 那些不在这一版的改动范围里，
+仍需另开票处理；改动它们会碰到 `game/rules/**` 的玩家可见文案，
+而黄金轨迹门禁（`scripts/trace-gate.mjs`）逐帧对照的就是这些效果。

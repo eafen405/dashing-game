@@ -553,17 +553,15 @@ body {
   transform: scale(0.96);
 }
 
-/* 操作手法选择 —— 绝对定位在开始界面右上角，不占纵向排版高度 */
+/* 操作手法选择（主页面） */
 .control-pick {
-  position: absolute;
-  top: 8px;
-  right: 10px;
   display: flex;
   align-items: center;
   gap: 5px;
+  margin: 6px 0 2px;
   padding: 4px 6px;
   border-radius: 12px;
-  background: rgba(5, 8, 16, 0.55);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -574,7 +572,8 @@ body {
 }
 
 .control-btn {
-  padding: 4px 10px;
+  min-height: 32px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.05);
@@ -594,6 +593,217 @@ body {
 
 .control-btn:active {
   transform: scale(0.95);
+}
+
+/* ============ 主页面（开始界面） ============ */
+/*
+ * 开始界面只回答一件事：**这一局打哪一档**。
+ * 难度选择搬到了独立的「难度」界面，规则墙搬到了「玩法说明」界面。
+ */
+.home-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 2px;
+  padding: 12px 20px;
+  min-width: min(78vw, 320px);
+  border-radius: 16px;
+  cursor: pointer;
+  border: 1px solid rgba(79, 209, 255, 0.34);
+  background: linear-gradient(180deg, rgba(79, 209, 255, 0.14), rgba(79, 209, 255, 0.05));
+  color: #eaf8ff;
+  font-family: inherit;
+  font-size: clamp(13px, 2.2vw, 16px);
+}
+
+.home-summary:active {
+  transform: scale(0.97);
+}
+
+.home-summary-k {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+
+.home-summary-stars {
+  font-size: clamp(14px, 2.4vw, 18px);
+  color: #ffd24a;
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.6);
+  letter-spacing: 1px;
+}
+
+.home-summary-name {
+  font-weight: 600;
+}
+
+.home-summary-more {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.home-link {
+  margin: 4px 0 2px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cdd8f0;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.home-link:active {
+  transform: scale(0.96);
+}
+
+/* ============ 难度界面 ============ */
+/*
+ * 4 档**纵排**（旧版是并排 4 个 chip，4 个必然换行成 2×2 顶出横屏手机）。
+ * 每档画两条轴：密度 / 移速 —— 难度星级不是单调阶梯
+ * （3★ 密度最高但最慢，4★ 最快但怪比 3★ 少），两条轴让这件事一眼可见。
+ */
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(86vw, 460px);
+  margin: 10px 0 2px;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cdd8f0;
+  font-family: inherit;
+  text-align: left;
+}
+
+.diff-row:active {
+  transform: scale(0.985);
+}
+
+.diff-row.active {
+  border-color: rgba(79, 209, 255, 0.6);
+  background: linear-gradient(180deg, rgba(79, 209, 255, 0.18), rgba(79, 209, 255, 0.06));
+  color: #eaf8ff;
+  box-shadow: 0 0 16px rgba(79, 209, 255, 0.2);
+}
+
+.diff-stars {
+  font-size: clamp(12px, 1.9vw, 15px);
+  letter-spacing: 1px;
+  color: #8d9ab8;
+  line-height: 1;
+  min-width: 4.6em;
+}
+
+.diff-row.active .diff-stars {
+  color: #ffd24a;
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.7);
+}
+
+.diff-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.diff-name {
+  font-size: clamp(13px, 2.1vw, 15px);
+  font-weight: 600;
+}
+
+.diff-note {
+  font-size: clamp(10px, 1.6vw, 12px);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-axes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: clamp(72px, 22vw, 116px);
+}
+
+.axis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.axis-name {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.axis-bar {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.axis-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  transition: width 0.18s ease-out;
+}
+
+.axis-density {
+  background: linear-gradient(90deg, #4fd1ff, #7ee7ff);
+}
+
+.axis-speed {
+  background: linear-gradient(90deg, #ff8a4f, #ffd24a);
+}
+
+/* 返回键（难度 / 玩法说明界面） */
+.back-button {
+  margin-top: 10px;
+  padding: 9px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cdd8f0;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.back-button:active {
+  transform: scale(0.96);
+}
+
+/* ============ 玩法说明界面 ============ */
+.help-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 18, 34, 0.72);
+  max-width: min(92vw, 720px);
 }
 
 .go-actions {
@@ -637,7 +847,7 @@ body {
   animation: breathe 1.6s ease-in-out infinite;
 }
 
-/* 矮屏（手机横屏）压缩开始界面，保证难度选择与开始提示都在屏内 */
+/* 矮屏（手机横屏）压缩菜单，保证一屏放得下 */
 @media (max-height: 410px) {
   .overlay {
     gap: 2px;
@@ -658,35 +868,58 @@ body {
     font-size: 11px;
     line-height: 1.5;
   }
-  .diff-pick {
-    margin: 8px 0 0;
-    gap: 8px;
-  }
-  .diff-btn {
-    padding: 6px 12px;
-    border-radius: 11px;
-  }
-  .diff-btn .stars {
-    font-size: 13px;
-  }
-  .diff-btn .dname {
-    font-size: 10px;
-  }
   .control-pick {
-    top: 4px;
-    right: 6px;
-    padding: 4px 6px;
+    margin: 2px 0 0;
+    padding: 3px 5px;
     gap: 4px;
   }
   .control-btn {
     min-height: 30px;
-    padding: 5px 10px;
+    padding: 4px 10px;
     font-size: 11px;
   }
   .tap-hint {
     margin-top: 7px;
     font-size: 13px;
     padding: 7px 20px;
+  }
+
+  /* 主页面 */
+  .home-summary {
+    margin: 8px 0 0;
+    padding: 9px 16px;
+  }
+  .home-link {
+    margin: 2px 0 0;
+    padding: 6px 16px;
+    font-size: 12px;
+  }
+
+  /* 难度界面：4 档纵排，每行压扁一点 */
+  .diff-list {
+    gap: 5px;
+    margin: 6px 0 0;
+  }
+  .diff-row {
+    padding: 6px 12px;
+    gap: 10px;
+  }
+  .diff-note {
+    font-size: 10px;
+  }
+  .diff-axes {
+    width: clamp(64px, 20vw, 100px);
+  }
+  .back-button {
+    margin-top: 6px;
+    padding: 7px 18px;
+    font-size: 12px;
+  }
+
+  /* 玩法说明界面：规则墙压到一屏 */
+  .help-card {
+    padding: 10px 16px;
+    gap: 4px;
   }
 }
 

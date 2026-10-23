@@ -30,6 +30,7 @@ import {
   launchBrowser,
   openApp,
   readHud,
+  readMenuRoute,
   readPhase,
   readStoredBest,
   shot,
@@ -75,45 +76,23 @@ try {
     (await page.locator('#startScreen h2').textContent()) === '双轨打怪',
     '标题是「双轨打怪」',
   );
-  assert((await page.locator('.diff-btn').count()) === 4, '难度星级有四个选项');
+  // 开始界面**不再平铺**难度 chip —— 深度来自屏数，不是排布。
   assert(
-    (await page.locator('.diff-btn[data-diff="1"] .stars').textContent()) === '★',
-    '1 星按钮显示一颗星',
+    (await page.locator('#startScreen .diff-btn').count()) === 0,
+    '开始界面没有平铺的难度按钮',
+  );
+  assert((await page.locator('#btnDifficulty').count()) === 1, '开始界面有「难度」入口');
+  assert((await page.locator('#btnHelp').count()) === 1, '开始界面有「玩法说明」入口');
+  assert(
+    (await page.locator('#btnDifficulty .home-summary-stars').textContent()) === '★',
+    '难度摘要显示 1 星',
   );
   assert(
-    (await page.locator('.diff-btn[data-diff="2"] .stars').textContent()) === '★★',
-    '2 星按钮显示两颗星',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="3"] .stars').textContent()) === '★★★',
-    '3 星按钮显示三颗星',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="3"] .dname').textContent())?.includes('刷新 ×3'),
-    '3 星标注刷新 ×3',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="3"] .dname').textContent())?.includes('移速不变'),
-    '3 星标注移速不变',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="4"] .stars').textContent()) === '★★★★',
-    '4 星按钮显示四颗星',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="4"] .dname').textContent())?.includes('刷新 ×2.5'),
-    '4 星标注刷新 ×2.5',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="4"] .dname').textContent())?.includes('移速 ×2'),
-    '4 星标注移速 ×2',
-  );
-  assert(
-    (await page.locator('.diff-btn[data-diff="1"]').getAttribute('class'))?.includes('active'),
-    '默认选中 1 星',
+    (await page.locator('#btnDifficulty .home-summary-name').textContent()) === '标准',
+    '难度摘要显示「标准」',
   );
 
-  // 操作手法选择：默认上下；切到左右只改图例，不开始游戏
+  // 操作手法选择：默认上下；切到左右不开始游戏
   assert(
     (await page.locator('#controlPick .control-btn').count()) === 2,
     '操作手法有两个选项（上下 / 左右）',
@@ -133,31 +112,125 @@ try {
     )?.includes('active'),
     '切到左右手法后按钮高亮',
   );
-  assert(
-    (await page.locator('.legend').textContent())?.includes('左半屏'),
-    '左右手法的图例是左/右半屏',
-  );
   await shot(page, '01b-control-horizontal.png');
+  assert((await readPhase(page)) === 'idle', '当前屏幕是 idle（开始界面）');
+  assert((await readMenuRoute(page)) === 'home', '当前菜单路由是 home');
+  await shot(page, '01-start-screen.png');
+
+  // ── 步骤 1b：玩法说明屏 ───────────────────────────────────
+  console.log('── 步骤 1b：玩法说明屏 ──');
+  await page.locator('#btnHelp').click();
+  await page.waitForTimeout(150);
+  assert((await readMenuRoute(page)) === 'help', '点「玩法说明」进入玩法说明屏');
+  const helpText = (await page.locator('#helpScreen').textContent()) ?? '';
+  assert(helpText.includes('判定区'), '玩法说明用规范词「判定区」');
+  assert(!helpText.includes('打击点'), '玩法说明里没有旧词「打击点」');
+  assert(!helpText.includes('光门'), '玩法说明里没有旧词「光门」');
+  assert(!helpText.includes('判定框'), '玩法说明里没有旧词「判定框」');
+  assert(!helpText.includes('COMBO'), '玩法说明里没有旧词「COMBO」');
+  assert(helpText.includes('连击'), '玩法说明用规范词「连击」');
+  assert(helpText.includes('左半屏'), '左右手法下玩法说明图例同步为左/右半屏');
+  assert(!helpText.includes('上半屏 → 上轨判定区'), '左右手法下不再显示上下图例');
+  await shot(page, '01b-help-screen.png');
+  await page.locator('#btnHelpBack').click();
+  await page.waitForTimeout(150);
+  assert((await readMenuRoute(page)) === 'home', '点「返回」回到主页面');
+
+  // 切回上下手法，后续自动出刀按上下半屏点击
   await page.locator('#controlPick [data-control="vertical"]').click();
   await page.waitForTimeout(120);
   assert(
-    (await page.locator('.legend').textContent())?.includes('上半屏'),
-    '切回上下手法后图例恢复',
+    (await page.locator('#controlPick [data-control="vertical"]').getAttribute('class'))?.includes(
+      'active',
+    ),
+    '切回上下手法',
   );
-  assert((await readPhase(page)) === 'idle', '当前屏幕是 idle（开始界面）');
-  await shot(page, '01-start-screen.png');
 
   // ── 步骤 2：选难度 → 进场 ─────────────────────────────────
   console.log('── 步骤 2：选难度 → 进场 ──');
-  await page.locator('.diff-btn[data-diff="2"]').click();
-  await page.waitForTimeout(120);
-  assert(
-    (await page.locator('.diff-btn[data-diff="2"]').getAttribute('class'))?.includes('active'),
-    '切到 2 星后 2 星按钮高亮',
-  );
-  await shot(page, '02-difficulty-picked.png');
+  await page.locator('#btnDifficulty').click();
+  await page.waitForTimeout(150);
+  assert((await readMenuRoute(page)) === 'difficulty', '点「难度」进入难度屏');
+  assert((await page.locator('#difficultyScreen .diff-row').count()) === 4, '难度屏有四档');
+  // 纵排而不是平铺：四行叠在一起，不是一行四个 chip。
+  const rowsStacked = await page.evaluate(() => {
+    const rows = [...globalThis.document.querySelectorAll('#difficultyScreen .diff-row')];
+    if (rows.length < 2) return false;
+    const top = rows[0].getBoundingClientRect().top;
+    const second = rows[1].getBoundingClientRect().top;
+    return second > top;
+  });
+  assert(rowsStacked, '四档难度是纵排的（不是并排平铺）');
 
-  // 点标题开始（难度选择区带 data-no-strike，点它不会开始游戏 —— 那是旧版的排除列表）
+  assert(
+    (await page.locator('#difficultyScreen .diff-row[data-diff="1"] .diff-stars').textContent()) ===
+      '★',
+    '1 星显示一颗星',
+  );
+  assert(
+    (await page.locator('#difficultyScreen .diff-row[data-diff="2"] .diff-stars').textContent()) ===
+      '★★',
+    '2 星显示两颗星',
+  );
+  assert(
+    (await page.locator('#difficultyScreen .diff-row[data-diff="3"] .diff-stars').textContent()) ===
+      '★★★',
+    '3 星显示三颗星',
+  );
+  assert(
+    (await page.locator('#difficultyScreen .diff-row[data-diff="4"] .diff-stars').textContent()) ===
+      '★★★★',
+    '4 星显示四颗星',
+  );
+
+  // 两条轴：3★ 密度满格但移速不满，4★ 移速满格但密度不满 —— 非单调关系可见。
+  const axes = await page.evaluate(() => {
+    const width = (sel) =>
+      Number(
+        (globalThis.document.querySelector(sel)?.getBoundingClientRect().width ?? 0).toFixed(2),
+      );
+    return {
+      threeDensity: width('#difficultyScreen .diff-row[data-diff="3"] .axis-density'),
+      threeSpeed: width('#difficultyScreen .diff-row[data-diff="3"] .axis-speed'),
+      fourDensity: width('#difficultyScreen .diff-row[data-diff="4"] .axis-density'),
+      fourSpeed: width('#difficultyScreen .diff-row[data-diff="4"] .axis-speed'),
+    };
+  });
+  assert(axes.threeDensity > axes.fourDensity, '3★ 的密度条比 4★ 长（3★ 更密）');
+  assert(axes.fourSpeed > axes.threeSpeed, '4★ 的移速条比 3★ 长（4★ 更快）');
+  assert(axes.threeDensity > axes.threeSpeed, '3★ 是「密而慢」');
+
+  assert(
+    (
+      await page.locator('#difficultyScreen .diff-row[data-diff="1"]').getAttribute('class')
+    )?.includes('active'),
+    '默认选中 1 星',
+  );
+  assert(
+    (
+      await page.locator('#difficultyScreen .diff-row[data-diff="3"] .diff-note').textContent()
+    )?.includes('最密'),
+    '3 星说明它是「最密」',
+  );
+  assert(
+    (
+      await page.locator('#difficultyScreen .diff-row[data-diff="4"] .diff-note').textContent()
+    )?.includes('最快'),
+    '4 星说明它是「最快」',
+  );
+  await shot(page, '02-difficulty-screen.png');
+
+  // 点 2 星 → 选定并回主页面
+  await page.locator('#difficultyScreen .diff-row[data-diff="2"]').click();
+  await page.waitForTimeout(150);
+  assert((await readMenuRoute(page)) === 'home', '选定难度后回主页面');
+  assert(
+    (await page.locator('#btnDifficulty .home-summary-stars').textContent()) === '★★',
+    '主页面摘要更新为 2 星',
+  );
+  await shot(page, '02b-difficulty-picked.png');
+
+  // 点标题开始（难度 / 玩法说明两个入口都带 data-no-strike，点它们不会开始游戏）
   await page.locator('#startScreen h2').click();
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'running', '点击标题后进入 running');
@@ -336,9 +409,16 @@ try {
   );
   await page.locator('#btnDiff').click();
   await page.waitForTimeout(300);
-  assert((await readPhase(page)) === 'idle', '「选择难度」回到开始界面');
-  assert((await page.locator('#startScreen').count()) === 1, '开始界面重新出现');
+  assert((await readPhase(page)) === 'idle', '「选择难度」退出结算');
+  // 「选择难度」现在**直接进难度屏**（旧版是回开始界面重选）。
+  assert((await readMenuRoute(page)) === 'difficulty', '「选择难度」直接进难度屏');
+  assert((await page.locator('#difficultyScreen .diff-row').count()) === 4, '难度屏有四档');
   await shot(page, '12-back-to-home.png');
+
+  // 从难度屏返回主页面
+  await page.locator('#btnDiffBack').click();
+  await page.waitForTimeout(200);
+  assert((await readMenuRoute(page)) === 'home', '难度屏点「返回」回主页面');
 
   // ── 步骤 8：最高分持久化 ─────────────────────────────────
   console.log('── 步骤 8：最高分写入 localStorage 并在下次显示 ──');
@@ -383,10 +463,14 @@ try {
     )?.includes('active'),
     '刷新后仍是左右手法',
   );
+  await page.locator('#btnHelp').click();
+  await page.waitForTimeout(150);
   assert(
-    (await page.locator('.legend').textContent())?.includes('左半屏'),
-    '刷新后图例是左/右半屏',
+    (await page.locator('#helpScreen .legend').textContent())?.includes('左半屏'),
+    '刷新后玩法说明图例是左/右半屏',
   );
+  await page.locator('#btnHelpBack').click();
+  await page.waitForTimeout(150);
   await shot(page, '15-control-mode-persisted.png');
   // 清理，避免影响后续断言
   await page.locator('#controlPick [data-control="vertical"]').click();

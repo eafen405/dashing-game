@@ -76,8 +76,9 @@ try {
   assert((await page.locator('.hud .hp-bar').count()) > 0, 'HUD 在');
 
   console.log('── 2. 点击舞台开始 ──');
-  // 点标题（不是难度选择区 —— 难度区带 `data-no-strike`，点击它不该开始游戏）
-  await page.mouse.click(640, 228);
+  // 点标题（点它会开打；「难度」「玩法说明」两个入口按钮带 data-no-strike，点它们只会切屏）。
+  // 不能点 `.tap-hint` —— 它有 `breathe` 动画，Playwright 的稳定性检查会一直等。
+  await page.locator('#startScreen h2').click();
   await page.waitForTimeout(300);
   assert((await page.locator('.overlay .tap-hint').count()) === 0, '开始界面消失（游戏已开始）');
 
