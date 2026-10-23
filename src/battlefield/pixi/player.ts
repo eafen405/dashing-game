@@ -1,5 +1,5 @@
 /**
- * 角色 —— 一个会走路的棒子人（本地玩法的 Pixi 移植）。
+ * 角色 —— 哲是程序化棒球少年，凛是参考动画逐帧抠像的 2D 立绘。
  *
  * 规则层只记录「角色驻守哪条轨道 / 是否在出招 / 双生下砸动画剩多久」，
  * 这里负责把这些状态翻译成动作：
@@ -11,6 +11,8 @@
  * - **双生击破**：大幅跳起，落到轨道上再狠狠下砸。
  * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打；结束后落回下轨。
  * - **换轨**：长按悬浮时平滑飞过去（腿随视觉时钟摆动）。
+ * - **凛**：程序化身体整体换成 5 帧待机 / 12 帧出招立绘（见 `rin-sprites.ts`），
+ *   长按、双生、灵魂分身共用同一套帧；判定与镰刀长度都不变。
  *
  * 保留旧版角色已有的 FEVER 光环、脚下地面光、生命环与受击红闪。
  * 所有动作都由 `FrameContext` 的只读快照驱动，渲染层不持有规则状态。
@@ -29,6 +31,7 @@
  * │   ├── frontArmGfx
  * │   ├── batRoot       棒子原点（translate + rotate）
  * │   │   └── batGfx
+ * │   ├── spriteRoot    凛的 2D 立绘（与程序化身体互斥）
  * │   └── flashGfx
  * ├── fxGfx        双生冲击环 / 落地尘环（世界坐标，画在身体之后）
  * └── hpGfx        生命环（世界坐标）
@@ -38,7 +41,7 @@
  * ```
  */
 
-import { Container, Graphics, GraphicsPath } from 'pixi.js';
+import { Container, Graphics, GraphicsPath, Sprite, Texture } from 'pixi.js';
 import type { FillGradient } from 'pixi.js';
 import {
   ATTACK_DUR,
@@ -65,6 +68,7 @@ import {
 } from './gfx';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
 import { hexA } from './palette';
+import { loadRinTextureSet } from './rin-sprites';
 
 /** 待机时棒子搭在肩上的角度（弧度；0 = 指向右，负 = 向上）。 */
 const IDLE_CLUB = -0.62;
@@ -137,6 +141,23 @@ const SIDES = [-1, 1] as const;
 /** 镰刀视觉长度（比球棒略长，命中判定不变）。 */
 const SCYTHE_LEN_R = CLUB_LEN_R * 1.18;
 
+/* ------------------------------------------------------------------ *
+ * 凛的 2D 立绘（参考动画逐帧抠像，见 rin-sprites.ts）
+ * ------------------------------------------------------------------ */
+
+/** 纹理里「发顶 → 脚底」的像素高度（0.5 倍裁切后的尺寸）。 */
+const RIN_SPRITE_BODY_PX = 281;
+/** 脚底在纹理里的锚点。 */
+const RIN_SPRITE_ANCHOR_X = 0.559;
+const RIN_SPRITE_ANCHOR_Y = 0.994;
+/** 立绘身体高度（发顶 → 脚底）折算成 playerR，与程序化角色一致。 */
+const RIN_SPRITE_BODY_R = 2.06;
+/** 待机呼吸帧率（走路时略快）。 */
+const RIN_IDLE_FPS = 4;
+const RIN_IDLE_WALK_FPS = 7;
+/** 长按连击时循环的帧：举镰 → 劈下 → 收势。 */
+const RIN_HOLD_FRAMES = [4, 5, 6, 7] as const;
+
 /** 挥棒残影的采样位置。 */
 const GHOST_T = [0.42, 0.64, 0.86] as const;
 /** 残影 alpha（与本地 Canvas 2D 版一致）。 */
@@ -153,7 +174,7 @@ const GLOW_REF_ALPHA = 0.16;
  * 灵魂分身的单帧姿态。
  *
  * `SoulView` 直接复用 `PlayerView` 的全部身体绘制函数 —— 灵魂和本体
- * **同一套画法**（同一条腿 / 躯干 / 帽子 / 棒子），只是整体半透明、
+ * **同一套画法**（哲是程序化身体，凛是立绘），只是整体半透明、
  * 动作由这里的外部参数决定。这样「灵魂长什么样」永远跟着本体走，
  * 不会出现两套逐渐画歪的角色。
  */
@@ -200,6 +221,9 @@ export class PlayerView {
   private readonly frontArmGfx = new Graphics();
   private readonly batRoot = new Container();
   private readonly batGfx = new Graphics();
+  /** 凛的 2D 立绘（程序化身体整体隐藏时使用）。 */
+  private readonly spriteRoot = new Container();
+  private readonly sprite = new Sprite();
   private readonly flashGfx = new Graphics();
   private readonly fxGfx = new Graphics();
   private readonly hpGfx = new Graphics();
@@ -253,6 +277,11 @@ export class PlayerView {
   // ── 动作状态（渲染层内部，只跟视觉有关） ───────────────────
   /** 本帧是否画凛（女性外观 + 镰刀）。 */
   private female = false;
+  /** 凛的立绘纹理（`prepare()` 里一次性建好，之后只换 `texture`）。 */
+  private rinIdleTextures: readonly Texture[] = [];
+  private rinAttackTextures: readonly Texture[] = [];
+  private rinSpritesReady = false;
+  private rinLoadStarted = false;
   /** 本帧视觉时钟（给头发 / 裙摆 / 飘带做次级运动）。 */
   private visT = 0;
   /** 本帧步态强度（0..1）与步频相位。 */
@@ -295,11 +324,17 @@ export class PlayerView {
     this.bodyRoot.addChild(this.frontArmGfx);
     this.bodyRoot.addChild(this.batRoot);
     this.batRoot.addChild(this.batGfx);
+    this.spriteRoot.addChild(this.sprite);
+    this.spriteRoot.visible = false;
+    this.bodyRoot.addChild(this.spriteRoot);
     this.bodyRoot.addChild(this.flashGfx);
   }
 
   prepare(): void {
     if (this.bodyGradient) return;
+    // 凛的 2D 立绘：数据 URL 解码是异步的，加载完成前先退回程序化身体。
+    this.sprite.anchor.set(RIN_SPRITE_ANCHOR_X, RIN_SPRITE_ANCHOR_Y);
+    this.loadRinSpriteTextures();
     // 躯干渐变：斜向（左上 → 右下）。
     this.bodyGradient = linearGradient(
       [
@@ -703,31 +738,50 @@ export class PlayerView {
     this.bodyRoot.rotation = bodyRot;
     this.bodyRoot.scale.set(1 / stretch, stretch);
 
-    // 腿（在躯干后面）。
-    this.drawLegs(s, walkAmp, walkPhase, legTuck);
-    this.drawHairBack(fc, s, jumping || falling);
+    // 凛：整只角色换成动画抠像立绘；程序化身体整体隐藏。
+    const useSprite = this.female && this.rinSpritesReady;
+    this.setSpriteBodyMode(useSprite);
 
-    // 挥棒残影（在身体后面）。
-    this.drawSwingGhosts(s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
+    if (useSprite) {
+      this.drawRinSprite(
+        fc,
+        s,
+        pairP,
+        hold !== null,
+        hold?.holding ?? false,
+        walking,
+        attackActive,
+      );
+      // 立绘自带镰刀与刀光；这里只负责清掉程序化残影，避免出现第二把镰刀。
+      this.drawSwingGhosts(s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
+    } else {
+      // 腿（在躯干后面）。
+      this.drawLegs(s, walkAmp, walkPhase, legTuck);
+      this.drawHairBack(fc, s, jumping || falling);
 
-    const skin = this.female ? SKIN_F : SKIN;
-    const skinDark = this.female ? SKIN_F_DARK : SKIN_DARK;
-    const sleeve = this.female ? TOP_F : JERSEY;
-    const sleeveDark = this.female ? TOP_F_DARK : JERSEY_DARK;
+      // 挥棒残影（在身体后面）。
+      this.drawSwingGhosts(s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
 
-    // 后手（深色）。
-    this.drawArm(this.backArmGfx, s, -s * 0.28, -s * 0.3, gripX, gripY, skinDark, sleeveDark);
+      const skin = this.female ? SKIN_F : SKIN;
+      const skinDark = this.female ? SKIN_F_DARK : SKIN_DARK;
+      const sleeve = this.female ? TOP_F : JERSEY;
+      const sleeveDark = this.female ? TOP_F_DARK : JERSEY_DARK;
 
-    // 躯干 + 头。
-    this.drawTorso(s);
-    this.drawHead(fc, s);
+      // 后手（深色）。
+      this.drawArm(this.backArmGfx, s, -s * 0.28, -s * 0.3, gripX, gripY, skinDark, sleeveDark);
 
-    // 前手 + 棒子。
-    this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, skin, sleeve);
-    this.drawWeapon(s, gripX, gripY, clubA, trail, impact, laneColor);
+      // 躯干 + 头。
+      this.drawTorso(s);
+      this.drawHead(fc, s);
 
-    // 受击红闪。
-    this.drawFlash(fc.playerFlash, s);
+      // 前手 + 棒子。
+      this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, skin, sleeve);
+      this.drawWeapon(s, gripX, gripY, clubA, trail, impact, laneColor);
+    }
+
+    // 受击红闪：立绘模式直接给贴图染色，避免程序化矩形盖在立绘上。
+    if (useSprite) this.drawSpriteFlash(fc.playerFlash);
+    else this.drawFlash(fc.playerFlash, s);
 
     /* ---------- 双生落地的冲击环 / 落地的尘环 ---------- */
     this.fxGfx.clear();
@@ -778,37 +832,161 @@ export class PlayerView {
     this.bodyRoot.rotation = pose.rot;
     this.bodyRoot.scale.set(1, 1);
 
-    // 腿（在躯干后面）。
-    this.drawLegs(s, 0, 0, pose.legTuck);
-    this.drawHairBack(fc, s, pose.legTuck > 0.3);
+    // 凛的分身同样用立绘（半透明由 container.alpha 控制）。
+    const useSprite = this.female && this.rinSpritesReady;
+    this.setSpriteBodyMode(useSprite);
 
-    // 挥棒残影（在身体后面）。
-    this.drawSwingGhosts(
-      s,
-      pivotX,
-      pivotY,
-      gripDist,
-      pose.trailFrom,
-      pose.batA,
-      laneColor,
-      pose.trail,
+    if (useSprite) {
+      this.drawRinSpritePose(s, pose);
+      this.drawSwingGhosts(
+        s,
+        pivotX,
+        pivotY,
+        gripDist,
+        pose.trailFrom,
+        pose.batA,
+        laneColor,
+        pose.trail,
+      );
+    } else {
+      // 腿（在躯干后面）。
+      this.drawLegs(s, 0, 0, pose.legTuck);
+      this.drawHairBack(fc, s, pose.legTuck > 0.3);
+
+      // 挥棒残影（在身体后面）。
+      this.drawSwingGhosts(
+        s,
+        pivotX,
+        pivotY,
+        gripDist,
+        pose.trailFrom,
+        pose.batA,
+        laneColor,
+        pose.trail,
+      );
+
+      const skin = this.female ? SKIN_F : SKIN;
+      const skinDark = this.female ? SKIN_F_DARK : SKIN_DARK;
+      const sleeve = this.female ? TOP_F : JERSEY;
+      const sleeveDark = this.female ? TOP_F_DARK : JERSEY_DARK;
+
+      // 后手（深色）。
+      this.drawArm(this.backArmGfx, s, -s * 0.28, -s * 0.3, gripX, gripY, skinDark, sleeveDark);
+
+      // 躯干 + 头。
+      this.drawTorso(s);
+      this.drawHead(fc, s);
+
+      // 前手 + 棒子。
+      this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, skin, sleeve);
+      this.drawWeapon(s, gripX, gripY, pose.batA, pose.trail, pose.impact, laneColor);
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 凛的 2D 立绘
+   * ------------------------------------------------------------------ */
+
+  /** 异步解码 17 张立绘；失败时保持程序化身体，并在下次 prepare 重试。 */
+  private loadRinSpriteTextures(): void {
+    if (this.rinLoadStarted) return;
+    this.rinLoadStarted = true;
+    loadRinTextureSet().then(
+      (set) => {
+        this.rinIdleTextures = set.idle;
+        this.rinAttackTextures = set.attack;
+        this.rinSpritesReady = true;
+      },
+      () => {
+        this.rinLoadStarted = false;
+      },
     );
+  }
 
-    const skin = this.female ? SKIN_F : SKIN;
-    const skinDark = this.female ? SKIN_F_DARK : SKIN_DARK;
-    const sleeve = this.female ? TOP_F : JERSEY;
-    const sleeveDark = this.female ? TOP_F_DARK : JERSEY_DARK;
+  /** 打开立绘模式时隐藏整套程序化身体；关闭时恢复（哲仍走程序化）。 */
+  private setSpriteBodyMode(on: boolean): void {
+    this.spriteRoot.visible = on;
+    this.legsGfx.visible = !on;
+    this.hairBackGfx.visible = !on;
+    this.backArmGfx.visible = !on;
+    this.torsoGfx.visible = !on;
+    this.frontArmGfx.visible = !on;
+    this.batRoot.visible = !on;
+    // swingGfx 不隐藏，但立绘模式下每帧都会清空；残影节点则统一关掉。
+    if (on) {
+      for (const root of this.ghostRoots) root.visible = false;
+    }
+  }
 
-    // 后手（深色）。
-    this.drawArm(this.backArmGfx, s, -s * 0.28, -s * 0.3, gripX, gripY, skinDark, sleeveDark);
+  /** 立绘的脚底锚点 + 缩放（水平翻转成面朝右）。 */
+  private positionRinSprite(s: number): void {
+    const scale = (RIN_SPRITE_BODY_R * s) / RIN_SPRITE_BODY_PX;
+    this.sprite.position.set(0, s * FEET_OFFSET_R);
+    this.sprite.scale.set(-scale, scale);
+  }
 
-    // 躯干 + 头。
-    this.drawTorso(s);
-    this.drawHead(fc, s);
+  private idleTexture(index: number): Texture {
+    return this.rinIdleTextures[index] ?? this.rinIdleTextures[0] ?? Texture.EMPTY;
+  }
 
-    // 前手 + 棒子。
-    this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, skin, sleeve);
-    this.drawWeapon(s, gripX, gripY, pose.batA, pose.trail, pose.impact, laneColor);
+  private attackTexture(index: number): Texture {
+    return this.rinAttackTextures[index] ?? this.rinAttackTextures[0] ?? Texture.EMPTY;
+  }
+
+  /**
+   * 本体立绘的帧选择：
+   * - 出招：`ATTACK_DUR` 均分 12 帧，第 6 帧（举镰过顶 → 下劈命中）落在动作中段；
+   * - 长按：0.24 秒一循环的「举镰 → 劈下 → 收势」；
+   * - 双生：蓄力举镰 → 下劈 → 收势；
+   * - 待机 / 跑动：5 帧呼吸循环。
+   */
+  private drawRinSprite(
+    fc: FrameContext,
+    s: number,
+    pairP: number,
+    holdActive: boolean,
+    holding: boolean,
+    walking: boolean,
+    attackActive: boolean,
+  ): void {
+    let frame: Texture;
+    if (attackActive) {
+      const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
+      const n = this.rinAttackTextures.length;
+      frame = this.attackTexture(Math.min(n - 1, Math.floor(t * n)));
+    } else if (holdActive) {
+      if (holding) {
+        const h = ((fc.vt + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
+        const k = Math.min(RIN_HOLD_FRAMES.length - 1, Math.floor(h * RIN_HOLD_FRAMES.length));
+        frame = this.attackTexture(RIN_HOLD_FRAMES[k] ?? 4);
+      } else {
+        // 暂停 / 续按宽限：举镰等待。
+        frame = this.attackTexture(2);
+      }
+    } else if (pairP > 0) {
+      if (pairP < 0.16) frame = this.attackTexture(1);
+      else if (pairP < 0.58) frame = this.attackTexture(2);
+      else if (pairP < 0.8) frame = this.attackTexture(pairP < 0.7 ? 5 : 6);
+      else frame = this.attackTexture(7);
+    } else {
+      const n = this.rinIdleTextures.length;
+      const fps = walking ? RIN_IDLE_WALK_FPS : RIN_IDLE_FPS;
+      frame = this.idleTexture(n > 0 ? Math.floor(fc.vt * fps) % n : 0);
+    }
+
+    this.positionRinSprite(s);
+    if (this.sprite.texture !== frame) this.sprite.texture = frame;
+  }
+
+  /** 灵魂分身：飞行时举镰、挥击时取对应的出招帧。 */
+  private drawRinSpritePose(s: number, pose: SoulPose): void {
+    const a = pose.batA;
+    const frame =
+      pose.trail > 0.04 || a < -1.4
+        ? this.attackTexture(a < -1.2 ? 2 : a < 0.4 ? 5 : a < 1.0 ? 6 : 7)
+        : this.idleTexture(0);
+    this.positionRinSprite(s);
+    if (this.sprite.texture !== frame) this.sprite.texture = frame;
   }
 
   destroy(): void {
@@ -2838,8 +3016,16 @@ export class PlayerView {
       return;
     }
 
-    const r = gripDist + s * (this.female ? SCYTHE_LEN_R : CLUB_LEN_R);
+    const L = s * (this.female ? SCYTHE_LEN_R : CLUB_LEN_R);
+    const r = gripDist + L;
     const trailCol = this.female ? RIN_TRAIL : color;
+
+    // 立绘模式：镰刀与刀光都已经画在立绘里，这里不再叠程序化残影。
+    if (this.spriteRoot.visible) {
+      for (const root of this.ghostRoots) root.visible = false;
+      return;
+    }
+
     const outerSweep = to < from;
 
     // 扇形光带：外弧 → 内弧围成的实心拖尾（动画里的速度残像）。
@@ -2889,7 +3075,6 @@ export class PlayerView {
     }
 
     // 三道淡影，越接近当前角度越实。
-    const L = s * (this.female ? SCYTHE_LEN_R : CLUB_LEN_R);
     this.ghostBatPath.clear();
     if (this.female) {
       this.buildScytheBlade(this.ghostBatPath, s, L, 0, 0);
@@ -2921,6 +3106,12 @@ export class PlayerView {
         gfx.stroke();
       }
     }
+  }
+
+  /** 受击红闪（立绘）：给贴图叠一层红色调，不画程序化色块。 */
+  private drawSpriteFlash(flash: number): void {
+    this.flashGfx.clear();
+    this.sprite.tint = flash > 0.02 ? 0xff8f9f : 0xffffff;
   }
 
   /** 受击红闪。 */
