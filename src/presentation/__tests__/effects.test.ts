@@ -90,6 +90,28 @@ describe('效果池 · 产生', () => {
     expect(pool.slashes[0]).toMatchObject({ x: 100, x0: 60, y: 140, lane: 'top', t: 0 });
     expect(pool.rings[0]).toMatchObject({ x: 200, y: 140, r0: 5, r1: 28, color: '#a6ff5e', t: 0 });
   });
+
+  it('灵魂分身按给定几何产生，到期后回收', () => {
+    const pool = new EffectsPool();
+
+    pool.addSoul(10, 20, 30, 40, 0.5, 'top', 'bottom', true, false);
+
+    expect(first(pool.souls)).toMatchObject({
+      x0: 10,
+      y0: 20,
+      x: 30,
+      y: 40,
+      life: 0.5,
+      from: 'top',
+      lane: 'bottom',
+      hit: true,
+      crit: false,
+      t: 0,
+    });
+
+    pool.step(0.6);
+    expect(pool.souls).toHaveLength(0);
+  });
 });
 
 describe('效果池 · 推进', () => {

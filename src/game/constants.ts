@@ -66,10 +66,14 @@ export const SPEED_BASE = 165; // 初始移速 px/s（900 基准宽）
 export const SPEED_MAX = 300; // 移速上限（到达后不再增加）
 export const SPEED_RAMP = 75; // 用多少秒平滑升到上限
 
-// 难度：1 星为当前标准；2 星刷新速度 ×2、移速与最终上限 ×1.5
+// 难度：1 星为当前标准；2 星刷新速度 ×2、移速与最终上限 ×1.5；
+// 3 星刷新速度 ×3、移速不变（只加密度，不加压力）；
+// 4 星刷新速度 ×2.5、移速与最终上限 ×2（速度压力最大）
 export const DIFFS: Record<Difficulty, { spawnMul: number; speedMul: number }> = {
   1: { spawnMul: 1, speedMul: 1 },
   2: { spawnMul: 2, speedMul: 1.5 },
+  3: { spawnMul: 3, speedMul: 1 },
+  4: { spawnMul: 2.5, speedMul: 2 },
 };
 
 export const LANE: Record<Lane, { color: string }> = {

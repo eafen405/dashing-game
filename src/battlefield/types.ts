@@ -33,6 +33,8 @@ export interface Effects {
   readonly slashes: readonly Slash[];
   /** 冲击环（旧 `rings`）。 */
   readonly rings: readonly Ring[];
+  /** 灵魂分身（按住长条怪时点另一条轨）。 */
+  readonly souls: readonly Soul[];
   /** 飘分文字（旧 `floaters`）。 */
   readonly floaters: readonly Floater[];
 }
@@ -133,6 +135,31 @@ export interface Ring {
   color: string;
   /** 环的档位（表现层按批次签名打上，决定粗细与颜色分档）。 */
   tier: RingTier;
+}
+
+/**
+ * 灵魂分身 —— 按住长条怪时点另一条轨，灵魂飞出去代打。
+ *
+ * 纯表现对象：伤害在规则层已经按本体判定点结算完了，
+ * 这里只负责「从角色身上分离 → 飞到落点 → 挥棒 → 消散」的动画。
+ */
+export interface Soul {
+  /** 起点（角色悬浮位置）。 */
+  x0: number;
+  y0: number;
+  /** 落点（本体判定点 `layout.hitX`）。 */
+  x: number;
+  y: number;
+  /** 已存活时间（秒）。 */
+  t: number;
+  /** 总寿命（秒）。 */
+  life: number;
+  from: Lane;
+  lane: Lane;
+  /** 这一击是否命中（未命中时落点不炸开）。 */
+  hit: boolean;
+  /** 是否暴击（金色灵魂）。 */
+  crit: boolean;
 }
 
 /** 一条飘分文字（旧 `addFloater(x, y, text, color)`）。 */

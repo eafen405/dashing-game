@@ -57,6 +57,35 @@ describe('表现层状态 · 效果事件', () => {
     expect(state.effects.floaters[0]?.text).toBe('+700');
   });
 
+  it('soul-strike 事件产生灵魂分身', () => {
+    const state = new PresentationState();
+
+    state.applyEffects([
+      {
+        type: 'soul-strike',
+        from: 'top',
+        lane: 'bottom',
+        x0: 1,
+        y0: 2,
+        x: 3,
+        y: 4,
+        life: 0.44,
+        hit: true,
+        crit: false,
+      },
+    ]);
+
+    expect(state.effects.souls).toHaveLength(1);
+    expect(state.effects.souls[0]).toMatchObject({
+      from: 'top',
+      lane: 'bottom',
+      x: 3,
+      y: 4,
+      hit: true,
+      crit: false,
+    });
+  });
+
   it('粒子事件也受 260 上限约束', () => {
     const state = new PresentationState();
 

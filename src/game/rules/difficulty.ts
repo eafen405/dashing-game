@@ -25,7 +25,7 @@ export function difficultyAt(now: number): number {
 export function spawnInterval(difficulty: number, diffLevel: Difficulty, rng: Rng): number {
   const base = 1.28 - difficulty * 0.045;
   const raw = clamp(base + rng.range(-0.12, 0.16), 0.62, 1.45);
-  // 2 星：刷新频率翻倍（间隔减半）
+  // 星级只改刷新频率：2 星间隔 ÷2，3 星间隔 ÷3
   return raw / DIFFS[diffLevel].spawnMul;
 }
 

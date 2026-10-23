@@ -42,7 +42,7 @@ function emptyFrame(overrides: Partial<FrameView> = {}): FrameView {
     playerLane: 'bottom',
     playerAirT: 0,
     scrollSpeed: 165,
-    effects: { particles: [], slashes: [], rings: [], floaters: [] },
+    effects: { particles: [], slashes: [], rings: [], floaters: [], souls: [] },
     shake: 0,
     playerFlash: 0,
     pairSmash: 0,

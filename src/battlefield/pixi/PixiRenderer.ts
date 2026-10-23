@@ -12,7 +12,7 @@
  *     ├── rails       轨道底光带 / 主线 / 流动刻度
  *     ├── defense     角色身前的防线
  *     ├── entities    判定区 → 角色 → 锁链 → 怪物
- *     ├── glow        判定区光 → FEVER 光环 → 平台光 → FEVER 氛围 → 刀光 → 环 → 粒子
+ *     ├── glow        判定区光 → FEVER 光环 → 平台光 → FEVER 氛围 → 刀光 → 灵魂 → 环 → 粒子
  *     │                 ↑ **bloom 挂在这一层**（票 07）
  *     └── floaters    飘分文字
  * ```
@@ -53,6 +53,7 @@ import { PlayerView } from './player';
 import { RailsView } from './rails';
 import { RingView } from './ring';
 import { SlashView } from './slash';
+import { SoulView } from './soul';
 import { TwinView } from './twin';
 
 /** 图层容器表。 */
@@ -99,7 +100,7 @@ export class PixiRenderer implements BattlefieldRenderer {
    */
   private readonly monsterGfx = new Graphics();
 
-  // ── 12 个 view（每个持有自己的 Graphics / 容器） ──────────────
+  // ── 13 个 view（每个持有自己的 Graphics / 容器） ──────────────
   private readonly background = new BackgroundView();
   private readonly ground = new GroundView();
   private readonly rails = new RailsView();
@@ -110,6 +111,7 @@ export class PixiRenderer implements BattlefieldRenderer {
   private readonly monster = new MonsterView(this.monsterGfx);
   private readonly holdMonster = new HoldMonsterView(this.monsterGfx);
   private readonly slash = new SlashView();
+  private readonly soul = new SoulView();
   private readonly ring = new RingView();
   private readonly particle = new ParticleView();
   private readonly floater = new FloaterView();
@@ -184,6 +186,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     layers.glow.addChild(this.player.haloGfx);
     layers.glow.addChild(this.player.platformGfx);
     layers.glow.addChild(this.slash.container);
+    layers.glow.addChild(this.soul.container);
     layers.glow.addChild(this.ring.container);
     layers.glow.addChild(this.particle.container);
     // FEVER 能量带压在最上面（旧版 `drawFrenzyOverlay` 就是最后画）。
@@ -220,6 +223,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.monster.prepare();
     this.holdMonster.prepare();
     this.slash.prepare();
+    this.soul.prepare();
     this.ring.prepare();
     this.particle.prepare();
     this.floater.prepare();
@@ -269,6 +273,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.monster.destroy();
     this.holdMonster.destroy();
     this.slash.destroy();
+    this.soul.destroy();
     this.ring.destroy();
     this.particle.destroy();
     this.floater.destroy();
@@ -311,6 +316,7 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.twin.draw(this.fc);
     this.drawMonsters();
     this.slash.draw(this.fc);
+    this.soul.draw(this.fc);
     this.ring.draw(this.fc);
     this.particle.draw(this.fc);
     this.floater.draw(this.fc);

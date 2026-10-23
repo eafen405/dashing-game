@@ -183,6 +183,10 @@ export class PresentationState {
             );
           }
           break;
+        case 'soul-strike':
+          // 灵魂分身：按住长条怪时点另一条轨，身体不动，灵魂飞出去代打。
+          this.effects.addSoul(e.x0, e.y0, e.x, e.y, e.life, e.from, e.lane, e.hit, e.crit);
+          break;
         case 'floater':
           this.effects.addFloater(e.x, e.y, e.text, e.color);
           break;

@@ -53,6 +53,8 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         <span style={{ color: '#a6ff5e' }}>
           长按：等头部进判定框时点击起手，按住 {LONG_HOLD_TIME} 秒贯穿，头 / 1s / 尾各 +200。
           <br />
+          按住期间点另一条轨：灵魂出窍代打，本体留在原地继续长按。
+          <br />
           错过时机或中途松手：COMBO 清零，不扣血。
         </span>
       </div>
@@ -75,6 +77,24 @@ export function StartScreen({ diffLevel, onDiffChange }: StartScreenProps): Reac
         >
           <span className="stars">★★</span>
           <span className="dname">2 星 · 刷新 ×2 · 移速 ×1.5</span>
+        </button>
+        <button
+          type="button"
+          className={diffLevel === 3 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="3"
+          onClick={() => onDiffChange(3)}
+        >
+          <span className="stars">★★★</span>
+          <span className="dname">3 星 · 刷新 ×3 · 移速不变</span>
+        </button>
+        <button
+          type="button"
+          className={diffLevel === 4 ? 'diff-btn active' : 'diff-btn'}
+          data-diff="4"
+          onClick={() => onDiffChange(4)}
+        >
+          <span className="stars">★★★★</span>
+          <span className="dname">4 星 · 刷新 ×2.5 · 移速 ×2</span>
         </button>
       </div>
 

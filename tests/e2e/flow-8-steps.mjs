@@ -75,7 +75,7 @@ try {
     (await page.locator('#startScreen h2').textContent()) === '双轨打怪',
     '标题是「双轨打怪」',
   );
-  assert((await page.locator('.diff-btn').count()) === 2, '难度星级有两个选项');
+  assert((await page.locator('.diff-btn').count()) === 4, '难度星级有四个选项');
   assert(
     (await page.locator('.diff-btn[data-diff="1"] .stars').textContent()) === '★',
     '1 星按钮显示一颗星',
@@ -83,6 +83,30 @@ try {
   assert(
     (await page.locator('.diff-btn[data-diff="2"] .stars').textContent()) === '★★',
     '2 星按钮显示两颗星',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="3"] .stars').textContent()) === '★★★',
+    '3 星按钮显示三颗星',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="3"] .dname').textContent())?.includes('刷新 ×3'),
+    '3 星标注刷新 ×3',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="3"] .dname').textContent())?.includes('移速不变'),
+    '3 星标注移速不变',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="4"] .stars').textContent()) === '★★★★',
+    '4 星按钮显示四颗星',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="4"] .dname').textContent())?.includes('刷新 ×2.5'),
+    '4 星标注刷新 ×2.5',
+  );
+  assert(
+    (await page.locator('.diff-btn[data-diff="4"] .dname').textContent())?.includes('移速 ×2'),
+    '4 星标注移速 ×2',
   );
   assert(
     (await page.locator('.diff-btn[data-diff="1"]').getAttribute('class'))?.includes('active'),

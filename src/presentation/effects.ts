@@ -43,6 +43,7 @@ import type {
   RingTier,
   Slash,
   SlashKind,
+  Soul,
 } from '../battlefield/types';
 import type { Lane } from '../game/types';
 
@@ -210,6 +211,26 @@ function createFloater(): Floater {
   return { x: 0, y: 0, text: '', color: '#ffffff', t: 0, life: 0, vy: 0 };
 }
 
+function createSoul(): Soul {
+  return {
+    x0: 0,
+    y0: 0,
+    x: 0,
+    y: 0,
+    t: 0,
+    life: 0,
+    from: 'bottom',
+    lane: 'top',
+    hit: false,
+    crit: false,
+  };
+}
+
+/** 灵魂只推进年龄。 */
+function advanceSoul(s: Soul): boolean {
+  return s.t < s.life;
+}
+
 /** 飘字推进 —— 逐字照抄 `source.html:1447-1450`。 */
 function advanceFloater(f: Floater, dt: number): boolean {
   if (f.t >= f.life) return false;
@@ -221,14 +242,15 @@ function advanceFloater(f: Floater, dt: number): boolean {
 /**
  * 效果池。
  *
- * 渲染层通过 `particles` / `slashes` / `rings` / `floaters` 四个只读数组读画面；
- * 上层（会话层）通过 `burst` / `addSlash` / `addRing` / `addFloater` 产生效果。
+ * 渲染层通过 `particles` / `slashes` / `rings` / `floaters` / `souls` 五个只读数组读画面；
+ * 上层（会话层）通过 `burst` / `addSlash` / `addRing` / `addFloater` / `addSoul` 产生效果。
  */
 export class EffectsPool implements Effects {
   private readonly particlePool = new TimedPool<Particle>(createParticle, advanceParticle);
   private readonly slashPool = new TimedPool<Slash>(createSlash, advanceSlash);
   private readonly ringPool = new TimedPool<Ring>(createRing, advanceRing);
   private readonly floaterPool = new TimedPool<Floater>(createFloater, advanceFloater);
+  private readonly soulPool = new TimedPool<Soul>(createSoul, advanceSoul);
 
   /** 活跃粒子。 */
   get particles(): readonly Particle[] {
@@ -245,6 +267,10 @@ export class EffectsPool implements Effects {
   /** 活跃飘字。 */
   get floaters(): readonly Floater[] {
     return this.floaterPool.items;
+  }
+  /** 活跃灵魂分身。 */
+  get souls(): readonly Soul[] {
+    return this.soulPool.items;
   }
 
   /**
@@ -387,12 +413,38 @@ export class EffectsPool implements Effects {
     f.vy = FLOATER_VY;
   }
 
+  /** 加一个灵魂分身 —— 几何全部由规则层效果事件给出。 */
+  addSoul(
+    x0: number,
+    y0: number,
+    x: number,
+    y: number,
+    life: number,
+    from: Lane,
+    lane: Lane,
+    hit: boolean,
+    crit: boolean,
+  ): void {
+    const s = this.soulPool.take();
+    s.x0 = x0;
+    s.y0 = y0;
+    s.x = x;
+    s.y = y;
+    s.t = 0;
+    s.life = life;
+    s.from = from;
+    s.lane = lane;
+    s.hit = hit;
+    s.crit = crit;
+  }
+
   /** 推进一帧（所有池一起）。 */
   step(dt: number): void {
     this.particlePool.step(dt);
     this.slashPool.step(dt);
     this.ringPool.step(dt);
     this.floaterPool.step(dt);
+    this.soulPool.step(dt);
   }
 
   /** 清空所有效果。 */
@@ -401,5 +453,6 @@ export class EffectsPool implements Effects {
     this.slashPool.clear();
     this.ringPool.clear();
     this.floaterPool.clear();
+    this.soulPool.clear();
   }
 }

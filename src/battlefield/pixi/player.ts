@@ -50,6 +50,7 @@ import {
   MAX_HP,
   TOP_AIR_TIME,
 } from '../../game/constants';
+import type { Lane } from '../../game/types';
 import type { FrameContext } from './context';
 import { destroyGradient, linearGradient, radialGradient } from './gradient';
 import { FEET_OFFSET_R, laneGroundY } from './ground';
@@ -104,6 +105,37 @@ const HALO_REF_PULSE = 0.5;
 const HALO_REF_ALPHA = 0.1 + HALO_REF_PULSE * 0.08;
 /** 脚下地面光渐变的参考 alpha。 */
 const GLOW_REF_ALPHA = 0.16;
+
+/**
+ * 灵魂分身的单帧姿态。
+ *
+ * `SoulView` 直接复用 `PlayerView` 的全部身体绘制函数 —— 灵魂和本体
+ * **同一套画法**（同一条腿 / 躯干 / 帽子 / 棒子），只是整体半透明、
+ * 动作由这里的外部参数决定。这样「灵魂长什么样」永远跟着本体走，
+ * 不会出现两套逐渐画歪的角色。
+ */
+export interface SoulPose {
+  /** 身体中心的世界坐标。 */
+  x: number;
+  /** 身体中心的世界坐标。 */
+  y: number;
+  /** 相对本体的大小（1 = 与本体相同）。 */
+  scale: number;
+  /** 整体透明度（0..1）。 */
+  alpha: number;
+  /** 身体前倾（弧度）。 */
+  rot: number;
+  /** 收腿程度（0 = 站立，1 = 收满）。 */
+  legTuck: number;
+  /** 棒子角度（弧度；0 = 指向右，负 = 向上）。 */
+  batA: number;
+  /** 挥击残影的起始角（与 `batA` 一起决定残影弧）。 */
+  trailFrom: number;
+  /** 残影强度（0..1）。 */
+  trail: number;
+  /** 棒尖击打闪光强度（0..1）。 */
+  impact: number;
+}
 
 export class PlayerView {
   /** 容器（挂到 `entities` 层）。 */
@@ -478,6 +510,68 @@ export class PlayerView {
 
     /* ---------- 生命环 ---------- */
     this.drawHpRing(fc, playerX, bodyY, s);
+  }
+
+  /**
+   * 画「灵魂分身」的一帧 —— 与 `draw()` **共用全部身体部件**：
+   * 腿、挥棒残影、后手 / 躯干 / 头 / 前手 / 棒子都是同一套函数，
+   * 所以灵魂看起来就是本体本人，只是整体半透明（`pose.alpha`）。
+   *
+   * 分身不参与世界层反馈（地面投影 / 尘土 / 生命环 / FEVER 光环 / 受击红闪），
+   * 这些 `Graphics` 每次都清空；动作状态也全部由 `pose` 传入 ——
+   * 这里不读 `fc.playerLane` / `fc.attackT`，不会和本体抢动作。
+   */
+  drawSoulPose(fc: FrameContext, lane: Lane, pose: SoulPose): void {
+    const s = fc.layout.playerR * pose.scale;
+    const laneColor = fc.frenzyActive ? FRENZY_LANE[lane] : LANE[lane].color;
+
+    // 清掉分身不该有的世界层反馈（这些 Graphics 只属于本体）。
+    this.shadowGfx.clear();
+    this.fxGfx.clear();
+    this.hpGfx.clear();
+    this.haloGfx.clear();
+    this.platformGfx.clear();
+    this.flashGfx.clear();
+
+    this.container.alpha = clamp(pose.alpha, 0, 1);
+    this.container.visible = this.container.alpha > 0.01;
+
+    const pivotX = s * CLUB_PIVOT_X_R;
+    const pivotY = -s * 0.26;
+    const gripDist = s * CLUB_GRIP_R;
+    const gripX = pivotX + Math.cos(pose.batA) * gripDist;
+    const gripY = pivotY + Math.sin(pose.batA) * gripDist;
+
+    // 身体变换（与 `draw()` 相同的容器层级）。
+    this.bodyRoot.position.set(pose.x, pose.y);
+    this.bodyRoot.rotation = pose.rot;
+    this.bodyRoot.scale.set(1, 1);
+
+    // 腿（在躯干后面）。
+    this.drawLegs(s, 0, 0, pose.legTuck);
+
+    // 挥棒残影（在身体后面）。
+    this.drawSwingGhosts(
+      s,
+      pivotX,
+      pivotY,
+      gripDist,
+      pose.trailFrom,
+      pose.batA,
+      laneColor,
+      pose.trail,
+    );
+
+    // 后手（深色）。
+    this.drawArm(this.backArmGfx, s, -s * 0.28, -s * 0.3, gripX, gripY, SKIN_DARK, JERSEY_DARK);
+
+    // 躯干 + 头。
+    this.drawTorso(s);
+    this.drawHead(fc, s);
+
+    // 前手 + 棒子。
+    this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, SKIN, JERSEY);
+    this.drawBat(s, gripX, gripY, pose.batA, pose.trail, pose.impact, laneColor);
   }
 
   destroy(): void {

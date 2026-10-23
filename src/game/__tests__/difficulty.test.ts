@@ -20,6 +20,32 @@ describe('刷新节奏', () => {
     expect(two).toBeCloseTo(0.65, 10);
   });
 
+  it('3 星：刷新 ×3，移速与最终上限不变', () => {
+    // 与 1 星同一随机数、同一难度系数 → 间隔只有倍率差别
+    expect(spawnInterval(0, 3, recordingRng([0.5]))).toBeCloseTo(1.3 / 3, 10);
+    expect(spawnInterval(10, 3, recordingRng([0.5]))).toBeCloseTo(0.85 / 3, 10);
+
+    expect(speedNow(0, 3)).toBeCloseTo(165, 10);
+    expect(speedNow(37.5, 3)).toBeCloseTo(232.5, 10);
+    expect(speedNow(75, 3)).toBeCloseTo(300, 10);
+  });
+
+  it('4 星：刷新 ×2.5，移速与最终上限 ×2', () => {
+    expect(spawnInterval(0, 4, recordingRng([0.5]))).toBeCloseTo(1.3 / 2.5, 10);
+    expect(spawnInterval(10, 4, recordingRng([0.5]))).toBeCloseTo(0.85 / 2.5, 10);
+
+    expect(speedNow(0, 4)).toBeCloseTo(330, 10);
+    expect(speedNow(37.5, 4)).toBeCloseTo(465, 10);
+    expect(speedNow(75, 4)).toBeCloseTo(600, 10);
+    expect(speedNow(1000, 4)).toBeCloseTo(600, 10);
+  });
+
+  it('移速倍率严格按 1 星为基准：4 星 = 1 星 ×2', () => {
+    for (const now of [0, 10, 37.5, 75, 200]) {
+      expect(speedNow(now, 4)).toBeCloseTo(speedNow(now, 1) * 2, 10);
+    }
+  });
+
   it('spawnInterval 随难度上升而缩短', () => {
     const early = spawnInterval(0, 1, recordingRng([0.5]));
     const late = spawnInterval(10, 1, recordingRng([0.5]));

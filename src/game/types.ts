@@ -20,8 +20,8 @@ export type Lane = 'top' | 'bottom';
 /** 局面阶段。 */
 export type Phase = 'idle' | 'running' | 'paused' | 'over';
 
-/** 难度星级（1 星标准，2 星更快更密）。 */
-export type Difficulty = 1 | 2;
+/** 难度星级（1 星标准，2 星更快更密，3 星刷新 ×3 但移速不变，4 星刷新 ×2.5、移速 ×2）。 */
+export type Difficulty = 1 | 2 | 3 | 4;
 
 /**
  * 战场几何布局（`source.html:534-577` 的纯函数化结果）。

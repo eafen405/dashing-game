@@ -16,6 +16,7 @@ export const EMPTY_EFFECTS: Effects = {
   slashes: [],
   rings: [],
   floaters: [],
+  souls: [],
 };
 
 /** 一组双生怪的锁链。 */

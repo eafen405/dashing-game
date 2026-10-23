@@ -168,3 +168,121 @@ describe('按下半屏', () => {
     expect(next.hp).toBe(250);
   });
 });
+
+describe('灵魂代打（按住长条怪时点另一条轨）', () => {
+  /** 正在按住上轨的长条怪，下轨来了一只怪。 */
+  function holdingState(bottom: ReturnType<typeof normalMonster>) {
+    return makeState({
+      monsters: [
+        holdMonster({ id: 1, lane: 'top', x: HIT_X - 40, anchored: true, holding: true }),
+        bottom,
+      ],
+      holdMonsterId: 1,
+      holdInputId: 'p1',
+      playerLane: 'top',
+      attackLane: 'top',
+      attackT: 0.44,
+    });
+  }
+
+  it('击杀另一条轨的怪：正常计分 / 连击 / 击杀数', () => {
+    const state = holdingState(normalMonster({ id: 2, lane: 'bottom', x: HIT_X }));
+
+    const { state: next } = pressLane(state, 'bottom', 'p2');
+
+    expect(next.kills).toBe(1);
+    expect(next.combo).toBe(1);
+    expect(next.score).toBe(300); // 暴击区
+    expect(next.monsters.find((m) => m.id === 2)?.removed).toBe(true);
+  });
+
+  it('本体留在长按轨：不改 playerLane / 出招状态，长按不中断', () => {
+    const state = holdingState(normalMonster({ id: 2, lane: 'bottom', x: HIT_X + 40 }));
+
+    const { state: next } = pressLane(state, 'bottom', 'p2');
+
+    expect(next.playerLane).toBe('top');
+    expect(next.attackLane).toBe('top');
+    expect(next.attackT).toBe(0.44);
+    expect(next.holdMonsterId).toBe(1);
+    expect(next.holdInputId).toBe('p1');
+    const held = next.monsters.find((m) => m.id === 1);
+    expect(held?.kind).toBe('hold');
+    if (held?.kind !== 'hold') throw new Error('应当是长按怪');
+    expect(held.anchored).toBe(true);
+    expect(held.holding).toBe(true);
+  });
+
+  it('发出 soul-strike 效果：从长按轨飞向目标轨的打击点', () => {
+    const state = holdingState(normalMonster({ id: 2, lane: 'bottom', x: HIT_X + 40 }));
+
+    const { effects } = pressLane(state, 'bottom', 'p2');
+    const soul = effects.find((e) => e.type === 'soul-strike');
+
+    expect(soul).toBeDefined();
+    if (soul?.type !== 'soul-strike') throw new Error('应当有灵魂效果');
+    expect(soul.from).toBe('top');
+    expect(soul.lane).toBe('bottom');
+    expect(soul.x).toBe(LAYOUT.hitX);
+    expect(soul.y).toBe(LAYOUT.laneY.bottom);
+    expect(soul.hit).toBe(true);
+    expect(soul.crit).toBe(false);
+    // 不再发出本体的刀光
+    expect(effects.some((e) => e.type === 'slash')).toBe(false);
+  });
+
+  it('灵魂判定点与本体一致：判定区内命中、区外空挥且不额外扣血', () => {
+    const inside = holdingState(
+      normalMonster({ id: 2, lane: 'bottom', x: HIT_X + LAYOUT.zoneHalf - 0.01 }),
+    );
+    const outside = holdingState(
+      normalMonster({ id: 2, lane: 'bottom', x: HIT_X + LAYOUT.zoneHalf + 0.01 }),
+    );
+
+    const hit = pressLane(inside, 'bottom', 'p2');
+    const miss = pressLane(outside, 'bottom', 'p2');
+
+    expect(hit.state.kills).toBe(1);
+    expect(miss.state.kills).toBe(0);
+    expect(miss.state.score).toBe(0);
+    expect(miss.state.hp).toBe(state0Hp()); // 空挥不扣血
+    const missSoul = miss.effects.find((e) => e.type === 'soul-strike');
+    if (missSoul?.type !== 'soul-strike') throw new Error('应当有灵魂效果');
+    expect(missSoul.hit).toBe(false);
+  });
+
+  it('暴击区与本体一致：灵魂也能打出暴击', () => {
+    const inside = holdingState(
+      normalMonster({ id: 2, lane: 'bottom', x: HIT_X + LAYOUT.critHalf - 0.01 }),
+    );
+    const outside = holdingState(
+      normalMonster({ id: 2, lane: 'bottom', x: HIT_X + LAYOUT.critHalf + 0.01 }),
+    );
+
+    const crit = pressLane(inside, 'bottom', 'p2');
+    const normal = pressLane(outside, 'bottom', 'p2');
+
+    expect(crit.state.critCount).toBe(1);
+    expect(normal.state.critCount).toBe(0);
+    const soul = crit.effects.find((e) => e.type === 'soul-strike');
+    if (soul?.type !== 'soul-strike') throw new Error('应当有灵魂效果');
+    expect(soul.crit).toBe(true);
+  });
+
+  it('没有长按时点另一条轨仍由本体出刀', () => {
+    const state = makeState({
+      monsters: [normalMonster({ id: 2, lane: 'bottom', x: HIT_X })],
+    });
+
+    const { state: next, effects } = pressLane(state, 'bottom', 'p2');
+
+    expect(next.kills).toBe(1);
+    expect(effects.some((e) => e.type === 'slash')).toBe(true);
+    expect(effects.some((e) => e.type === 'soul-strike')).toBe(false);
+  });
+});
+
+/** 初始血量（空挥不扣血的基准）。 */
+function state0Hp(): number {
+  return makeState().hp;
+}

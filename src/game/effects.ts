@@ -16,6 +16,7 @@ import type { Lane } from './types';
  * - `burst` —— 旧 `burst(x, y, color, n, power)`
  * - `ring` —— 旧 `rings.push({ x, y, t, life, r0, r1, color })`（`t` 是年龄，属表现层）
  * - `slash` —— 旧 `slashes.push({ x, x0, y, t, life, lane })`
+ * - `soul-strike` —— 按住长条怪时点另一条轨：灵魂分身飞出去代打（纯表现）
  * - `floater` —— 旧 `addFloater(x, y, text, color)`
  * - `toast` —— 旧 `showToast(text, color)`
  * - `lane-flash` —— 旧 `laneTop/laneBot.classList.add("hit")`（轨道受击高亮）
@@ -34,6 +35,24 @@ export type Effect =
   | { type: 'burst'; x: number; y: number; color: string; count: number; power: number }
   | { type: 'ring'; x: number; y: number; life: number; r0: number; r1: number; color: string }
   | { type: 'slash'; x: number; x0: number; y: number; life: number; lane: Lane }
+  | {
+      type: 'soul-strike';
+      /** 灵魂从哪条轨（长按怪所在轨）飞出来。 */
+      from: Lane;
+      /** 打向哪条轨。 */
+      lane: Lane;
+      /** 起点：角色悬浮位置。 */
+      x0: number;
+      y0: number;
+      /** 落点：与本体相同的判定点（`layout.hitX`）。 */
+      x: number;
+      y: number;
+      life: number;
+      /** 这一击是否真的打到了怪（决定落点要不要炸开）。 */
+      hit: boolean;
+      /** 是否落在暴击区（决定灵魂的颜色）。 */
+      crit: boolean;
+    }
   | { type: 'floater'; x: number; y: number; text: string; color: string }
   | { type: 'toast'; text: string; color: string }
   | { type: 'lane-flash'; lane: Lane }
