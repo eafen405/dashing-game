@@ -44,6 +44,12 @@ export type KeyAction =
   | { type: 'togglePause' }
   /** 结算界面上的「再来一局」。 */
   | { type: 'restart' }
+  /** 菜单里上下移动（`delta` 为 -1 上 / 1 下）。 */
+  | { type: 'menuMove'; delta: -1 | 1 }
+  /** 菜单里确认（选定当前项）。 */
+  | { type: 'menuConfirm' }
+  /** 菜单里返回上一层。 */
+  | { type: 'menuBack' }
   /** 不做任何事。 */
   | { type: 'none' };
 
@@ -53,6 +59,13 @@ export interface KeyContext {
   isStartScreen: boolean;
   /** 当前是否已结算。 */
   isOver: boolean;
+  /**
+   * 当前是否停在**菜单子屏**（难度 / 玩法说明）。
+   *
+   * 菜单屏上 `↑` / `↓` 不是出刀，而是**在列表里移动** ——
+   * 菜单屏处于规则层的 `idle`，出刀本来就是空操作。
+   */
+  inMenu?: boolean;
 }
 
 /**
@@ -63,8 +76,31 @@ export interface KeyContext {
  *   - `↓` / `S` → 开始界面上是「开始」，否则下轨出刀
  *   - `P` → 暂停 / 恢复切换
  *   - `Enter` / `Space` → 开始界面上是「开始」；结算界面上是「再来一局」
+ *
+ * **菜单子屏（`inMenu`）优先**：那里 `↑` / `↓` 用来在列表里移动，
+ * `Enter` / `Space` 确认，`Esc` / `Backspace` 返回。
  */
 export function mapKeyDown(code: string, ctx: KeyContext): KeyAction {
+  if (ctx.inMenu) {
+    switch (code) {
+      case 'ArrowUp':
+      case 'KeyW':
+        return { type: 'menuMove', delta: -1 };
+      case 'ArrowDown':
+      case 'KeyS':
+        return { type: 'menuMove', delta: 1 };
+      case 'Enter':
+      case 'Space':
+        return { type: 'menuConfirm' };
+      case 'Escape':
+      case 'Backspace':
+        return { type: 'menuBack' };
+      default:
+        // 其余键（`P` 等）落到下面的通用分支 —— 菜单不劫持它们。
+        break;
+    }
+  }
+
   switch (code) {
     case 'ArrowUp':
     case 'KeyW':

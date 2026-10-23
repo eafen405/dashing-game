@@ -21,10 +21,14 @@ import { attachOrientationWatcher, detectLandscape } from '../input/orientation'
 import { attachPointerInput } from '../input/pointer';
 import { GameSession } from './GameSession';
 import { loadBest, saveBest } from './best';
+import { stepDifficulty } from './difficultyMeta';
 import { toggleFullscreen } from './fullscreen';
 import { Hud } from './hud/Hud';
 import { hudStore } from './hud/hudStore';
+import { transition as menuTransition, type MenuAction, type MenuRoute } from './menuRoute';
+import { DifficultyScreen } from './screens/DifficultyScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
+import { HelpScreen } from './screens/HelpScreen';
 import { PauseScreen } from './screens/PauseScreen';
 import { RotatePrompt } from './screens/RotatePrompt';
 import { StartScreen } from './screens/StartScreen';
@@ -85,6 +89,7 @@ export function GameApp({
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const [screen, setScreen] = useState<Phase>('idle');
+  const [route, setRoute] = useState<MenuRoute>('home');
   const [diff, setDiff] = useState<Difficulty>(diffLevel);
   const [landscape, setLandscape] = useState<boolean>(() => detectLandscape(window));
   const [best, setBest] = useState<number>(() => loadBest());
@@ -97,14 +102,66 @@ export function GameApp({
   // 事件回调里要读「当前阶段」与「当前会话」——
   // 用 ref 镜像，避免闭包捕获过期值（也避免把 state 塞进依赖数组）。
   const screenRef = useRef<Phase>('idle');
+  const routeRef = useRef<MenuRoute>('home');
   const sessionRef = useRef<GameSession | null>(null);
   const bestRef = useRef<number>(best);
   const diffRef = useRef<Difficulty>(diff);
   const phaseListenerRef = useRef<((phase: Phase) => void) | undefined>(onPhaseChange);
   const seqRef = useRef(0);
 
+  // 菜单子屏的键盘回调 —— **用 ref 固定**。
+  // 主 effect 的依赖数组是 `[renderer, seed]`，把这两个回调直接写进去
+  // 会让会话每渲染一次就重建一次（回调身份每渲染都变）。
+  const menuMoveRef = useRef<(delta: -1 | 1) => void>(() => undefined);
+  const menuBackRef = useRef<() => void>(() => undefined);
+
   useEffect(() => {
     phaseListenerRef.current = onPhaseChange;
+  });
+
+  // ── 菜单动作 ────────────────────────────────────────────
+  //
+  // 菜单子屏（主页面 / 难度 / 玩法说明）**全部处于规则层的 `idle`** ——
+  // 「屏内怎么走」是界面层自己的事，路由机在 `src/app/menuRoute.ts`
+  // （见 `docs/adr/0006-menu-route-decoupled-from-rules-phase.md`）。
+  const handleDiffChange = (next: Difficulty): void => {
+    diffRef.current = next;
+    setDiff(next);
+    sessionRef.current?.setDifficulty(next);
+  };
+
+  /** 走一步菜单路由；非法转换由 `menuTransition` 静默拒绝（返回原路由）。 */
+  const handleMenu = (action: MenuAction): void => {
+    const next = menuTransition(routeRef.current, action);
+    if (next === routeRef.current) return;
+    routeRef.current = next;
+    setRoute(next);
+  };
+
+  const handleOpenDifficulty = (): void => handleMenu('openDifficulty');
+  const handleOpenHelp = (): void => handleMenu('openHelp');
+  const handleMenuBack = (): void => handleMenu('backHome');
+
+  /** 难度屏上选定一档 —— 选定并回主页面。 */
+  const handlePickDifficulty = (next: Difficulty): void => {
+    handleDiffChange(next);
+    handleMenu('confirmDifficulty');
+  };
+
+  /**
+   * 菜单里上下移动 —— 在难度屏上就是**换一档**。
+   *
+   * 难度即光标：上下移动即改选中档，不另设一个光标状态
+   * （难度本来就是跨局保留的全局选择，改了不影响当前局面）。
+   */
+  const handleMenuMove = (delta: -1 | 1): void => {
+    if (routeRef.current !== 'difficulty') return;
+    handleDiffChange(stepDifficulty(diffRef.current, delta));
+  };
+
+  useEffect(() => {
+    menuMoveRef.current = handleMenuMove;
+    menuBackRef.current = handleMenuBack;
   });
 
   useEffect(() => {
@@ -232,16 +289,21 @@ export function GameApp({
     }
 
     // ── 输入接线 ──────────────────────────────────────────
+    //
+    // 「点击屏幕开始」只在**主页面**成立 —— 难度 / 玩法说明两个子屏上
+    // 点空白处不该直接开打（那会把玩家正在看的内容瞬间掀掉）。
+    const isHomeScreen = (): boolean => screenRef.current === 'idle' && routeRef.current === 'home';
+
     const detachPointer = attachPointerInput({
       stage,
       sink: session,
-      isStartScreen: () => screenRef.current === 'idle',
+      isStartScreen: isHomeScreen,
       onStartFromTap: () => session.start(),
     });
 
     const detachKeyboard = attachKeyboardInput({
       sink: session,
-      isStartScreen: () => screenRef.current === 'idle',
+      isStartScreen: isHomeScreen,
       isOver: () => screenRef.current === 'over',
       onStartFromTap: () => session.start(),
       onTogglePause: () => {
@@ -250,6 +312,10 @@ export function GameApp({
         else if (current === 'paused') session.resume();
       },
       onRestart: () => session.restart(),
+      isInMenu: () => screenRef.current === 'idle' && routeRef.current !== 'home',
+      onMenuMove: (delta) => menuMoveRef.current(delta),
+      onMenuConfirm: () => menuBackRef.current(),
+      onMenuBack: () => menuBackRef.current(),
     });
 
     const detachOrientation = attachOrientationWatcher({
@@ -277,18 +343,22 @@ export function GameApp({
   }, [renderer, seed]);
 
   // ── 界面动作 ────────────────────────────────────────────
-  const handleDiffChange = (next: Difficulty): void => {
-    diffRef.current = next;
-    setDiff(next);
-    sessionRef.current?.setDifficulty(next);
-  };
-
   const handlePause = (): void => sessionRef.current?.pause();
   const handleResume = (): void => sessionRef.current?.resume();
   const handleRestart = (): void => sessionRef.current?.restart();
-  const handleQuitToHome = (): void => sessionRef.current?.quitToHome();
-  const handleChooseDifficulty = (): void => sessionRef.current?.chooseDifficulty();
   const handleToggleFullscreen = (): void => toggleFullscreen();
+
+  /** 暂停界面的「回主页面」—— 回**主页面**（不是难度屏）。 */
+  const handleQuitToHome = (): void => {
+    sessionRef.current?.quitToHome();
+    handleMenu('backHome');
+  };
+
+  /** 结算界面的「选择难度」—— 直接进**难度屏**（旧版是回开始界面重选）。 */
+  const handleChooseDifficulty = (): void => {
+    sessionRef.current?.chooseDifficulty();
+    handleMenu('openDifficulty');
+  };
 
   const showStart = screen === 'idle';
   const showPause = screen === 'paused';
@@ -333,7 +403,23 @@ export function GameApp({
             </div>
           ) : null}
 
-          {showStart ? <StartScreen diffLevel={diff} onDiffChange={handleDiffChange} /> : null}
+          {showStart ? (
+            route === 'difficulty' ? (
+              <DifficultyScreen
+                diffLevel={diff}
+                onPick={handlePickDifficulty}
+                onBack={handleMenuBack}
+              />
+            ) : route === 'help' ? (
+              <HelpScreen onBack={handleMenuBack} />
+            ) : (
+              <StartScreen
+                diffLevel={diff}
+                onOpenDifficulty={handleOpenDifficulty}
+                onOpenHelp={handleOpenHelp}
+              />
+            )
+          ) : null}
           {showPause ? (
             <PauseScreen
               onResume={handleResume}

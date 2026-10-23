@@ -1,0 +1,77 @@
+/**
+ * 菜单子路由 —— 单测。
+ *
+ * 与 `screenMachine.test.ts` 同样的形状：合法转换表 + 非法转换被拒。
+ * 区别在于**这一层管的是屏内导航**（主页面 / 难度 / 玩法说明），
+ * 规则层的 `Phase` 不参与（见 `docs/adr/0006-menu-route-decoupled-from-rules-phase.md`）。
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import { canTransition, transition, type MenuAction, type MenuRoute } from '../menuRoute';
+
+describe('菜单子路由', () => {
+  it('home → difficulty：进难度屏', () => {
+    expect(canTransition('home', 'openDifficulty')).toBe(true);
+    expect(transition('home', 'openDifficulty')).toBe('difficulty');
+  });
+
+  it('home → help：进玩法说明屏', () => {
+    expect(canTransition('home', 'openHelp')).toBe(true);
+    expect(transition('home', 'openHelp')).toBe('help');
+  });
+
+  it('difficulty → home：返回', () => {
+    expect(transition('difficulty', 'backHome')).toBe('home');
+  });
+
+  it('help → home：返回', () => {
+    expect(transition('help', 'backHome')).toBe('home');
+  });
+
+  it('difficulty → home：选定某档后回主页面', () => {
+    expect(canTransition('difficulty', 'confirmDifficulty')).toBe(true);
+    expect(transition('difficulty', 'confirmDifficulty')).toBe('home');
+  });
+
+  describe('非法转换被拒（路由保持不变）', () => {
+    const illegal: readonly (readonly [MenuRoute, MenuAction])[] = [
+      ['home', 'backHome'],
+      ['home', 'confirmDifficulty'],
+      ['difficulty', 'openDifficulty'],
+      ['difficulty', 'openHelp'],
+      ['help', 'openDifficulty'],
+      ['help', 'openHelp'],
+      ['help', 'confirmDifficulty'],
+    ];
+
+    for (const [from, action] of illegal) {
+      it(`${from} --${action}--> 保持 ${from}`, () => {
+        expect(canTransition(from, action)).toBe(false);
+        expect(transition(from, action)).toBe(from);
+      });
+    }
+  });
+
+  it('从任意路由都到不了表外的路由（无隐藏边）', () => {
+    const all: readonly MenuRoute[] = ['home', 'difficulty', 'help'];
+    const actions: readonly MenuAction[] = [
+      'openDifficulty',
+      'openHelp',
+      'backHome',
+      'confirmDifficulty',
+    ];
+    for (const from of all) {
+      for (const action of actions) {
+        const next = transition(from, action);
+        expect(all).toContain(next);
+        if (!canTransition(from, action)) expect(next).toBe(from);
+      }
+    }
+  });
+
+  it('难度屏与玩法说明屏之间不能直接跳（必须回主页面）', () => {
+    expect(transition('difficulty', 'openHelp')).toBe('difficulty');
+    expect(transition('help', 'openDifficulty')).toBe('help');
+  });
+});

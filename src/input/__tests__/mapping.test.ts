@@ -103,6 +103,62 @@ describe('keydown 映射', () => {
   });
 });
 
+describe('菜单子屏的键位', () => {
+  it('↑ / W 在菜单里是「往上移」', () => {
+    for (const code of ['ArrowUp', 'KeyW']) {
+      expect(mapKeyDown(code, { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+        type: 'menuMove',
+        delta: -1,
+      });
+    }
+  });
+
+  it('↓ / S 在菜单里是「往下移」', () => {
+    for (const code of ['ArrowDown', 'KeyS']) {
+      expect(mapKeyDown(code, { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+        type: 'menuMove',
+        delta: 1,
+      });
+    }
+  });
+
+  it('Enter / Space 在菜单里是「确认」', () => {
+    for (const code of ['Enter', 'Space']) {
+      expect(mapKeyDown(code, { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+        type: 'menuConfirm',
+      });
+    }
+  });
+
+  it('Esc / Backspace 在菜单里是「返回」', () => {
+    for (const code of ['Escape', 'Backspace']) {
+      expect(mapKeyDown(code, { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+        type: 'menuBack',
+      });
+    }
+  });
+
+  it('菜单里按 P 仍然是切换暂停（不劫持）', () => {
+    expect(mapKeyDown('KeyP', { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+      type: 'togglePause',
+    });
+  });
+
+  it('菜单里其他键什么也不做', () => {
+    expect(mapKeyDown('KeyQ', { isStartScreen: false, isOver: false, inMenu: true })).toEqual({
+      type: 'none',
+    });
+  });
+
+  it('不在菜单时，↑/↓ 仍然是出刀（菜单键不外溢）', () => {
+    expect(mapKeyDown('ArrowUp', { isStartScreen: false, isOver: false })).toEqual({
+      type: 'press',
+      lane: 'top',
+    });
+    expect(mapKeyDown('Escape', { isStartScreen: false, isOver: false })).toEqual({ type: 'none' });
+  });
+});
+
 describe('keyup 映射', () => {
   it('↑ / W 松开上轨', () => {
     for (const code of ['ArrowUp', 'KeyW']) {

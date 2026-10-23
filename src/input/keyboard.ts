@@ -35,6 +35,14 @@ export interface KeyboardInputOptions {
   onTogglePause: () => void;
   /** 结算界面上的「再来一局」。 */
   onRestart: () => void;
+  /** 当前是否停在菜单子屏（难度 / 玩法说明）。 */
+  isInMenu?: () => boolean;
+  /** 菜单里上下移动。 */
+  onMenuMove?: (delta: -1 | 1) => void;
+  /** 菜单里确认（选定当前项）。 */
+  onMenuConfirm?: () => void;
+  /** 菜单里返回上一层。 */
+  onMenuBack?: () => void;
   /** 事件所在的 window（默认 `window`；测试时注入假实现）。 */
   win?: Window;
 }
@@ -52,9 +60,17 @@ export function attachKeyboardInput(options: KeyboardInputOptions): () => void {
     // 长按不重复触发（旧代码 `if (e.repeat) return;`）
     if (event.repeat) return;
 
+    // 焦点在按钮上时，Enter / Space 的默认行为就是「点这个按钮」——
+    // 交给浏览器，别抢。否则在开始界面上按 Enter 会**同时**
+    // 「开始游戏」和「打开难度界面」（两件事都发生）。
+    const target = event.target as Element | null;
+    const focusOnControl = Boolean(target?.closest('button, a, input, select, textarea'));
+    if (focusOnControl && (event.code === 'Enter' || event.code === 'Space')) return;
+
     const action = mapKeyDown(event.code, {
       isStartScreen: isStartScreen(),
       isOver: isOver(),
+      inMenu: options.isInMenu?.() ?? false,
     });
 
     switch (action.type) {
@@ -69,6 +85,15 @@ export function attachKeyboardInput(options: KeyboardInputOptions): () => void {
         break;
       case 'restart':
         onRestart();
+        break;
+      case 'menuMove':
+        options.onMenuMove?.(action.delta);
+        break;
+      case 'menuConfirm':
+        options.onMenuConfirm?.();
+        break;
+      case 'menuBack':
+        options.onMenuBack?.();
         break;
       case 'none':
         break;
