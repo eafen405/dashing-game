@@ -169,6 +169,25 @@ const RIN_RIDE_HOVER_R = 0.08;
 /** 骑乘帧率（9 帧 ≈ 0.9 秒一个起伏循环）。 */
 const RIN_RIDE_FPS = 10;
 
+/* 燃魂形态（立绘）—— 参考视频：红发梢 / 红黑气息 / 旋镰攻击。 */
+
+/** 燃魂出招把 12 帧压成 8 段：起手 → 横持镰刀旋转 → 命中 → 收势。 */
+const RIN_BURN_ATTACK_FRAMES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+/** 发梢在身体坐标里的位置（单位 playerR；y 向下为正）。 */
+const RIN_BURN_TIP_IDLE = [-1.19, 0.45] as const;
+const RIN_BURN_TIP_IDLE_2 = [-1.12, 0.16] as const;
+/** 出招 / 长按 / 双生：马尾前后甩动，取帧序列的中间位置。 */
+const RIN_BURN_TIP_ATTACK = [-0.72, 0.34] as const;
+const RIN_BURN_TIP_ATTACK_2 = [-0.88, 0.08] as const;
+/** 骑镰飞行时马尾向左后方拉直（主发尾 + 上侧碎发）。 */
+const RIN_BURN_TIP_RIDE = [-1.76, -0.01] as const;
+const RIN_BURN_TIP_RIDE_2 = [-1.61, 0.12] as const;
+/** 发梢红光渐变的参考 alpha（每帧按脉冲换算）。 */
+const BURN_TIP_REF_ALPHA = 0.5;
+/** 立绘燃魂红黑描边（复制一份贴图染色，共享纹理、不额外占显存）。 */
+const RIN_BURN_DARK_TINT = 0x32040f;
+const RIN_BURN_GLOW_TINT = 0xff1b3d;
+
 /** 挥棒残影的采样位置。 */
 const GHOST_T = [0.42, 0.64, 0.86] as const;
 /** 残影 alpha（与本地 Canvas 2D 版一致）。 */
@@ -235,6 +254,13 @@ export class PlayerView {
   /** 凛的 2D 立绘（程序化身体整体隐藏时使用）。 */
   private readonly spriteRoot = new Container();
   private readonly sprite = new Sprite();
+  /** 燃魂：同一张贴图复制两层，暗红打底 + 亮红加法描边（跟着立绘逐帧同步）。 */
+  private readonly burnAuraDark = new Sprite();
+  private readonly burnAuraGlow = new Sprite();
+  /** 燃魂：身体后方的黑红烟气（身体坐标）。 */
+  private readonly burnBackGfx = new Graphics();
+  /** 燃魂：发梢红光 / 火舌 / 镰刃红黑气息（身体坐标）。 */
+  private readonly burnFrontGfx = new Graphics();
   private readonly flashGfx = new Graphics();
   private readonly fxGfx = new Graphics();
   private readonly hpGfx = new Graphics();
@@ -283,6 +309,7 @@ export class PlayerView {
   private irisGradient: FillGradient | null = null;
   private haloGradient: FillGradient | null = null;
   private burnGradient: FillGradient | null = null;
+  private burnTipGradient: FillGradient | null = null;
   private glowGradient: FillGradient | null = null;
 
   // ── 动作状态（渲染层内部，只跟视觉有关） ───────────────────
@@ -336,9 +363,21 @@ export class PlayerView {
     this.bodyRoot.addChild(this.frontArmGfx);
     this.bodyRoot.addChild(this.batRoot);
     this.batRoot.addChild(this.batGfx);
+    // 燃魂：黑色烟气在立绘后方，发梢红光 / 火舌在立绘前方。
+    this.bodyRoot.addChild(this.burnBackGfx);
+    this.burnAuraDark.visible = false;
+    this.burnAuraGlow.visible = false;
+    this.burnAuraDark.tint = RIN_BURN_DARK_TINT;
+    this.burnAuraDark.alpha = 0.5;
+    this.spriteRoot.addChild(this.burnAuraDark);
+    this.burnAuraGlow.tint = RIN_BURN_GLOW_TINT;
+    this.burnAuraGlow.alpha = 0.32;
+    this.burnAuraGlow.blendMode = 'add';
+    this.spriteRoot.addChild(this.burnAuraGlow);
     this.spriteRoot.addChild(this.sprite);
     this.spriteRoot.visible = false;
     this.bodyRoot.addChild(this.spriteRoot);
+    this.bodyRoot.addChild(this.burnFrontGfx);
     this.bodyRoot.addChild(this.flashGfx);
   }
 
@@ -513,12 +552,26 @@ export class PlayerView {
       0,
       0.5,
     );
-    // 燃魂光环：品红 → 紫，外圈透明。
+    // 燃魂光环：暗红 → 黑红，外圈收黑（偏「血雾」而不是粉色霓虹）。
     this.burnGradient = radialGradient(
       [
-        { offset: 0, color: 'rgba(255,122,192,0)' },
-        { offset: 0.55, color: `rgba(255,77,141,${BURN_REF_ALPHA})` },
-        { offset: 1, color: 'rgba(150,60,255,0)' },
+        { offset: 0, color: 'rgba(255,60,80,0)' },
+        { offset: 0.52, color: `rgba(150,6,26,${BURN_REF_ALPHA})` },
+        { offset: 0.84, color: `rgba(66,0,14,${BURN_REF_ALPHA * 0.8})` },
+        { offset: 1, color: 'rgba(24,0,6,0)' },
+      ],
+      0.5,
+      0.5,
+      0,
+      0.5,
+    );
+    // 发梢红光：橙红核心 → 血红 → 暗红收尾（浓到能把灰白发丝染红）。
+    this.burnTipGradient = radialGradient(
+      [
+        { offset: 0, color: 'rgba(255,150,80,0.66)' },
+        { offset: 0.32, color: 'rgba(255,28,56,0.7)' },
+        { offset: 0.7, color: 'rgba(160,0,26,0.42)' },
+        { offset: 1, color: 'rgba(80,0,16,0)' },
       ],
       0.5,
       0.5,
@@ -594,6 +647,19 @@ export class PlayerView {
     // 凛的立绘已就绪时，地面跑动改为「站在镰刀上飞」。
     const useSprite = this.female && this.rinSpritesReady;
     const riding = useSprite && walking;
+    // 燃魂发梢位置：站立 / 出招 / 骑乘三套马尾姿态各不相同。
+    const burnTip =
+      riding || attackActive || hold !== null || pairP > 0
+        ? riding
+          ? RIN_BURN_TIP_RIDE
+          : RIN_BURN_TIP_ATTACK
+        : RIN_BURN_TIP_IDLE;
+    const burnTip2 =
+      riding || attackActive || hold !== null || pairP > 0
+        ? riding
+          ? RIN_BURN_TIP_RIDE_2
+          : RIN_BURN_TIP_ATTACK_2
+        : RIN_BURN_TIP_IDLE_2;
     const laneWalk = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
     const walkAmp = jumping || falling || hold ? 0 : Math.max(laneWalk, walking ? 1 : 0);
     const walkPhase = fc.now * WALK_RATE;
@@ -747,7 +813,7 @@ export class PlayerView {
     const gripY = pivotY + Math.sin(clubA) * gripDist;
 
     /* ---------- FEVER 光环（glow 层） ---------- */
-    this.drawFever(fc, playerX, bodyY, s);
+    this.drawFever(fc, playerX, bodyY, s, attackActive, riding, burnTip, burnTip2);
 
     /* ---------- 身体变换 ---------- */
     const stretch = 1 + squash * 0.05;
@@ -759,15 +825,7 @@ export class PlayerView {
     this.setSpriteBodyMode(useSprite);
 
     if (useSprite) {
-      this.drawRinSprite(
-        fc,
-        s,
-        pairP,
-        hold !== null,
-        hold?.holding ?? false,
-        walking,
-        attackActive,
-      );
+      this.drawRinSprite(fc, s, pairP, hold !== null, hold?.holding ?? false, attackActive, riding);
       // 立绘自带镰刀与刀光；这里只负责清掉程序化残影，避免出现第二把镰刀。
       this.drawSwingGhosts(s, pivotX, pivotY, gripDist, trailFrom, clubA, laneColor, trail);
     } else {
@@ -794,6 +852,9 @@ export class PlayerView {
       this.drawArm(this.frontArmGfx, s, s * 0.1, -s * 0.3, gripX, gripY, skin, sleeve);
       this.drawWeapon(s, gripX, gripY, clubA, trail, impact, laneColor);
     }
+
+    // 燃魂：立绘周身的黑红烟气 / 发梢红光 / 镰刃气息（仅立绘模式）。
+    this.drawBurnBody(fc, s, useSprite, attackActive, burnTip, burnTip2);
 
     // 受击红闪：立绘模式直接给贴图染色，避免程序化矩形盖在立绘上。
     if (useSprite) this.drawSpriteFlash(fc.playerFlash);
@@ -833,6 +894,11 @@ export class PlayerView {
     this.haloGfx.clear();
     this.platformGfx.clear();
     this.flashGfx.clear();
+    // 燃魂特效只属于本体：分身不继承红黑烟气 / 发梢火光。
+    this.burnBackGfx.clear();
+    this.burnFrontGfx.clear();
+    this.burnAuraDark.visible = false;
+    this.burnAuraGlow.visible = false;
 
     this.container.alpha = clamp(pose.alpha, 0, 1);
     this.container.visible = this.container.alpha > 0.01;
@@ -971,6 +1037,8 @@ export class PlayerView {
   /**
    * 本体立绘的帧选择：
    * - 出招：`ATTACK_DUR` 均分 12 帧，第 6 帧（举镰过顶 → 下劈命中）落在动作中段；
+   * - 燃魂出招：改用 8 段「起手 → 横持镰刀旋转 → 命中 → 收势」，
+   *   配合 `drawBurnSpin` 的大回旋刀光，表现旋转镰刀攻击；
    * - 长按：0.24 秒一循环的「举镰 → 劈下 → 收势」；
    * - 双生：蓄力举镰 → 下劈 → 收势；
    * - 跑动：9 帧骑镰飞行循环（刀刃高度起伏）；
@@ -982,17 +1050,22 @@ export class PlayerView {
     pairP: number,
     holdActive: boolean,
     holding: boolean,
-    walking: boolean,
     attackActive: boolean,
+    riding: boolean,
   ): void {
     let frame: Texture;
     // 出招帧原画朝左，需要镜像；待机 / 骑乘不镜像。
     let mirrored = false;
-    const ride = walking && this.rinRideTextures.length > 0;
     if (attackActive) {
       const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
-      const n = this.rinAttackTextures.length;
-      frame = this.attackTexture(Math.min(n - 1, Math.floor(t * n)));
+      if (fc.burning) {
+        const n = RIN_BURN_ATTACK_FRAMES.length;
+        const idx = Math.min(n - 1, Math.floor(t * n));
+        frame = this.attackTexture(RIN_BURN_ATTACK_FRAMES[idx] ?? 1);
+      } else {
+        const n = this.rinAttackTextures.length;
+        frame = this.attackTexture(Math.min(n - 1, Math.floor(t * n)));
+      }
       mirrored = true;
     } else if (holdActive) {
       mirrored = true;
@@ -1010,7 +1083,7 @@ export class PlayerView {
       else if (pairP < 0.58) frame = this.attackTexture(2);
       else if (pairP < 0.8) frame = this.attackTexture(pairP < 0.7 ? 5 : 6);
       else frame = this.attackTexture(7);
-    } else if (ride) {
+    } else if (riding) {
       const n = this.rinRideTextures.length;
       frame = this.rideTexture(Math.floor(fc.vt * RIN_RIDE_FPS) % n);
     } else {
@@ -1018,9 +1091,150 @@ export class PlayerView {
       frame = this.idleTexture(n > 0 ? Math.floor(fc.vt * RIN_IDLE_FPS) % n : 0);
     }
 
-    if (ride) this.positionRideSprite(s);
+    if (riding) this.positionRideSprite(s);
     else this.positionRinSprite(s, mirrored);
     if (this.sprite.texture !== frame) this.sprite.texture = frame;
+    this.syncBurnAura(fc, riding);
+  }
+
+  /**
+   * 燃魂描边：把当前立绘贴图复制成两层（暗红 + 加法亮红），
+   * 跟随本体立绘的锚点 / 位置 / 缩放，形成红黑轮廓光。
+   * 贴图是共享的 —— 只是多两个 `Sprite` 节点，不额外占显存。
+   */
+  private syncBurnAura(fc: FrameContext, riding: boolean): void {
+    const show = fc.burning;
+    this.burnAuraDark.visible = show;
+    this.burnAuraGlow.visible = show;
+    if (!show) return;
+    const tex = this.sprite.texture;
+    if (this.burnAuraDark.texture !== tex) this.burnAuraDark.texture = tex;
+    if (this.burnAuraGlow.texture !== tex) this.burnAuraGlow.texture = tex;
+    const ax = this.sprite.anchor.x;
+    const ay = this.sprite.anchor.y;
+    const px = this.sprite.position.x;
+    const py = this.sprite.position.y;
+    const sx = this.sprite.scale.x;
+    const sy = this.sprite.scale.y;
+    // 骑乘帧的锚点 / 缩放不同，直接照抄即可。
+    this.burnAuraDark.anchor.set(ax, ay);
+    this.burnAuraDark.position.set(px, py);
+    this.burnAuraDark.scale.set(sx * 1.045, sy * 1.045);
+    this.burnAuraGlow.anchor.set(ax, ay);
+    this.burnAuraGlow.position.set(px, py);
+    const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 7);
+    this.burnAuraGlow.scale.set(sx * (1.018 + pulse * 0.012), sy * (1.018 + pulse * 0.012));
+    this.burnAuraGlow.alpha = 0.2 + pulse * 0.16;
+    // 骑乘时整体稍微再亮一点（刀刃贴着地面飞，需要更强的速度感）。
+    if (riding) this.burnAuraGlow.alpha += 0.06;
+  }
+
+  /**
+   * 燃魂的身体层特效：
+   * - `burnBackGfx`：身后的黑红烟气（立绘后方）；
+   * - `burnFrontGfx`：发梢染红 / 亮红发丝（立绘前方，正常混合，让灰白发梢真正「变红」）。
+   * 只画在立绘模式；程序化身体沿用原来的燃魂处理。
+   */
+  private drawBurnBody(
+    fc: FrameContext,
+    s: number,
+    useSprite: boolean,
+    attackActive: boolean,
+    tip: readonly [number, number],
+    tip2: readonly [number, number],
+  ): void {
+    const back = this.burnBackGfx;
+    const front = this.burnFrontGfx;
+    back.clear();
+    front.clear();
+    if (!fc.burning || !useSprite) return;
+    const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 7);
+
+    // 身后的黑红烟气：上窄下宽，缓慢上浮。
+    for (let i = 0; i < 5; i++) {
+      const ph = (fc.vt * 0.9 + i * 0.2) % 1;
+      const bx = (i - 2) * s * 0.3 + Math.sin(fc.vt * 1.7 + i) * s * 0.1;
+      const by = -s * (0.2 + ph * 1.55);
+      const w = s * (0.17 + 0.08 * Math.sin(fc.vt * 2.3 + i));
+      const tip = Math.sin(fc.vt * 3 + i) * s * 0.14;
+      setStroke(back, w, `rgba(44,0,11,${(0.34 * (1 - ph)).toFixed(3)})`, 1, 'round');
+      back.beginPath();
+      back.moveTo(bx, by + s * 0.25);
+      back.quadraticCurveTo(bx + w * 1.5, by + s * 0.02, bx + tip, by - s * 0.32);
+      back.stroke();
+      setStroke(back, w * 0.42, `rgba(168,10,32,${(0.24 * (1 - ph)).toFixed(3)})`, 1, 'round');
+      back.beginPath();
+      back.moveTo(bx, by + s * 0.25);
+      back.quadraticCurveTo(bx + w * 1.5, by + s * 0.02, bx + tip, by - s * 0.32);
+      back.stroke();
+    }
+
+    // 发梢染红：先用几层低透明红把发丝「压」成暗红，再沿发尾走向补几笔
+    // 亮红发丝 —— 只靠一团红光会像浮在头发旁边的灯泡。
+    const glow = 0.8 + pulse * 0.2;
+    this.drawBurnHairDye(front, s * tip[0], s * tip[1], s, 1, glow);
+    this.drawBurnHairDye(front, s * tip2[0], s * tip2[1], s, 0.72, glow);
+
+    // 出招时在刃侧补一抹红黑拖影（旋转刀光的实体层备份，避免只有 glow 层）。
+    if (attackActive) {
+      const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
+      const env = Math.min(1, t * 8) * Math.min(1, (1 - t) * 7);
+      if (env > 0.02) {
+        const spin = -Math.PI * 0.6 + t * Math.PI * 3.4;
+        const a = spin + Math.PI * 0.1;
+        const r = s * 1.4;
+        const bx = Math.cos(a) * r;
+        const by = Math.sin(a) * r;
+        setStroke(front, s * 0.16, `rgba(70,0,14,${(0.2 * env).toFixed(3)})`, 1, 'round');
+        front.beginPath();
+        front.moveTo(bx, by - s * 0.55);
+        front.quadraticCurveTo(bx + s * 0.3, by - s * 0.1, bx, by + s * 0.55);
+        front.stroke();
+      }
+    }
+  }
+
+  /** 发梢染红：低透明红压暗发丝 + 沿发尾补两笔亮红，让末端真正「变红」。 */
+  private drawBurnHairDye(
+    g: Graphics,
+    tipX: number,
+    tipY: number,
+    s: number,
+    k: number,
+    glow: number,
+  ): void {
+    setFill(g, `rgba(168,10,32,${(0.26 * glow).toFixed(3)})`);
+    g.beginPath();
+    g.circle(tipX, tipY, s * 0.46 * k);
+    g.fill();
+    setFill(g, `rgba(226,18,42,${(0.3 * glow).toFixed(3)})`);
+    g.beginPath();
+    g.circle(tipX, tipY, s * 0.3 * k);
+    g.fill();
+    setFill(g, `rgba(255,74,58,${(0.26 * glow).toFixed(3)})`);
+    g.beginPath();
+    g.circle(tipX + s * 0.04 * k, tipY - s * 0.03 * k, s * 0.17 * k);
+    g.fill();
+    // 沿发尾方向压两笔：深红打底 + 橙红高光，让发丝本身变红。
+    for (let i = 0; i < 2; i++) {
+      const lane = (i - 0.5) * 0.09;
+      const sx = tipX + s * 0.36 * k;
+      const sy = tipY + s * (-0.26 + lane) * k;
+      const ex = tipX + s * 0.02 * k;
+      const ey = tipY + s * (0.03 + lane * 0.6) * k;
+      const cx = tipX + s * 0.2 * k;
+      const cy = tipY + s * (-0.12 + lane * 0.4) * k;
+      setStroke(g, s * 0.045 * k, `rgba(180,8,30,${(0.5 * glow).toFixed(3)})`, 1, 'round');
+      g.beginPath();
+      g.moveTo(sx, sy);
+      g.quadraticCurveTo(cx, cy, ex, ey);
+      g.stroke();
+      setStroke(g, s * 0.014 * k, `rgba(255,96,64,${(0.65 * glow).toFixed(3)})`, 1, 'round');
+      g.beginPath();
+      g.moveTo(sx, sy);
+      g.quadraticCurveTo(cx, cy, ex, ey);
+      g.stroke();
+    }
   }
 
   /** 灵魂分身：飞行时举镰、挥击时取对应的出招帧。 */
@@ -1049,6 +1263,7 @@ export class PlayerView {
     destroyGradient(this.irisGradient);
     destroyGradient(this.haloGradient);
     destroyGradient(this.burnGradient);
+    destroyGradient(this.burnTipGradient);
     destroyGradient(this.glowGradient);
     this.bodyGradient = null;
     this.bodyGradientF = null;
@@ -3177,8 +3392,17 @@ export class PlayerView {
    * 世界坐标光效
    * ------------------------------------------------------------------ */
 
-  /** FEVER 光环 / 燃魂光环。 */
-  private drawFever(fc: FrameContext, x: number, y: number, s: number): void {
+  /** FEVER 光环 / 燃魂光环（红黑气息 + 旋转镰刀刀光）。 */
+  private drawFever(
+    fc: FrameContext,
+    x: number,
+    y: number,
+    s: number,
+    attackActive: boolean,
+    riding: boolean,
+    tip: readonly [number, number],
+    tip2: readonly [number, number],
+  ): void {
     const g = this.haloGfx;
     g.clear();
     if (!fc.frenzyActive && !fc.burning) return;
@@ -3187,41 +3411,79 @@ export class PlayerView {
       const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 7);
       const gradient = this.burnGradient;
       if (gradient) {
-        const alpha = (0.16 + pulse * 0.1) / BURN_REF_ALPHA;
+        const alpha = (0.26 + pulse * 0.14) / BURN_REF_ALPHA;
         setFillGradient(g, gradient, alpha);
         g.beginPath();
-        g.circle(x, y, s * (1.9 + pulse * 0.35));
+        g.circle(x, y, s * (2.3 + pulse * 0.4));
         g.fill();
       }
+      // 黑红气旋：彗星状拖尾（尾端收成一点、头部张开），深黑红外焰 +
+      // 暗红内焰，只在头部留一小段亮弧 —— 避免糊成一圈霓虹圆环。
       for (let i = 0; i < 3; i++) {
-        const rr = s * (1.35 + i * 0.3 + pulse * 0.08);
-        const a0 = -fc.vt * (1.8 + i * 0.6) + i * 2.4;
+        const base = s * (1.42 + i * 0.3 + pulse * 0.05);
+        const a1 = fc.vt * (0.9 + i * 0.4) + i * 2.4;
+        const a0 = a1 - Math.PI * (0.56 + i * 0.08);
+        this.buildBurnWispPath(this.swingRibbonPath, x, y, base, a0, a1, s * (0.28 - i * 0.03), 12);
+        setFill(g, `rgba(26,0,7,${(0.48 + pulse * 0.1).toFixed(3)})`);
+        attachPath(g, this.swingRibbonPath);
+        g.fill();
+        this.buildBurnWispPath(
+          this.swingRibbonPath,
+          x,
+          y,
+          base + s * 0.02,
+          a0 + 0.12,
+          a1,
+          s * (0.16 - i * 0.02),
+          12,
+        );
+        setFill(g, `rgba(156,8,30,${(0.3 + pulse * 0.08).toFixed(3)})`);
+        attachPath(g, this.swingRibbonPath);
+        g.fill();
+        // 头部亮弧：只画最后一小段，像被甩亮的刃口。
         this.haloArcPath.clear();
-        arcInto(this.haloArcPath, x, y, rr, a0, a0 + Math.PI * 0.8);
-        setStroke(g, 7, 'rgba(190,80,255,.14)');
-        attachPath(g, this.haloArcPath);
-        g.stroke();
-        setStroke(g, 2, `rgba(255,110,199,${0.4 + pulse * 0.35})`);
+        arcInto(this.haloArcPath, x, y, base + s * 0.02, a1 - 0.42, a1);
+        setStroke(g, s * 0.02, `rgba(255,86,106,${(0.42 + pulse * 0.22).toFixed(3)})`, 1, 'round');
         attachPath(g, this.haloArcPath);
         g.stroke();
       }
-      // 向上飘的火舌。
-      for (let i = 0; i < 4; i++) {
-        const ph = (fc.vt * 1.3 + i * 0.25) % 1;
-        const fx = x + Math.sin(i * 2.3 + fc.vt * 1.7) * s * 0.6;
-        const fy = y - s * (0.7 + ph * 1.1);
+      // 向上飘的红黑火舌（黑烟外焰 + 红焰内芯）。
+      for (let i = 0; i < 6; i++) {
+        const ph = (fc.vt * 1.25 + i * 0.167) % 1;
+        const fx = x + Math.sin(i * 2.1 + fc.vt * 1.6) * s * (0.55 + (i % 3) * 0.16);
+        const fy = y - s * (0.5 + ph * 1.5);
+        const sway = Math.sin(fc.vt * 3.4 + i * 1.7) * s * 0.06;
+        setStroke(g, s * 0.09, `rgba(48,0,10,${(0.4 * (1 - ph)).toFixed(3)})`, 1, 'round');
+        g.beginPath();
+        g.moveTo(fx, fy);
+        g.quadraticCurveTo(fx + sway, fy - s * 0.17, fx + sway * 0.7, fy - s * 0.36);
+        g.stroke();
         setStroke(
           g,
-          2.2,
-          `rgba(255,${120 + i * 20},210,${((1 - ph) * 0.5).toFixed(3)})`,
+          s * 0.03,
+          `rgba(255,${70 + i * 8},${104 + ((i * 17) % 36)},${(0.8 * (1 - ph)).toFixed(3)})`,
           1,
           'round',
         );
         g.beginPath();
         g.moveTo(fx, fy);
-        g.quadraticCurveTo(fx + s * 0.08, fy - s * 0.12, fx - s * 0.02, fy - s * 0.22);
+        g.quadraticCurveTo(fx + sway, fy - s * 0.18, fx + sway * 0.85, fy - s * 0.3);
         g.stroke();
       }
+      // 四周漂浮的余烬。
+      for (let i = 0; i < 5; i++) {
+        const ph = (fc.vt * 1.7 + i * 0.21) % 1;
+        const ex = x + Math.sin(i * 2.7 + fc.vt * 2.3) * s * 0.85;
+        const ey = y - s * (0.2 + ph * 1.6);
+        setFill(g, `rgba(255,${90 + i * 18},70,${((1 - ph) * 0.65).toFixed(3)})`);
+        g.circle(ex, ey, s * (0.012 + 0.012 * (1 - ph)));
+        g.fill();
+      }
+      // 发梢变成红色：红光 + 三条火舌 + 火星。
+      this.drawBurnHairTips(fc, x, y, s, tip, tip2, pulse);
+      // 镰刀上的红黑气息（待机 / 骑乘；出招由大回旋刀光接管）。
+      if (!attackActive) this.drawBurnScytheAura(fc, x, y, s, riding, pulse);
+      if (attackActive) this.drawBurnSpin(fc, x, y, s);
     }
 
     if (fc.frenzyActive) {
@@ -3251,6 +3513,298 @@ export class PlayerView {
     }
   }
 
+  /**
+   * 燃魂气旋的「彗星拖尾」路径：
+   * 尾端收成一点 → 头部沿半径方向张开，形成一头粗一头细的弧形烟带。
+   * 这是为了避开 `arc` + 粗描边带来的「霓虹圆环」观感。
+   */
+  private buildBurnWispPath(
+    path: GraphicsPath,
+    cx: number,
+    cy: number,
+    base: number,
+    a0: number,
+    a1: number,
+    headWidth: number,
+    steps: number,
+  ): void {
+    const rTail = base - headWidth * 0.18;
+    const rHeadOuter = base + headWidth * 0.62;
+    const rHeadInner = base - headWidth * 0.38;
+    path.clear();
+    path.moveTo(cx + Math.cos(a0) * rTail, cy + Math.sin(a0) * rTail);
+    for (let k = 1; k <= steps; k++) {
+      const u = k / steps;
+      const a = a0 + (a1 - a0) * u;
+      const r = rTail + (rHeadOuter - rTail) * u;
+      path.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    for (let k = steps; k >= 0; k--) {
+      const u = k / steps;
+      const a = a0 + (a1 - a0) * u;
+      const r = rTail + (rHeadInner - rTail) * u;
+      path.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    path.closePath();
+  }
+
+  /** 发梢火苗路径：底部圆润、顶端收尖，可整体倾斜。 */
+  private buildBurnFlamePath(
+    path: GraphicsPath,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    lean: number,
+  ): void {
+    path.clear();
+    path.moveTo(x - w * 0.5, y);
+    path.quadraticCurveTo(x - w * 0.42 + lean * 0.25, y - h * 0.52, x + lean, y - h);
+    path.quadraticCurveTo(x + w * 0.46 + lean * 0.25, y - h * 0.5, x + w * 0.5, y);
+    path.quadraticCurveTo(x, y + w * 0.32, x - w * 0.5, y);
+    path.closePath();
+  }
+
+  /** 燃魂：两撮发尾的红光 + 火舌 + 火星（画在 glow 层，吃 bloom）。 */
+  private drawBurnHairTips(
+    fc: FrameContext,
+    x: number,
+    y: number,
+    s: number,
+    tip: readonly [number, number],
+    tip2: readonly [number, number],
+    pulse: number,
+  ): void {
+    this.drawBurnTipCluster(fc, x + s * tip[0], y + s * tip[1], s, 1, pulse);
+    this.drawBurnTipCluster(fc, x + s * tip2[0], y + s * tip2[1], s, 0.72, pulse);
+  }
+
+  /** 单撮发尾的火光（k = 尺寸系数，碎发用小一号）。 */
+  private drawBurnTipCluster(
+    fc: FrameContext,
+    tipX: number,
+    tipY: number,
+    s: number,
+    k: number,
+    pulse: number,
+  ): void {
+    const g = this.haloGfx;
+    const gradient = this.burnTipGradient;
+    if (gradient) {
+      const alpha = (0.16 + pulse * 0.1 + k * 0.05) / BURN_TIP_REF_ALPHA;
+      setFillGradient(g, gradient, alpha);
+      g.beginPath();
+      g.circle(tipX, tipY, s * 0.42 * k);
+      g.fill();
+    }
+    for (let i = 0; i < 3; i++) {
+      const flick = Math.sin(fc.vt * 8.5 + i * 2.2);
+      const ph = (fc.vt * 1.6 + i * 0.37) % 1;
+      // 三簇火苗沿着发尾方向错开，而不是站成一排像火把。
+      const bx = tipX + (i - 1) * s * 0.09 * k;
+      const by = tipY + (i - 1) * s * 0.06 * k + s * (0.04 - ph * 0.08) * k;
+      const big = i === 1 ? 1 : 0.74;
+      const h = s * (0.3 + 0.12 * Math.abs(flick)) * (0.72 + ph * 0.5) * k * big;
+      const w = s * 0.17 * k * big;
+      const lean = s * (0.07 * flick + (i - 1) * 0.045) * k;
+      // 外焰：暗红填充的火苗。
+      this.buildBurnFlamePath(this.swingRibbonPath, bx, by, w, h, lean);
+      setFill(g, 'rgba(222,18,44,.5)');
+      attachPath(g, this.swingRibbonPath);
+      g.fill();
+      // 内焰：橙红芯（别再往黄白跑，保持「红黑」）。
+      this.buildBurnFlamePath(
+        this.swingRibbonPath,
+        bx,
+        by - h * 0.04,
+        w * 0.5,
+        h * 0.7,
+        lean * 0.8,
+      );
+      setFill(g, 'rgba(255,104,70,.8)');
+      attachPath(g, this.swingRibbonPath);
+      g.fill();
+    }
+    // 从发梢飘起来的火星。
+    for (let i = 0; i < 4; i++) {
+      const ph = (fc.vt * 1.8 + i * 0.23) % 1;
+      const ex = tipX + Math.sin(i * 2.7 + fc.vt * 2.4) * s * 0.3 * k;
+      const ey = tipY + s * 0.08 * k - ph * s * 0.55 * k;
+      setFill(g, `rgba(255,${110 + i * 20},80,${((1 - ph) * 0.7).toFixed(3)})`);
+      g.circle(ex, ey, s * (0.018 + 0.012 * (1 - ph)) * k);
+      g.fill();
+    }
+  }
+
+  /** 燃魂：镰刀上的红黑气息 —— 暗弧打底 + 血红内芯 + 刀口火星。 */
+  private drawBurnScytheAura(
+    fc: FrameContext,
+    x: number,
+    y: number,
+    s: number,
+    riding: boolean,
+    pulse: number,
+  ): void {
+    const g = this.haloGfx;
+    if (riding) {
+      // 骑乘时镰刀横在脚下：沿刀刃铺一条红黑气浪。
+      for (let i = 0; i < 2; i++) {
+        const yy = y + s * (0.01 + i * 0.07);
+        const x0 = x - s * (0.8 - i * 0.15);
+        const x1 = x + s * (1.5 + i * 0.12);
+        setStroke(g, s * 0.2, 'rgba(30,0,7,.3)', 1, 'round');
+        g.beginPath();
+        g.moveTo(x0, yy);
+        g.quadraticCurveTo(x + s * 0.4, yy - s * 0.08, x1, yy - s * 0.02);
+        g.stroke();
+        setStroke(g, s * 0.05, 'rgba(190,10,34,.32)', 1, 'round');
+        g.beginPath();
+        g.moveTo(x0, yy);
+        g.quadraticCurveTo(x + s * 0.4, yy - s * 0.08, x1, yy - s * 0.02);
+        g.stroke();
+        setStroke(g, s * 0.014, `rgba(255,90,110,${(0.38 + pulse * 0.26).toFixed(3)})`, 1, 'round');
+        g.beginPath();
+        g.moveTo(x0 + s * 0.2, yy - s * 0.02);
+        g.quadraticCurveTo(x + s * 0.4, yy - s * 0.09, x1, yy - s * 0.03);
+        g.stroke();
+      }
+      // 刀刃上飘起的黑红烟气：镰刀像裹着一层血雾。
+      for (let i = 0; i < 3; i++) {
+        const ph = (fc.vt * 1.15 + i * 0.3) % 1;
+        const fx = x - s * 0.35 + i * s * 0.62;
+        const fy = y + s * 0.02 - ph * s * 0.42;
+        const sway = Math.sin(fc.vt * 2.6 + i * 1.9) * s * 0.05;
+        setStroke(g, s * 0.13, `rgba(24,0,7,${(0.4 * (1 - ph)).toFixed(3)})`, 1, 'round');
+        g.beginPath();
+        g.moveTo(fx, fy + s * 0.1);
+        g.quadraticCurveTo(fx + sway, fy - s * 0.12, fx + sway * 0.8, fy - s * 0.24);
+        g.stroke();
+        setStroke(g, s * 0.034, `rgba(255,44,70,${(0.62 * (1 - ph)).toFixed(3)})`, 1, 'round');
+        g.beginPath();
+        g.moveTo(fx, fy + s * 0.1);
+        g.quadraticCurveTo(fx + sway, fy - s * 0.12, fx + sway * 0.8, fy - s * 0.22);
+        g.stroke();
+      }
+    } else {
+      // 站立：镰刃在身体右上，沿刃口画三道游走的红黑气弧。
+      const bx = x + s * 0.72;
+      const by = y - s * 1.08;
+      for (let i = 0; i < 3; i++) {
+        const a0 = -2.55 + i * 0.42 + Math.sin(fc.vt * 2.4 + i) * 0.12;
+        const rr = s * (0.78 + i * 0.08);
+        this.haloArcPath.clear();
+        arcInto(this.haloArcPath, bx, by, rr, a0, a0 + Math.PI * 0.78);
+        setStroke(g, s * 0.13, 'rgba(30,0,7,.3)', 1, 'round');
+        attachPath(g, this.haloArcPath);
+        g.stroke();
+        setStroke(g, s * 0.042, 'rgba(200,10,36,.32)', 1, 'round');
+        attachPath(g, this.haloArcPath);
+        g.stroke();
+        setStroke(g, s * 0.014, `rgba(255,94,116,${(0.45 + pulse * 0.3).toFixed(3)})`, 1, 'round');
+        attachPath(g, this.haloArcPath);
+        g.stroke();
+      }
+      for (let i = 0; i < 3; i++) {
+        const ph = (fc.vt * 2 + i * 0.33) % 1;
+        const ang = -2.2 + i * 0.7;
+        const ax = bx + Math.cos(ang) * s * 0.88;
+        const ay = by + Math.sin(ang) * s * 0.88 - ph * s * 0.22;
+        setFill(g, `rgba(255,84,104,${((1 - ph) * 0.55).toFixed(3)})`);
+        g.circle(ax, ay, s * 0.015);
+        g.fill();
+      }
+    }
+  }
+
+  /** 燃魂出招：旋转镰刀 —— 三层大回旋刀光 + 前导月牙 + 命中星芒。 */
+  private drawBurnSpin(fc: FrameContext, x: number, y: number, s: number): void {
+    const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
+    // 起手淡入 / 收势淡出。
+    const env = Math.min(1, t * 8) * Math.min(1, (1 - t) * 7);
+    if (env <= 0.02) return;
+    const g = this.haloGfx;
+    const cx = x + s * 0.1;
+    const cy = y - s * 0.08;
+    const spin = -Math.PI * 0.6 + t * Math.PI * 3.4;
+
+    for (let i = 0; i < 3; i++) {
+      const r = s * (1.48 + i * 0.3);
+      const a1 = spin - i * 0.3;
+      const a0 = a1 - Math.PI * (0.85 - i * 0.08);
+      // 彗星状拖尾：尾端收尖，避免三圈粗细一致的「圆环」。
+      this.buildBurnWispPath(this.swingRibbonPath, cx, cy, r, a0, a1, s * (0.3 - i * 0.04), 14);
+      setFill(g, `rgba(26,0,6,${(0.5 * env).toFixed(3)})`);
+      attachPath(g, this.swingRibbonPath);
+      g.fill();
+      this.buildBurnWispPath(
+        this.swingRibbonPath,
+        cx,
+        cy,
+        r + s * 0.02,
+        a0 + 0.16,
+        a1,
+        s * (0.18 - i * 0.03),
+        14,
+      );
+      setFill(g, `rgba(176,8,34,${(0.5 * env).toFixed(3)})`);
+      attachPath(g, this.swingRibbonPath);
+      g.fill();
+      // 前导亮弧。
+      this.haloArcPath.clear();
+      arcInto(this.haloArcPath, cx, cy, r + s * 0.06, a1 - 0.45, a1);
+      setStroke(g, s * 0.035, `rgba(255,96,118,${(0.82 * env).toFixed(3)})`, 1, 'round');
+      attachPath(g, this.haloArcPath);
+      g.stroke();
+    }
+
+    // 前导月牙（实心），像甩出去的镰刃。
+    const ro = s * 2.1;
+    const ri = s * 1.52;
+    const a1 = spin + Math.PI * 0.35;
+    const a0 = a1 - Math.PI * 0.62;
+    this.swingRibbonPath.clear();
+    this.swingRibbonPath.moveTo(cx + Math.cos(a0) * ro, cy + Math.sin(a0) * ro);
+    this.swingRibbonPath.arc(cx, cy, ro, a0, a1);
+    this.swingRibbonPath.lineTo(cx + Math.cos(a1) * ri, cy + Math.sin(a1) * ri);
+    this.swingRibbonPath.arc(cx, cy, ri, a1, a0, true);
+    this.swingRibbonPath.closePath();
+    setFill(g, 'rgba(190,8,38,.36)', env);
+    attachPath(g, this.swingRibbonPath);
+    g.fill();
+    setStroke(g, s * 0.016, `rgba(255,205,214,${(0.55 * env).toFixed(3)})`);
+    attachPath(g, this.swingRibbonPath);
+    g.stroke();
+
+    // 外圈甩出的速度线。
+    for (let i = 0; i < 4; i++) {
+      const a = spin - 0.3 - i * 0.4;
+      const r0 = s * 2.16;
+      const r1 = s * (2.42 + (i % 2) * 0.1);
+      setStroke(g, s * 0.02, `rgba(255,74,102,${(0.5 * env).toFixed(3)})`, 1, 'round');
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.stroke();
+    }
+
+    // 命中瞬间的放射星芒（刃侧）。
+    const hit = clamp((t - 0.4) / 0.12, 0, 1) * clamp((0.74 - t) / 0.16, 0, 1);
+    if (hit > 0.02) {
+      const hx = cx + s * 1.74;
+      const hy = cy - s * 0.18;
+      setFill(g, `rgba(255,40,80,${(0.4 * hit).toFixed(3)})`);
+      this.starPath.clear();
+      starInto(this.starPath, hx, hy, s * (0.5 + 0.5 * hit), s * (0.14 + 0.16 * hit));
+      attachPath(g, this.starPath);
+      g.fill();
+      setFill(g, `rgba(255,245,245,${(0.85 * hit).toFixed(3)})`);
+      this.starPath.clear();
+      starInto(this.starPath, hx, hy, s * (0.22 + 0.3 * hit), s * (0.055 + 0.08 * hit));
+      attachPath(g, this.starPath);
+      g.fill();
+    }
+  }
+
   /** 生命环。 */
   private drawHpRing(fc: FrameContext, x: number, y: number, s: number): void {
     const g = this.hpGfx;
@@ -3264,13 +3818,13 @@ export class PlayerView {
     g.stroke();
 
     const hpCol = fc.burning
-      ? 'rgba(255,77,141,.95)'
+      ? 'rgba(196,16,44,.85)'
       : frac > 0.55
         ? 'rgba(67,224,140,.75)'
         : frac > 0.28
           ? 'rgba(255,182,72,.85)'
           : 'rgba(255,77,109,.95)';
-    setStroke(g, 8, hpCol, 0.3);
+    setStroke(g, 8, hpCol, fc.burning ? 0.14 : 0.3);
     this.hpPath.clear();
     arcInto(this.hpPath, x, y, s * 1.95, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
     attachPath(g, this.hpPath);
