@@ -35,6 +35,7 @@
 import { Application, Container, Graphics, Rectangle } from 'pixi.js';
 import type { Layout, Monster } from '../../game/types';
 import type { BattlefieldRenderer, FrameView, LaneHintMode } from '../types';
+import { AdaptiveResolution, resolutionSteps } from './adaptive-resolution';
 import { BackgroundView } from './background';
 import { FrameContext } from './context';
 import { DefenseLineView } from './defense-line';
@@ -70,6 +71,12 @@ const SHAKE_THRESHOLD = 0.2;
  */
 const NO_BLOOM =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('nobloom');
+/**
+ * 开发期开关：`?fixedres` 锁死 `min(devicePixelRatio, 2)`，关掉自适应分辨率。
+ * 性能采样 / 截图对比时用，正常游戏不锁。
+ */
+const FIXED_RES =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('fixedres');
 
 export class PixiRenderer implements BattlefieldRenderer {
   private app: Application | null = null;
@@ -87,6 +94,11 @@ export class PixiRenderer implements BattlefieldRenderer {
   /** 已应用的画布尺寸（CSS 像素）—— 与 `layout.width/height` 比对，避免重复 resize。 */
   private appliedWidth = 0;
   private appliedHeight = 0;
+
+  /** 自适应渲染分辨率（掉帧时降内部像素密度；`?fixedres` 时为 `null`）。 */
+  private adaptive: AdaptiveResolution | null = null;
+  /** 上一帧渲染开始的时间戳（`performance.now()`；0 = 还没开始）。 */
+  private lastRenderAt = 0;
 
   /** 每帧复用的上下文（零分配）。 */
   private readonly fc = new FrameContext();
@@ -122,6 +134,12 @@ export class PixiRenderer implements BattlefieldRenderer {
   async mount(host: HTMLElement): Promise<void> {
     this.unmount();
 
+    // 内部渲染分辨率：最高 min(devicePixelRatio, 2)，掉帧时由 governor 逐档下调。
+    // 像素填充是这游戏的主要成本（大面积光效），降分辨率比砍效果更不容易伤画面。
+    const baseResolution = Math.min(window.devicePixelRatio || 1, 2);
+    this.adaptive = FIXED_RES ? null : new AdaptiveResolution(resolutionSteps(baseResolution));
+    this.lastRenderAt = 0;
+
     const app = new Application();
     await app.init({
       // **必须显式锁 webgl**：Pixi v8 默认尝试 WebGPU，而 WebGPU 在 `file://`
@@ -132,7 +150,7 @@ export class PixiRenderer implements BattlefieldRenderer {
       // `resize()` 重建渐变之后、下一帧 `draw()` 之前抢先渲染，读到已销毁的纹理。
       autoStart: false,
       autoDensity: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: this.adaptive?.resolution ?? baseResolution,
       // 旧版画布是**透明**的 —— 背景氛围由 DOM 的 `#tint` / `#vignette` 提供
       // （`source.html:127-128`）。不要给一层不透明底色。
       backgroundAlpha: 0,
@@ -246,6 +264,8 @@ export class PixiRenderer implements BattlefieldRenderer {
     this.layout = null;
     this.appliedWidth = 0;
     this.appliedHeight = 0;
+    this.adaptive = null;
+    this.lastRenderAt = 0;
 
     // 滤镜实例在 `mount()` 里造 —— 这里**显式销毁**
     // （`app.destroy` 只销毁场景图，不会销毁挂在容器上的滤镜资源）。
@@ -299,6 +319,13 @@ export class PixiRenderer implements BattlefieldRenderer {
 
     // 画布尺寸没跟上时补一次（`mount` 之后直接 `render` 的情况）。
     this.applySize(layout);
+    // 帧间隔超出预算时，先把内部渲染分辨率降一档（画面清晰度让位于手感）。
+    // 燃魂 / 出招是重负载状态：只许降档，不许在这里试探升档（否则会周期性掉帧）。
+    this.observeFrame(
+      layout,
+      frame.phase === 'running',
+      !frame.burning && frame.attackT <= 0 && frame.pairSmash <= 0,
+    );
 
     this.fillFrameContext(frame, layout);
     this.collectMonsters(frame);
@@ -337,6 +364,33 @@ export class PixiRenderer implements BattlefieldRenderer {
   /** 把表现层的 `ScreenFx` 映射到滤镜参数上（实例不重建，只改参数）。 */
   private applyScreenFx(frame: FrameView): void {
     this.filters?.apply(frame.screenFx, frame.visualTime);
+  }
+
+  /**
+   * 自适应分辨率：按 `render()` 的真实调用间隔统计帧预算。
+   *
+   * **用渲染入口的间隔而不是 `GameSession` 的 dt**：这里量到的就是
+   * 「上一帧画完 → 这一帧开始」的墙钟时间，包含浏览器合成与 vsync，
+   * 与玩家感知的卡顿一致。
+   *
+   * **只在 `running` 相位统计**：菜单 / 暂停 / 结算不消耗操作预算，
+   * 而且启动时的解码尖峰不该把整局画质永久降档。
+   */
+  private observeFrame(layout: Layout, running: boolean, canUpgrade: boolean): void {
+    const now = performance.now();
+    const last = this.lastRenderAt;
+    this.lastRenderAt = now;
+    const adaptive = this.adaptive;
+    if (!adaptive) return;
+    if (!running) {
+      adaptive.resetWindow();
+      return;
+    }
+    if (last === 0) return;
+    const next = adaptive.observe(now - last, canUpgrade);
+    if (next === null) return;
+    // `resize` 的宽高是 CSS 像素；只换分辨率，画布尺寸不变（autoDensity 负责 CSS 尺寸）。
+    this.app?.renderer.resize(layout.width, layout.height, next);
   }
 
   // ── 内部 ──────────────────────────────────────────────────

@@ -166,13 +166,18 @@ const RIN_RIDE_ANCHOR_X = 0.5488;
 const RIN_RIDE_ANCHOR_Y = 0.975;
 /** 镰刀离地悬浮的高度（playerR）—— 让刀刃贴着地面飞。 */
 const RIN_RIDE_HOVER_R = 0.08;
-/** 骑乘帧率（9 帧 ≈ 0.9 秒一个起伏循环）。 */
-const RIN_RIDE_FPS = 10;
+/** 骑乘帧率（9 帧 = 0.75 秒一个起伏循环；12fps 能被 60Hz 整除，步进最均匀）。 */
+const RIN_RIDE_FPS = 12;
 
 /* 燃魂形态（立绘）—— 参考视频：红发梢 / 红黑气息 / 旋镰攻击。 */
 
-/** 燃魂出招把 12 帧压成 8 段：起手 → 横持镰刀旋转 → 命中 → 收势。 */
-const RIN_BURN_ATTACK_FRAMES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+/**
+ * 燃魂出招用原动画的 1~11 帧（起手 → 横持镰刀旋转 → 命中 → 收势）。
+ *
+ * 之前压成 8 帧（18fps），在 0.44 秒的攻击里能明显看出「一格格跳」；
+ * 用满 11 帧后是 25fps，配合大回旋刀光，旋转过程连续得多。
+ */
+const RIN_BURN_ATTACK_FRAMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 /** 发梢在身体坐标里的位置（单位 playerR；y 向下为正）。 */
 const RIN_BURN_TIP_IDLE = [-1.19, 0.45] as const;
 const RIN_BURN_TIP_IDLE_2 = [-1.12, 0.16] as const;
@@ -184,8 +189,7 @@ const RIN_BURN_TIP_RIDE = [-1.76, -0.01] as const;
 const RIN_BURN_TIP_RIDE_2 = [-1.61, 0.12] as const;
 /** 发梢红光渐变的参考 alpha（每帧按脉冲换算）。 */
 const BURN_TIP_REF_ALPHA = 0.5;
-/** 立绘燃魂红黑描边（复制一份贴图染色，共享纹理、不额外占显存）。 */
-const RIN_BURN_DARK_TINT = 0x32040f;
+/** 立绘燃魂的红色加法描边（复制一份贴图染色，共享纹理、不额外占显存）。 */
 const RIN_BURN_GLOW_TINT = 0xff1b3d;
 
 /** 挥棒残影的采样位置。 */
@@ -254,8 +258,7 @@ export class PlayerView {
   /** 凛的 2D 立绘（程序化身体整体隐藏时使用）。 */
   private readonly spriteRoot = new Container();
   private readonly sprite = new Sprite();
-  /** 燃魂：同一张贴图复制两层，暗红打底 + 亮红加法描边（跟着立绘逐帧同步）。 */
-  private readonly burnAuraDark = new Sprite();
+  /** 燃魂：同一张贴图复制的亮红加法描边（跟着立绘逐帧同步）。 */
   private readonly burnAuraGlow = new Sprite();
   /** 燃魂：身体后方的黑红烟气（身体坐标）。 */
   private readonly burnBackGfx = new Graphics();
@@ -365,11 +368,7 @@ export class PlayerView {
     this.batRoot.addChild(this.batGfx);
     // 燃魂：黑色烟气在立绘后方，发梢红光 / 火舌在立绘前方。
     this.bodyRoot.addChild(this.burnBackGfx);
-    this.burnAuraDark.visible = false;
     this.burnAuraGlow.visible = false;
-    this.burnAuraDark.tint = RIN_BURN_DARK_TINT;
-    this.burnAuraDark.alpha = 0.5;
-    this.spriteRoot.addChild(this.burnAuraDark);
     this.burnAuraGlow.tint = RIN_BURN_GLOW_TINT;
     this.burnAuraGlow.alpha = 0.32;
     this.burnAuraGlow.blendMode = 'add';
@@ -897,7 +896,6 @@ export class PlayerView {
     // 燃魂特效只属于本体：分身不继承红黑烟气 / 发梢火光。
     this.burnBackGfx.clear();
     this.burnFrontGfx.clear();
-    this.burnAuraDark.visible = false;
     this.burnAuraGlow.visible = false;
 
     this.container.alpha = clamp(pose.alpha, 0, 1);
@@ -1037,7 +1035,7 @@ export class PlayerView {
   /**
    * 本体立绘的帧选择：
    * - 出招：`ATTACK_DUR` 均分 12 帧，第 6 帧（举镰过顶 → 下劈命中）落在动作中段；
-   * - 燃魂出招：改用 8 段「起手 → 横持镰刀旋转 → 命中 → 收势」，
+   * - 燃魂出招：用 11 帧完整「起手 → 横持镰刀旋转 → 命中 → 收势」，
    *   配合 `drawBurnSpin` 的大回旋刀光，表现旋转镰刀攻击；
    * - 长按：0.24 秒一循环的「举镰 → 劈下 → 收势」；
    * - 双生：蓄力举镰 → 下劈 → 收势；
@@ -1098,17 +1096,18 @@ export class PlayerView {
   }
 
   /**
-   * 燃魂描边：把当前立绘贴图复制成两层（暗红 + 加法亮红），
-   * 跟随本体立绘的锚点 / 位置 / 缩放，形成红黑轮廓光。
-   * 贴图是共享的 —— 只是多两个 `Sprite` 节点，不额外占显存。
+   * 燃魂描边：把当前立绘贴图再复制一份（加法亮红），
+   * 跟随本体立绘的锚点 / 位置 / 缩放，形成红色轮廓光。
+   *
+   * **只保留加法层**：之前还有一层暗红复制贴图，两层一起画时
+   * 帧率损失约 5fps，而目视差别几乎为零（暗红层几乎全被本体盖住）。
+   * 贴图是共享的 —— 不额外占显存。
    */
   private syncBurnAura(fc: FrameContext, riding: boolean): void {
     const show = fc.burning;
-    this.burnAuraDark.visible = show;
     this.burnAuraGlow.visible = show;
     if (!show) return;
     const tex = this.sprite.texture;
-    if (this.burnAuraDark.texture !== tex) this.burnAuraDark.texture = tex;
     if (this.burnAuraGlow.texture !== tex) this.burnAuraGlow.texture = tex;
     const ax = this.sprite.anchor.x;
     const ay = this.sprite.anchor.y;
@@ -1116,10 +1115,6 @@ export class PlayerView {
     const py = this.sprite.position.y;
     const sx = this.sprite.scale.x;
     const sy = this.sprite.scale.y;
-    // 骑乘帧的锚点 / 缩放不同，直接照抄即可。
-    this.burnAuraDark.anchor.set(ax, ay);
-    this.burnAuraDark.position.set(px, py);
-    this.burnAuraDark.scale.set(sx * 1.045, sy * 1.045);
     this.burnAuraGlow.anchor.set(ax, ay);
     this.burnAuraGlow.position.set(px, py);
     const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 7);
