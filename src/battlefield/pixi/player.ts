@@ -935,15 +935,20 @@ export class PlayerView {
     }
   }
 
-  /** 立绘的脚底锚点 + 缩放（保持原画朝向：面朝右，迎着右侧来的怪）。 */
-  private positionRinSprite(s: number): void {
+  /**
+   * 立绘的脚底锚点 + 缩放。
+   *
+   * 待机 / 骑乘两套原画朝向右侧；只有出招帧是朝左侧挥镰的，
+   * 需要水平翻转（`mirrored`）才能让刀刃落向右侧的怪。
+   */
+  private positionRinSprite(s: number, mirrored: boolean): void {
     const scale = (RIN_SPRITE_BODY_R * s) / RIN_SPRITE_BODY_PX;
     this.sprite.anchor.set(RIN_SPRITE_ANCHOR_X, RIN_SPRITE_ANCHOR_Y);
     this.sprite.position.set(0, s * FEET_OFFSET_R);
-    this.sprite.scale.set(scale, scale);
+    this.sprite.scale.set(mirrored ? -scale : scale, scale);
   }
 
-  /** 骑镰姿态：锚点落在刀刃最低点，整体抬起一点，刀刃贴着地面悬浮。 */
+  /** 骑镰姿态：锚点落在刀刃最低点，整体抬起一点，刀刃贴着地面悬浮（保持原画朝右）。 */
   private positionRideSprite(s: number): void {
     const scale = (RIN_SPRITE_BODY_R * s) / RIN_RIDE_BODY_PX;
     this.sprite.anchor.set(RIN_RIDE_ANCHOR_X, RIN_RIDE_ANCHOR_Y);
@@ -981,12 +986,16 @@ export class PlayerView {
     attackActive: boolean,
   ): void {
     let frame: Texture;
+    // 出招帧原画朝左，需要镜像；待机 / 骑乘不镜像。
+    let mirrored = false;
     const ride = walking && this.rinRideTextures.length > 0;
     if (attackActive) {
       const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
       const n = this.rinAttackTextures.length;
       frame = this.attackTexture(Math.min(n - 1, Math.floor(t * n)));
+      mirrored = true;
     } else if (holdActive) {
+      mirrored = true;
       if (holding) {
         const h = ((fc.vt + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
         const k = Math.min(RIN_HOLD_FRAMES.length - 1, Math.floor(h * RIN_HOLD_FRAMES.length));
@@ -996,6 +1005,7 @@ export class PlayerView {
         frame = this.attackTexture(2);
       }
     } else if (pairP > 0) {
+      mirrored = true;
       if (pairP < 0.16) frame = this.attackTexture(1);
       else if (pairP < 0.58) frame = this.attackTexture(2);
       else if (pairP < 0.8) frame = this.attackTexture(pairP < 0.7 ? 5 : 6);
@@ -1009,18 +1019,18 @@ export class PlayerView {
     }
 
     if (ride) this.positionRideSprite(s);
-    else this.positionRinSprite(s);
+    else this.positionRinSprite(s, mirrored);
     if (this.sprite.texture !== frame) this.sprite.texture = frame;
   }
 
   /** 灵魂分身：飞行时举镰、挥击时取对应的出招帧。 */
   private drawRinSpritePose(s: number, pose: SoulPose): void {
     const a = pose.batA;
-    const frame =
-      pose.trail > 0.04 || a < -1.4
-        ? this.attackTexture(a < -1.2 ? 2 : a < 0.4 ? 5 : a < 1.0 ? 6 : 7)
-        : this.idleTexture(0);
-    this.positionRinSprite(s);
+    const attacking = pose.trail > 0.04 || a < -1.4;
+    const frame = attacking
+      ? this.attackTexture(a < -1.2 ? 2 : a < 0.4 ? 5 : a < 1.0 ? 6 : 7)
+      : this.idleTexture(0);
+    this.positionRinSprite(s, attacking);
     if (this.sprite.texture !== frame) this.sprite.texture = frame;
   }
 
