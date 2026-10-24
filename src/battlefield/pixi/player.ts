@@ -935,12 +935,12 @@ export class PlayerView {
     }
   }
 
-  /** 立绘的脚底锚点 + 缩放（水平翻转成面朝右）。 */
+  /** 立绘的脚底锚点 + 缩放（保持原画朝向：面朝右，迎着右侧来的怪）。 */
   private positionRinSprite(s: number): void {
     const scale = (RIN_SPRITE_BODY_R * s) / RIN_SPRITE_BODY_PX;
     this.sprite.anchor.set(RIN_SPRITE_ANCHOR_X, RIN_SPRITE_ANCHOR_Y);
     this.sprite.position.set(0, s * FEET_OFFSET_R);
-    this.sprite.scale.set(-scale, scale);
+    this.sprite.scale.set(scale, scale);
   }
 
   /** 骑镰姿态：锚点落在刀刃最低点，整体抬起一点，刀刃贴着地面悬浮。 */
@@ -948,7 +948,7 @@ export class PlayerView {
     const scale = (RIN_SPRITE_BODY_R * s) / RIN_RIDE_BODY_PX;
     this.sprite.anchor.set(RIN_RIDE_ANCHOR_X, RIN_RIDE_ANCHOR_Y);
     this.sprite.position.set(0, s * (FEET_OFFSET_R - RIN_RIDE_HOVER_R));
-    this.sprite.scale.set(-scale, scale);
+    this.sprite.scale.set(scale, scale);
   }
 
   private idleTexture(index: number): Texture {
