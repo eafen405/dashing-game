@@ -1,15 +1,19 @@
 /**
  * 凛的 2D 立绘帧（来自参考动画的逐帧抠像）。
  *
- * 动画源是一段 24fps、1280×720 的「镰刀少女待机 → 举镰过顶 → 上轨下劈」循环：
+ * 两段动画源都是 24fps、1280×720：
  *
- * - `RIN_IDLE_SPRITES`：待机呼吸（0、5、10、15、20 帧），只差发丝 / 刃光，
- *   循环播放时不会看出跳帧。
- * - `RIN_ATTACK_SPRITES`：出招 12 帧 —— 起手（30）→ 后摆（34）→ 举镰过顶
- *   （38~44）→ 命中（46，带红色刀光与星芒）→ 收势（50~64）。
+ * - **待机 / 出招**（第一段）：待机 → 举镰过顶 → 上轨下劈。
+ *   - `RIN_IDLE_SPRITES`：待机呼吸（0、5、10、15、20 帧），只差发丝 / 刃光。
+ *   - `RIN_ATTACK_SPRITES`：出招 12 帧 —— 起手（30）→ 后摆（34）→ 举镰过顶
+ *     （38~44）→ 命中（46，带红色刀光与星芒）→ 收势（50~64）。
+ * - **骑镰飞行**（第二段）：凛站在横持的镰刀上，刀刃上下摆动 + 发丝飘动。
+ *   - `RIN_RIDE_SPRITES`：42、48、…、90 帧共 9 帧，构成「高 → 低 → 高」的
+ *     起伏循环，用作地面跑动时的飞行姿态。
  *
- * 抠像由 U²-Netp 生成，统一裁到 `x∈[150,1250]、y∈[30,716]` 后缩到 0.5 倍，
- * 因此所有帧共用同一套锚点（脚底）与缩放比例（见 `player.ts` 的 RIN_SPRITE_*）。
+ * 两段素材的裁切窗口不同：待机 / 出招统一裁到 `x∈[150,1250]、y∈[30,716]`；
+ * 骑乘帧按眼睛位置对齐后裁到 820×570，再缩到 0.5 倍。因此各自的锚点与
+ * 身体像素高度分别记在 `player.ts` 的 `RIN_SPRITE_*` / `RIN_RIDE_*` 常量里。
  *
  * 用 `?inline` 导入：单文件构建会把它们全部转成 data URL，`file://` 下也能加载。
  */
@@ -33,6 +37,15 @@ import idle1 from './rin/idle-1.webp?inline';
 import idle2 from './rin/idle-2.webp?inline';
 import idle3 from './rin/idle-3.webp?inline';
 import idle4 from './rin/idle-4.webp?inline';
+import ride0 from './rin/ride/ride-0.webp?inline';
+import ride1 from './rin/ride/ride-1.webp?inline';
+import ride2 from './rin/ride/ride-2.webp?inline';
+import ride3 from './rin/ride/ride-3.webp?inline';
+import ride4 from './rin/ride/ride-4.webp?inline';
+import ride5 from './rin/ride/ride-5.webp?inline';
+import ride6 from './rin/ride/ride-6.webp?inline';
+import ride7 from './rin/ride/ride-7.webp?inline';
+import ride8 from './rin/ride/ride-8.webp?inline';
 
 /** 待机帧（顺序播放）。 */
 export const RIN_IDLE_SPRITES: readonly string[] = [idle0, idle1, idle2, idle3, idle4];
@@ -53,10 +66,24 @@ export const RIN_ATTACK_SPRITES: readonly string[] = [
   atk11,
 ];
 
+/** 骑镰飞行帧（顺序播放，构成刀刃起伏循环）。 */
+export const RIN_RIDE_SPRITES: readonly string[] = [
+  ride0,
+  ride1,
+  ride2,
+  ride3,
+  ride4,
+  ride5,
+  ride6,
+  ride7,
+  ride8,
+];
+
 /** 一组立绘纹理（本体 / 灵魂分身共用同一份 GPU 纹理）。 */
 export interface RinTextureSet {
   readonly idle: readonly Texture[];
   readonly attack: readonly Texture[];
+  readonly ride: readonly Texture[];
 }
 
 let textureSet: Promise<RinTextureSet> | null = null;
@@ -88,11 +115,12 @@ function decodeTexture(src: string): Promise<Texture> {
 export function loadRinTextureSet(): Promise<RinTextureSet> {
   if (!textureSet) {
     textureSet = (async () => {
-      const [idle, attack] = await Promise.all([
+      const [idle, attack, ride] = await Promise.all([
         Promise.all(RIN_IDLE_SPRITES.map((src) => decodeTexture(src))),
         Promise.all(RIN_ATTACK_SPRITES.map((src) => decodeTexture(src))),
+        Promise.all(RIN_RIDE_SPRITES.map((src) => decodeTexture(src))),
       ]);
-      return { idle, attack };
+      return { idle, attack, ride };
     })().catch((err: unknown) => {
       textureSet = null;
       throw err;

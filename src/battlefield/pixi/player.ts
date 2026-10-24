@@ -11,8 +11,9 @@
  * - **双生击破**：大幅跳起，落到轨道上再狠狠下砸。
  * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打；结束后落回下轨。
  * - **换轨**：长按悬浮时平滑飞过去（腿随视觉时钟摆动）。
- * - **凛**：程序化身体整体换成 5 帧待机 / 12 帧出招立绘（见 `rin-sprites.ts`），
- *   长按、双生、灵魂分身共用同一套帧；判定与镰刀长度都不变。
+ * - **凛**：程序化身体整体换成 2D 立绘（见 `rin-sprites.ts`）——
+ *   待机 5 帧呼吸、跑动 9 帧「站在镰刀上飞行」、出招 12 帧；
+ *   长按、双生、灵魂分身共用待机 / 出招帧；判定与镰刀长度都不变。
  *
  * 保留旧版角色已有的 FEVER 光环、脚下地面光、生命环与受击红闪。
  * 所有动作都由 `FrameContext` 的只读快照驱动，渲染层不持有规则状态。
@@ -152,11 +153,21 @@ const RIN_SPRITE_ANCHOR_X = 0.559;
 const RIN_SPRITE_ANCHOR_Y = 0.994;
 /** 立绘身体高度（发顶 → 脚底）折算成 playerR，与程序化角色一致。 */
 const RIN_SPRITE_BODY_R = 2.06;
-/** 待机呼吸帧率（走路时略快）。 */
+/** 待机呼吸帧率。 */
 const RIN_IDLE_FPS = 4;
-const RIN_IDLE_WALK_FPS = 7;
 /** 长按连击时循环的帧：举镰 → 劈下 → 收势。 */
 const RIN_HOLD_FRAMES = [4, 5, 6, 7] as const;
+
+/* 骑镰飞行帧（第二段参考动画，见 rin-sprites.ts）。 */
+/** 骑乘帧里「发顶 → 靴底」的像素高度。 */
+const RIN_RIDE_BODY_PX = 195;
+/** 镰刀最低点所在的锚点（裁切窗口按眼睛对齐）。 */
+const RIN_RIDE_ANCHOR_X = 0.5488;
+const RIN_RIDE_ANCHOR_Y = 0.975;
+/** 镰刀离地悬浮的高度（playerR）—— 让刀刃贴着地面飞。 */
+const RIN_RIDE_HOVER_R = 0.08;
+/** 骑乘帧率（9 帧 ≈ 0.9 秒一个起伏循环）。 */
+const RIN_RIDE_FPS = 10;
 
 /** 挥棒残影的采样位置。 */
 const GHOST_T = [0.42, 0.64, 0.86] as const;
@@ -280,6 +291,7 @@ export class PlayerView {
   /** 凛的立绘纹理（`prepare()` 里一次性建好，之后只换 `texture`）。 */
   private rinIdleTextures: readonly Texture[] = [];
   private rinAttackTextures: readonly Texture[] = [];
+  private rinRideTextures: readonly Texture[] = [];
   private rinSpritesReady = false;
   private rinLoadStarted = false;
   /** 本帧视觉时钟（给头发 / 裙摆 / 飘带做次级运动）。 */
@@ -579,6 +591,9 @@ export class PlayerView {
     // 只有踩在下轨地面上时才算「在走」；空中 / 悬浮 / 出招都暂停步态。
     const onGround = lane === 'bottom' && !jumping && !falling && Math.abs(y - bottomY) < 1.5;
     const walking = fc.phase === 'running' && !attackActive && !hold && pairP === 0 && onGround;
+    // 凛的立绘已就绪时，地面跑动改为「站在镰刀上飞」。
+    const useSprite = this.female && this.rinSpritesReady;
+    const riding = useSprite && walking;
     const laneWalk = clamp(Math.abs(targetY - y) / (s * 0.8), 0, 1);
     const walkAmp = jumping || falling || hold ? 0 : Math.max(laneWalk, walking ? 1 : 0);
     const walkPhase = fc.now * WALK_RATE;
@@ -702,7 +717,9 @@ export class PlayerView {
     const bob =
       jumping || falling
         ? 0
-        : Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(walkPhase)) * s * 0.035 * walkAmp;
+        : riding
+          ? Math.sin(fc.vt * 2.6) * s * 0.035
+          : Math.sin(fc.vt * 2.2) * s * 0.03 + Math.abs(Math.sin(walkPhase)) * s * 0.035 * walkAmp;
 
     const actionLane =
       pairP > 0
@@ -721,7 +738,7 @@ export class PlayerView {
     const bodyY = y + hover + lift + bob;
 
     /* ---------- 地面投影 + 走路尘土 ---------- */
-    this.drawShadowAndDust(fc, playerX, bodyY, s, groundFeet, topY, walking, walkPhase);
+    this.drawShadowAndDust(fc, playerX, bodyY, s, groundFeet, topY, walking, riding, walkPhase);
 
     const pivotX = s * CLUB_PIVOT_X_R;
     const pivotY = -s * 0.26;
@@ -739,7 +756,6 @@ export class PlayerView {
     this.bodyRoot.scale.set(1 / stretch, stretch);
 
     // 凛：整只角色换成动画抠像立绘；程序化身体整体隐藏。
-    const useSprite = this.female && this.rinSpritesReady;
     this.setSpriteBodyMode(useSprite);
 
     if (useSprite) {
@@ -887,7 +903,7 @@ export class PlayerView {
    * 凛的 2D 立绘
    * ------------------------------------------------------------------ */
 
-  /** 异步解码 17 张立绘；失败时保持程序化身体，并在下次 prepare 重试。 */
+  /** 异步解码 26 张立绘；失败时保持程序化身体，并在下次 prepare 重试。 */
   private loadRinSpriteTextures(): void {
     if (this.rinLoadStarted) return;
     this.rinLoadStarted = true;
@@ -895,6 +911,7 @@ export class PlayerView {
       (set) => {
         this.rinIdleTextures = set.idle;
         this.rinAttackTextures = set.attack;
+        this.rinRideTextures = set.ride;
         this.rinSpritesReady = true;
       },
       () => {
@@ -921,7 +938,16 @@ export class PlayerView {
   /** 立绘的脚底锚点 + 缩放（水平翻转成面朝右）。 */
   private positionRinSprite(s: number): void {
     const scale = (RIN_SPRITE_BODY_R * s) / RIN_SPRITE_BODY_PX;
+    this.sprite.anchor.set(RIN_SPRITE_ANCHOR_X, RIN_SPRITE_ANCHOR_Y);
     this.sprite.position.set(0, s * FEET_OFFSET_R);
+    this.sprite.scale.set(-scale, scale);
+  }
+
+  /** 骑镰姿态：锚点落在刀刃最低点，整体抬起一点，刀刃贴着地面悬浮。 */
+  private positionRideSprite(s: number): void {
+    const scale = (RIN_SPRITE_BODY_R * s) / RIN_RIDE_BODY_PX;
+    this.sprite.anchor.set(RIN_RIDE_ANCHOR_X, RIN_RIDE_ANCHOR_Y);
+    this.sprite.position.set(0, s * (FEET_OFFSET_R - RIN_RIDE_HOVER_R));
     this.sprite.scale.set(-scale, scale);
   }
 
@@ -933,12 +959,17 @@ export class PlayerView {
     return this.rinAttackTextures[index] ?? this.rinAttackTextures[0] ?? Texture.EMPTY;
   }
 
+  private rideTexture(index: number): Texture {
+    return this.rinRideTextures[index] ?? this.rinRideTextures[0] ?? Texture.EMPTY;
+  }
+
   /**
    * 本体立绘的帧选择：
    * - 出招：`ATTACK_DUR` 均分 12 帧，第 6 帧（举镰过顶 → 下劈命中）落在动作中段；
    * - 长按：0.24 秒一循环的「举镰 → 劈下 → 收势」；
    * - 双生：蓄力举镰 → 下劈 → 收势；
-   * - 待机 / 跑动：5 帧呼吸循环。
+   * - 跑动：9 帧骑镰飞行循环（刀刃高度起伏）；
+   * - 待机：5 帧呼吸循环。
    */
   private drawRinSprite(
     fc: FrameContext,
@@ -950,6 +981,7 @@ export class PlayerView {
     attackActive: boolean,
   ): void {
     let frame: Texture;
+    const ride = walking && this.rinRideTextures.length > 0;
     if (attackActive) {
       const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
       const n = this.rinAttackTextures.length;
@@ -968,13 +1000,16 @@ export class PlayerView {
       else if (pairP < 0.58) frame = this.attackTexture(2);
       else if (pairP < 0.8) frame = this.attackTexture(pairP < 0.7 ? 5 : 6);
       else frame = this.attackTexture(7);
+    } else if (ride) {
+      const n = this.rinRideTextures.length;
+      frame = this.rideTexture(Math.floor(fc.vt * RIN_RIDE_FPS) % n);
     } else {
       const n = this.rinIdleTextures.length;
-      const fps = walking ? RIN_IDLE_WALK_FPS : RIN_IDLE_FPS;
-      frame = this.idleTexture(n > 0 ? Math.floor(fc.vt * fps) % n : 0);
+      frame = this.idleTexture(n > 0 ? Math.floor(fc.vt * RIN_IDLE_FPS) % n : 0);
     }
 
-    this.positionRinSprite(s);
+    if (ride) this.positionRideSprite(s);
+    else this.positionRinSprite(s);
     if (this.sprite.texture !== frame) this.sprite.texture = frame;
   }
 
@@ -1079,6 +1114,7 @@ export class PlayerView {
     groundFeet: number,
     topY: number,
     walking: boolean,
+    riding: boolean,
     walkPhase: number,
   ): void {
     const g = this.shadowGfx;
@@ -1096,7 +1132,8 @@ export class PlayerView {
     }
 
     // 走路时在身后扬起一点尘土，让「在地面上走」更明确。
-    if (walking) {
+    // 骑镰飞行时脚不沾地，改由画面里的刀刃起伏表现速度，不再扬尘。
+    if (walking && !riding) {
       const footLine = bodyY + s * FEET_OFFSET_R;
       const cycle = (walkPhase / (Math.PI * 2)) % 1;
       for (let i = 0; i < 2; i++) {
