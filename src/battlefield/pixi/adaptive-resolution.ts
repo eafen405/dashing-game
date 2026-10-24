@@ -8,22 +8,25 @@
  * 弱 GPU 会先扛不住填充率 —— 表现就是「凛一攻击就卡」。
  *
  * **策略**：从最高分辨率开始，按窗口统计 rAF 间隔：
- * - 平均间隔 > `downMs` → 立刻降一档（宁可稍软，也要跟手）；
+ * - 平均间隔 ≥ `severeMs`（≤ 50fps）→ 立刻降一档（宁可稍软，也要跟手）；
+ * - 平均间隔在 `downMs`~`severeMs` 之间 → 连慢两个窗口才降，避免偶发卡顿引起画质抽动；
  * - 平均间隔 < `upMs` 且连续若干个窗口 → 升一档（有余量就把清晰度还回去）；
  * - 每次变档后跳过 `settleFrames` 帧，等新尺寸稳定再判定；
  * - 升档后下一窗口又掉帧 → 记为一次失败的升档，并加长「升档需要的连续好窗口数」；
  *   连续失败 3 次后不再试探，稳定在当前档 —— 避免在边界上来回跳、每十几秒卡一下。
  *
  * **阈值按 60Hz 的 rAF 取**：16.7ms = 60fps，33.3ms = 30fps。
- * 18.3ms ≈ 54.6fps，17.0ms ≈ 58.8fps。
+ * 18.3ms ≈ 54.6fps，17.0ms ≈ 58.8fps，20ms = 50fps。
  *
  * 逻辑与 Pixi 无关，方便单测（见 `__tests__/adaptive-resolution.test.ts`）。
  */
 
 /** 自适应分辨率参数。 */
 export interface AdaptiveResolutionOptions {
-  /** 窗口平均间隔超过它 → 降一档（毫秒）。 */
+  /** 窗口平均间隔超过它 → 进入降档判定（毫秒）。 */
   readonly downMs?: number;
+  /** 窗口平均间隔达到它 → 不等第二个窗口，立刻降档（毫秒）。 */
+  readonly severeMs?: number;
   /** 窗口平均间隔低于它 → 记一次「还有余量」（毫秒）。 */
   readonly upMs?: number;
   /** 每个判定窗口的帧数。 */
@@ -38,6 +41,7 @@ export interface AdaptiveResolutionOptions {
 
 const DEFAULTS = {
   downMs: 18.3,
+  severeMs: 20,
   upMs: 17.0,
   windowFrames: 45,
   upWindows: 4,
@@ -55,6 +59,7 @@ const MAX_UP_FAILURES = 3;
 export class AdaptiveResolution {
   private readonly steps: readonly number[];
   private readonly downMs: number;
+  private readonly severeMs: number;
   private readonly upMs: number;
   private readonly windowFrames: number;
   private readonly baseUpWindows: number;
@@ -65,6 +70,8 @@ export class AdaptiveResolution {
   private acc = 0;
   private count = 0;
   private goodWindows = 0;
+  /** 连续「轻度慢窗口」数：不够严重时等第二个窗口再降档。 */
+  private slowWindows = 0;
   private settle = 0;
   private upPenalty = 0;
   /** 刚升过一档：下一窗口若立刻掉帧，记为一次失败的升档。 */
@@ -83,6 +90,7 @@ export class AdaptiveResolution {
     if (clean.length === 0) throw new Error('AdaptiveResolution 至少要有一个正的分辨率档位');
     this.steps = clean;
     this.downMs = options.downMs ?? DEFAULTS.downMs;
+    this.severeMs = Math.max(this.downMs, options.severeMs ?? DEFAULTS.severeMs);
     this.upMs = options.upMs ?? DEFAULTS.upMs;
     this.windowFrames = Math.max(1, options.windowFrames ?? DEFAULTS.windowFrames);
     this.baseUpWindows = Math.max(1, options.upWindows ?? DEFAULTS.upWindows);
@@ -113,6 +121,7 @@ export class AdaptiveResolution {
     this.acc = 0;
     this.count = 0;
     this.goodWindows = 0;
+    this.slowWindows = 0;
     this.pendingUp = false;
   }
 
@@ -145,6 +154,14 @@ export class AdaptiveResolution {
 
     if (avg > this.downMs) {
       this.goodWindows = 0;
+      // 轻度慢（约 54→50fps）先观察一个窗口：单次偶发卡顿不值得降画质，
+      // 否则画面会在两档之间来回抽；连续两个窗口都慢才降。
+      // 刚升档后的「试用窗口」例外 —— 那一档站不住就立刻退回。
+      if (!this.pendingUp && avg < this.severeMs) {
+        this.slowWindows += 1;
+        if (this.slowWindows < 2) return null;
+      }
+      this.slowWindows = 0;
       // 上一窗口刚升档、这一窗口又掉帧 → 升档失败，下次试探要等更久
       // （4 → 8 → 16 → 32 个好窗口），避免在边界上反复跳。
       if (this.pendingUp) {
@@ -159,6 +176,7 @@ export class AdaptiveResolution {
       return this.resolution;
     }
 
+    this.slowWindows = 0;
     if (canUpgrade && !this.upBlocked && avg < this.upMs && this.index > 0) {
       this.goodWindows += 1;
       if (this.goodWindows >= this.requiredGoodWindows) {

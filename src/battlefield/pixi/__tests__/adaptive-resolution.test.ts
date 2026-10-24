@@ -119,6 +119,36 @@ describe('AdaptiveResolution', () => {
     expect(g.resolution).toBe(1.75);
   });
 
+  it('轻度慢窗口要连续两个才降档，单次卡顿不降', () => {
+    const g = new AdaptiveResolution(steps, {
+      windowFrames: 10,
+      settleFrames: 0,
+      upWindows: 2,
+    });
+    // 18.6ms ≈ 53.8fps：只慢一点点 → 第一个窗口不动分辨率。
+    expect(windows(g, 18.6, 1).every((v) => v === null)).toBe(true);
+    expect(g.resolution).toBe(2);
+
+    // 中间恢复满帧 → 慢窗口计数清零，再来一次慢窗口仍然不降。
+    expect(windows(g, 16.7, 1).every((v) => v === null)).toBe(true);
+    expect(windows(g, 18.6, 1).every((v) => v === null)).toBe(true);
+    expect(g.resolution).toBe(2);
+
+    // 连续两个慢窗口 → 降一档。
+    expect(windows(g, 18.6, 1)).toContain(1.75);
+    expect(g.resolution).toBe(1.75);
+  });
+
+  it('严重掉帧（≤50fps）不等第二个窗口，立刻降档', () => {
+    const g = new AdaptiveResolution(steps, {
+      windowFrames: 10,
+      settleFrames: 0,
+    });
+    // 20.0ms = 50fps，正好达到 severeMs。
+    expect(windows(g, 20, 1)).toContain(1.75);
+    expect(g.resolution).toBe(1.75);
+  });
+
   it('切后台回来（超长间隔）作废当前窗口，不会误降档', () => {
     const g = new AdaptiveResolution(steps, { windowFrames: 10, settleFrames: 0 });
     // 先喂 9 个正常帧（差 1 帧就凑满一个窗口）。
