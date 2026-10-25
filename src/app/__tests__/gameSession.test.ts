@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BattlefieldRenderer, FrameView } from '../../battlefield/types';
 import { computeLayout } from '../../game/layout';
-import type { CharacterId, Phase } from '../../game/types';
+import type { CharacterId, Difficulty, Phase } from '../../game/types';
 import { GameSession } from '../GameSession';
 import { createPresentation } from '../presentation';
 
@@ -79,7 +79,10 @@ function makeClock(): {
 }
 
 /** 造一个会话。 */
-function makeSession(characterId?: CharacterId): {
+function makeSession(
+  characterId?: CharacterId,
+  diffLevel: Difficulty = 1,
+): {
   session: GameSession;
   renderer: StubRenderer;
   clock: ReturnType<typeof makeClock>;
@@ -93,7 +96,7 @@ function makeSession(characterId?: CharacterId): {
   const session = new GameSession({
     renderer,
     host: { tagName: 'DIV' } as unknown as HTMLElement,
-    diffLevel: 1,
+    diffLevel,
     seed: 20240601,
     layout: computeLayout(800, 400, 1),
     presentation,
@@ -106,6 +109,24 @@ function makeSession(characterId?: CharacterId): {
 }
 
 describe('GameSession', () => {
+  it('三星 FEVER 经规则结束后，色散和周身火花回落，不停留在页面上', async () => {
+    const { session, renderer, clock, presentation } = makeSession('zhe', 3);
+    await session.mount();
+    session.start();
+    session.setDebugFever(true);
+    clock.advance(400);
+    expect(renderer.last.frenzyActive).toBe(true);
+    expect(presentation.screenFx.rgbSplit).toBe(1);
+
+    // 不用调试开关关闭 FEVER：通过真实 Tick 的到期 / 漏怪路径结束。
+    clock.advance(10_500);
+    expect(session.getState().frenzyActive).toBe(false);
+    expect(presentation.screenFx.rgbSplit).toBe(0);
+    clock.advance(1_500);
+    expect(presentation.snapshot.particles.some((p) => p.form === 'ember')).toBe(false);
+    session.dispose();
+  });
+
   it('挂载后开始出帧', async () => {
     const { session, renderer, clock } = makeSession();
     await session.mount();
@@ -281,6 +302,42 @@ describe('GameSession', () => {
     expect(renderer.resizedTo).toBe(1024);
     session.dispose();
   });
+
+  it.each(['home', 'difficulty'] as const)(
+    '多次 resize 后经 %s 返回 idle，待机与下一局都保留最新布局',
+    async (route) => {
+      const { session, renderer, clock } = makeSession();
+      await session.mount();
+      session.setDifficulty(4);
+      session.start();
+      session.resize(computeLayout(1024, 600, 2));
+      const latest = computeLayout(844, 335, 1);
+      session.resize(latest);
+
+      if (route === 'home') {
+        session.pause();
+        session.quitToHome();
+      } else {
+        clock.advance(60_000);
+        expect(session.phase).toBe('over');
+        session.chooseDifficulty();
+      }
+
+      expect(session.phase).toBe('idle');
+      expect(session.getState().layout).toEqual(latest);
+      clock.advance(16);
+      expect(renderer.last.layout).toEqual(latest);
+
+      session.setCharacter('rin');
+      session.start();
+      clock.advance(16);
+      expect(session.getState().layout).toEqual(latest);
+      expect(renderer.last.layout).toEqual(latest);
+      expect(session.getState().characterId).toBe('rin');
+      expect(session.getState().diffLevel).toBe(4);
+      session.dispose();
+    },
+  );
 
   it('默认角色是哲：300 / 300，帧里带角色字段', async () => {
     const { session, renderer, clock } = makeSession();

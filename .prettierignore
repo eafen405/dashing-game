@@ -11,3 +11,6 @@ source.html
 *.md
 .scratch/
 docs/
+
+# Native Unity project uses its own C# and asset tooling.
+unity/

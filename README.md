@@ -1,5 +1,8 @@
 # 双轨打怪 (Dual-Rail Monster Slayer)
 
+现已加入原生 **Unity 2D / Windows 版本**：工程位于 [`unity/`](unity/README.md)。
+本机可双击 `unity/Play.cmd` 试玩，或用 Unity Hub 打开该目录继续开发。
+
 一款双轨道点击战斗小游戏：怪物沿上下两条轨道自右侧袭来，一个戴棒球帽、穿红球衣的
 角色在大地上奔跑，在**判定区**内挥棒迎击它们。
 
@@ -108,6 +111,7 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 | `npm install` | 安装依赖 |
 | `npm run dev` | 启动 Vite 开发服务器（热更新） |
 | `npm run build` | 构建单文件产物 → `dist/index.html` |
+| `npm run analyze` | 测量代码 / 内联原画 / 依赖组成 → `dist/bundle-report.json` |
 | `npm run preview` | 本地预览构建产物（`http://localhost:4173`） |
 | `npm run verify` | 校验产物：自包含检查 + `file://` 下可运行检查 |
 | `npm test` | 单元测试（Vitest） |
@@ -123,8 +127,10 @@ Vite 开发服务器默认监听 <http://localhost:5173>，改动即时热更新
 
 `npm run verify` 分两步：先用静态检查确认产物自包含（无外部 `src`/`href`、无裸 `import`），
 再用 Playwright + Chromium 以 `file://` 打开产物，验证画布真的画出了东西、`localStorage`
-可读写、且没有发起任何外部网络请求。产物体积超过 **1,200 KB**（gzip **380 KB**）时
-会打印告警（不阻断构建），提示检查 Pixi / React 是否被整包引入。
+可读写、且没有发起任何外部网络请求。代码 / 样式保留 **1,200 KiB**（gzip **380 KiB**）
+告警线；26 张原画独立采用 **1,200 KiB**（gzip **1,000 KiB**）预算，并始终显示完整文件体积。
+超过任一预算会打印告警（不阻断构建）。`npm run analyze` 可定位代码与素材来源，
+避免将内联原画误判为依赖膨胀，详见 [ADR-0009](docs/adr/0009-separate-code-and-inline-artwork-budgets.md)。
 
 ### CI 门禁
 

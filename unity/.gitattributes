@@ -1,0 +1,6 @@
+# Unity serializes empty YAML values with trailing spaces.
+# Keep source GUIDs and scene/settings text diffable without rewriting it.
+*.meta text eol=lf whitespace=-blank-at-eol
+*.asset text eol=lf whitespace=-blank-at-eol
+*.unity text eol=lf whitespace=-blank-at-eol
+*.png binary

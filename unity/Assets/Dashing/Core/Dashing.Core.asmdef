@@ -1,0 +1,5 @@
+{
+  "name": "Dashing.Core",
+  "rootNamespace": "Dashing.Core",
+  "noEngineReferences": true
+}

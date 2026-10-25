@@ -18,24 +18,17 @@
  *   2  浏览器不可用（静态检查已通过，但浏览器起不来）—— 明确报错并以非零退出，
  *      绝不静默跳过（票 01 要求：浏览器缺失必须让 CI 变红并留下可见痕迹）
  */
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { gzipSync } from 'node:zlib';
 
 import { launchChromium } from './browser.mjs';
+import { measureBundle, bundleWarnings } from './bundle-size.mjs';
 
 const DIST = resolve(process.cwd(), 'dist', 'index.html');
 
-/**
- * 产物体积告警线 —— **只告警，不失败**。
- *
- * 票 10 的要求是「上限告警」：单文件承诺不等于可以无限膨胀，但体积也随功能
- * 正当增长，所以不设硬门禁。当前基线约 1,068 KB / gzip 318 KB；
- * 留约 12% / 19% 余量，越过就提示回头检查是不是 Pixi / React 被整包引入。
- */
-const SIZE_WARN_KB = 1200;
-const GZIP_WARN_KB = 380;
+// Code retains its original 1200/380 KiB warning limits. Original embedded
+// artwork has a separate visible budget; see ADR-0009 and bundle-size.mjs.
 
 const args = process.argv.slice(2);
 
@@ -76,21 +69,14 @@ function staticCheck() {
   }
 
   const html = readFileSync(DIST, 'utf8');
-  const size = statSync(DIST).size;
-  const gzipSize = gzipSync(html).length;
+  const measured = measureBundle(html);
+  const size = measured.htmlBytes;
+  const gzipSize = measured.gzipBytes;
 
-  // 体积告警（票 10）：单文件从 729 KB 长到 1 MB+ 是 Pixi 的代价，但继续膨胀
-  // 往往意味着 tree-shaking 失效，先提示再看。
-  if (size > SIZE_WARN_KB * 1024) {
-    warn.push(
-      `产物体积 ${(size / 1024).toFixed(1)} KB 超过告警线 ${SIZE_WARN_KB} KB（gzip ${(gzipSize / 1024).toFixed(1)} KB）—— 先检查 pixi.js / react-dom 是否被整包引入`,
-    );
-  }
-  if (gzipSize > GZIP_WARN_KB * 1024) {
-    warn.push(
-      `产物 gzip ${(gzipSize / 1024).toFixed(1)} KB 超过告警线 ${GZIP_WARN_KB} KB —— 同上，先查 tree-shaking`,
-    );
-  }
+  warn.push(...bundleWarnings(measured));
+  console.log(
+    `代码 / 样式 ${(measured.codeBytes / 1024).toFixed(1)} KB（gzip ${(measured.codeGzipBytes / 1024).toFixed(1)} KB）；${measured.inlineImages} 张内联原画 ${(measured.imageBytes / 1024).toFixed(1)} KB（gzip ${(measured.imageGzipBytes / 1024).toFixed(1)} KB）`,
+  );
 
   // 外部资源引用：<script src="..."> / <link href="..."> / <img src="...">
   const externalRefs = [

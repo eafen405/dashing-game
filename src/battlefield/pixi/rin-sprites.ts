@@ -4,7 +4,8 @@
  * 两段动画源都是 24fps、1280×720：
  *
  * - **待机 / 出招**（第一段）：待机 → 举镰过顶 → 上轨下劈。
- *   - `RIN_IDLE_SPRITES`：待机呼吸（0、5、10、15、20 帧），只差发丝 / 刃光。
+ *   - `RIN_IDLE_SPRITES`：保留原素材的 0、5、10、15、20 帧；其中末帧已进入起手，
+ *     呼吸实际只用前四张往返播放（顺序见 `rin-animation.ts`）。
  *   - `RIN_ATTACK_SPRITES`：出招 12 帧 —— 起手（30）→ 后摆（34）→ 举镰过顶
  *     （38~44）→ 命中（46，带红色刀光与星芒）→ 收势（50~64）。
  * - **骑镰飞行**（第二段）：凛站在横持的镰刀上，刀刃上下摆动 + 发丝飘动。
@@ -49,7 +50,7 @@ import ride6 from './rin/ride/ride-6.webp?inline';
 import ride7 from './rin/ride/ride-7.webp?inline';
 import ride8 from './rin/ride/ride-8.webp?inline';
 
-/** 待机帧（顺序播放）。 */
+/** 待机原素材（播放顺序由 rin-animation.ts 决定）。 */
 export const RIN_IDLE_SPRITES: readonly string[] = [idle0, idle1, idle2, idle3, idle4];
 
 /** 出招帧（按时间顺序，索引 6 = 命中帧）。 */

@@ -1,5 +1,5 @@
 /**
- * 启动 headless Chromium —— Playwright 自带 → 本机缓存 → 系统 chromium。
+ * 启动 headless Chromium —— Playwright 自带 → Windows 浏览器 → 本机缓存 → 系统 chromium。
  *
  * 回退链的必要性：本机 Playwright 缓存的浏览器版本与当前 `playwright` 包
  * 期望的版本可能不一致（`Executable doesn't exist at .../chromium-1248/...`），
@@ -32,6 +32,18 @@ export const CHROMIUM_ARGS = [
 export function chromiumCandidates() {
   return [
     undefined,
+    ...(process.platform === 'win32'
+      ? [
+          join(
+            process.env.PROGRAMFILES ?? 'C:/Program Files',
+            'Google/Chrome/Application/chrome.exe',
+          ),
+          join(
+            process.env['PROGRAMFILES(X86)'] ?? 'C:/Program Files (x86)',
+            'Microsoft/Edge/Application/msedge.exe',
+          ),
+        ]
+      : []),
     join(process.env.HOME ?? '', '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome'),
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',

@@ -18,7 +18,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 
 /** 连击徽标属性。 */
 export interface ComboBadgeProps {

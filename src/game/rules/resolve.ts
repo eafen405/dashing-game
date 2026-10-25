@@ -533,6 +533,8 @@ export function longPenalty(
     { type: 'shake-max', amount: 8 },
     { type: 'vibrate', pattern: 60 },
   ];
+  // 规则状态与表现层同步关闭：否则 FEVER 色散和周身火花会永久保留。
+  if (state.frenzyActive) effects.push({ type: 'fever-end' });
   return { state: s, effects };
 }
 
@@ -675,6 +677,7 @@ export function hurtPlayer(
       { type: 'ring', x: m.x, y: m.y, life: 0.3, r0: 6, r1: 30, color: '#9fb0cf' },
       { type: 'toast', text: '错过 · COMBO 清零', color: '#ffcf6b' },
     ];
+    if (state.frenzyActive) effects.push({ type: 'fever-end' });
     return { state: s, effects };
   }
 
@@ -708,6 +711,7 @@ export function hurtPlayer(
     { type: 'toast', text: '-' + HIT_DAMAGE, color: '#ff4d6d' },
     { type: 'vibrate', pattern: 60 },
   ];
+  if (state.frenzyActive) effects.push({ type: 'fever-end' });
 
   if (hp <= 0) {
     const over = gameOver(s);

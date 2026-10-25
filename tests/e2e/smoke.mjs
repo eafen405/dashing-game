@@ -59,6 +59,24 @@ try {
     '难度摘要显示 1 星',
   );
   assert((await page.locator('#btnHelp').count()) === 1, '「玩法说明」入口在');
+  const scoreStyle = await page.locator('[data-motion="score-roll"]').evaluate((element) => {
+    const value = globalThis.getComputedStyle(element);
+    const parent = globalThis.getComputedStyle(element.parentElement);
+    return {
+      fontSize: value.fontSize,
+      parentFontSize: parent.fontSize,
+      color: value.color,
+      parentColor: parent.color,
+    };
+  });
+  assert(scoreStyle.fontSize === scoreStyle.parentFontSize, '分数数字继承数值字号');
+  assert(scoreStyle.color === scoreStyle.parentColor, '分数数字继承数值颜色');
+  assert(
+    (await page
+      .locator('#scoreText + span')
+      .evaluate((element) => globalThis.getComputedStyle(element).fontSize)) === '10px',
+    'SCORE 标签仍使用小字',
+  );
 
   // ── 2. 难度屏 ──────────────────────────────────────────
   console.log('── 2. 难度屏 ──');
@@ -117,6 +135,28 @@ try {
   await page.waitForTimeout(200);
   assert((await readPhase(page)) === 'running', 'P 键恢复');
 
+  // 缩放后返回菜单不能把战场重置为启动时的旧尺寸。
+  console.log('── 6a. 缩放 → 回主页面 → 开局 ──');
+  await page.keyboard.press('KeyP');
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.waitForTimeout(300);
+  await page.locator('#btnHome').click();
+  await page.waitForTimeout(200);
+  assert((await readPhase(page)) === 'idle', '缩放后能回主页面');
+  const canvasAspectMatches = () => {
+    const canvas = document.querySelector('.canvas-host canvas');
+    return (
+      canvas !== null &&
+      canvas.clientHeight > 0 &&
+      Math.abs(canvas.width / canvas.height - canvas.clientWidth / canvas.clientHeight) < 0.02
+    );
+  };
+  assert(await page.evaluate(canvasAspectMatches), '返回菜单后画布与战场宽高比一致');
+  await page.locator('#startScreen h2').click();
+  await page.waitForTimeout(200);
+  assert((await readPhase(page)) === 'running', '缩放后能重新开局');
+  assert(await page.evaluate(canvasAspectMatches), '下一局沿用当前战场尺寸');
+
   // ── 7. 结算 ────────────────────────────────────────────
   console.log('── 7. 结算 ──');
   await page.waitForFunction(
@@ -135,6 +175,7 @@ try {
   await page.waitForTimeout(300);
   assert((await readPhase(page)) === 'idle', '「选择难度」退出结算');
   assert((await readMenuRoute(page)) === 'difficulty', '「选择难度」直接进难度屏');
+  assert(await page.evaluate(canvasAspectMatches), '结算后选择难度仍保留当前战场尺寸');
   await page.locator('#btnDiffBack').click();
   await page.waitForTimeout(200);
   assert((await readMenuRoute(page)) === 'home', '难度屏点「返回」回主页面');

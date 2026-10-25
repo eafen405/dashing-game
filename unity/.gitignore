@@ -1,0 +1,15 @@
+/Library/
+/Temp/
+/Obj/
+/Logs/
+/UserSettings/
+/Builds/
+/TestResults/
+/.vs/
+/*.csproj
+/*.sln
+/*.slnx
+/*.pidb
+/*.user
+/*.opendb
+/*.VC.db

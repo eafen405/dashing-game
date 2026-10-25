@@ -18,7 +18,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { motion } from 'motion/react';
+import * as motion from 'motion/react-m';
 
 /** 结算界面属性。 */
 export interface GameOverScreenProps {

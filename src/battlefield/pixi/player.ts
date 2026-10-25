@@ -12,7 +12,7 @@
  * - **长按怪**：悬浮在对应轨道上方，棒子连续向下击打；结束后落回下轨。
  * - **换轨**：长按悬浮时平滑飞过去（腿随视觉时钟摆动）。
  * - **凛**：程序化身体整体换成 2D 立绘（见 `rin-sprites.ts`）——
- *   待机 5 帧呼吸、跑动 9 帧「站在镰刀上飞行」、出招 12 帧；
+ *   待机四张站姿往返呼吸、跑动 9 帧「站在镰刀上飞行」、出招 12 帧；
  *   长按、双生、灵魂分身共用待机 / 出招帧；判定与镰刀长度都不变。
  *
  * 保留旧版角色已有的 FEVER 光环、脚下地面光、生命环与受击红闪。
@@ -42,7 +42,7 @@
  * ```
  */
 
-import { Container, Graphics, GraphicsPath, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, GraphicsPath, Texture } from 'pixi.js';
 import type { FillGradient } from 'pixi.js';
 import {
   ATTACK_DUR,
@@ -69,6 +69,14 @@ import {
 } from './gfx';
 import { clamp, easeInOutCubic, easeOutCubic, lerp } from './math';
 import { hexA } from './palette';
+import {
+  RIN_ATTACK_FRAMES,
+  RIN_BURN_FRAMES,
+  RIN_IDLE_FRAMES,
+  RIN_RIDE_FRAMES,
+  RinFrameSample,
+} from './rin-animation';
+import { RinSprite } from './rin-sprite';
 import { loadRinTextureSet } from './rin-sprites';
 
 /** 待机时棒子搭在肩上的角度（弧度；0 = 指向右，负 = 向上）。 */
@@ -155,8 +163,6 @@ const RIN_SPRITE_ANCHOR_Y = 0.994;
 const RIN_SPRITE_BODY_R = 2.06;
 /** 待机呼吸帧率。 */
 const RIN_IDLE_FPS = 4;
-/** 长按连击时循环的帧：举镰 → 劈下 → 收势。 */
-const RIN_HOLD_FRAMES = [4, 5, 6, 7] as const;
 
 /* 骑镰飞行帧（第二段参考动画，见 rin-sprites.ts）。 */
 /** 骑乘帧里「发顶 → 靴底」的像素高度。 */
@@ -171,13 +177,6 @@ const RIN_RIDE_FPS = 12;
 
 /* 燃魂形态（立绘）—— 参考视频：红发梢 / 红黑气息 / 旋镰攻击。 */
 
-/**
- * 燃魂出招用原动画的 1~11 帧（起手 → 横持镰刀旋转 → 命中 → 收势）。
- *
- * 之前压成 8 帧（18fps），在 0.44 秒的攻击里能明显看出「一格格跳」；
- * 用满 11 帧后是 25fps，配合大回旋刀光，旋转过程连续得多。
- */
-const RIN_BURN_ATTACK_FRAMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 /** 发梢在身体坐标里的位置（单位 playerR；y 向下为正）。 */
 const RIN_BURN_TIP_IDLE = [-1.19, 0.45] as const;
 const RIN_BURN_TIP_IDLE_2 = [-1.12, 0.16] as const;
@@ -257,9 +256,12 @@ export class PlayerView {
   private readonly batGfx = new Graphics();
   /** 凛的 2D 立绘（程序化身体整体隐藏时使用）。 */
   private readonly spriteRoot = new Container();
-  private readonly sprite = new Sprite();
+  private readonly sprite = new RinSprite();
+  private readonly rinFrame = new RinFrameSample();
+  /** 动画自身时钟：暂停不推进，恢复时也不追赶暂停期间的视觉时钟。 */
+  private rinTime = 0;
   /** 燃魂：同一张贴图复制的亮红加法描边（跟着立绘逐帧同步）。 */
-  private readonly burnAuraGlow = new Sprite();
+  private readonly burnAuraGlow = new RinSprite();
   /** 燃魂：身体后方的黑红烟气（身体坐标）。 */
   private readonly burnBackGfx = new Graphics();
   /** 燃魂：发梢红光 / 火舌 / 镰刃红黑气息（身体坐标）。 */
@@ -585,6 +587,7 @@ export class PlayerView {
     this.visT = fc.vt;
 
     const dt = this.frameDt(fc);
+    this.rinTime += dt;
 
     // 新一局：游戏时间归零，清掉上一局残留的滞空 / 下落状态。
     if (fc.now + 0.01 < this.lastNow) {
@@ -592,6 +595,7 @@ export class PlayerView {
       this.fallV = 0;
       this.landT = 0;
       this.airborne = false;
+      this.rinTime = 0;
     }
     this.lastNow = fc.now;
     if (this.landT > 0) this.landT = Math.max(0, this.landT - dt);
@@ -640,11 +644,13 @@ export class PlayerView {
     const attackActive = fc.attackT > 0 && fc.attackLane !== null;
     const pairP = clamp(fc.pairSmash, 0, 1);
 
+    const useSprite = this.female && this.rinSpritesReady;
+    // 凛暂停时保留骑乘姿态，避免时钟冻结了却突然切回站姿。
+    const walkingPhase = fc.phase === 'running' || (useSprite && fc.phase === 'paused');
     // 只有踩在下轨地面上时才算「在走」；空中 / 悬浮 / 出招都暂停步态。
     const onGround = lane === 'bottom' && !jumping && !falling && Math.abs(y - bottomY) < 1.5;
-    const walking = fc.phase === 'running' && !attackActive && !hold && pairP === 0 && onGround;
+    const walking = walkingPhase && !attackActive && !hold && pairP === 0 && onGround;
     // 凛的立绘已就绪时，地面跑动改为「站在镰刀上飞」。
-    const useSprite = this.female && this.rinSpritesReady;
     const riding = useSprite && walking;
     // 燃魂发梢位置：站立 / 出招 / 骑乘三套马尾姿态各不相同。
     const burnTip =
@@ -708,7 +714,7 @@ export class PlayerView {
       legTuck = 0.9;
       bodyRot = 0.05;
       if (hold.holding) {
-        const h = ((fc.vt + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
+        const h = (((this.female ? this.rinTime : fc.vt) + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
         if (h < 0.45) {
           const k = easeOutCubic(h / 0.45);
           clubA = lerp(-1.5, 1.15, k);
@@ -1028,19 +1034,15 @@ export class PlayerView {
     return this.rinAttackTextures[index] ?? this.rinAttackTextures[0] ?? Texture.EMPTY;
   }
 
-  private rideTexture(index: number): Texture {
-    return this.rinRideTextures[index] ?? this.rinRideTextures[0] ?? Texture.EMPTY;
-  }
-
   /**
    * 本体立绘的帧选择：
    * - 出招：`ATTACK_DUR` 均分 12 帧，第 6 帧（举镰过顶 → 下劈命中）落在动作中段；
    * - 燃魂出招：用 11 帧完整「起手 → 横持镰刀旋转 → 命中 → 收势」，
    *   配合 `drawBurnSpin` 的大回旋刀光，表现旋转镰刀攻击；
-   * - 长按：0.24 秒一循环的「举镰 → 劈下 → 收势」；
+   * - 长按：0.24 秒一循环的完整起手、命中与收势；
    * - 双生：蓄力举镰 → 下劈 → 收势；
    * - 跑动：9 帧骑镰飞行循环（刀刃高度起伏）；
-   * - 待机：5 帧呼吸循环。
+   * - 待机：四张相邻站姿往返呼吸；循环帧间连续混合，出招只做短过渡。
    */
   private drawRinSprite(
     fc: FrameContext,
@@ -1051,47 +1053,54 @@ export class PlayerView {
     attackActive: boolean,
     riding: boolean,
   ): void {
-    let frame: Texture;
+    let textures = this.rinAttackTextures;
+    const sample = this.rinFrame;
     // 出招帧原画朝左，需要镜像；待机 / 骑乘不镜像。
     let mirrored = false;
     if (attackActive) {
       const t = clamp(1 - fc.attackT / ATTACK_DUR, 0, 1);
       if (fc.burning) {
-        const n = RIN_BURN_ATTACK_FRAMES.length;
-        const idx = Math.min(n - 1, Math.floor(t * n));
-        frame = this.attackTexture(RIN_BURN_ATTACK_FRAMES[idx] ?? 1);
+        sample.sample(RIN_BURN_FRAMES, t * RIN_BURN_FRAMES.length, false, 0.35);
       } else {
-        const n = this.rinAttackTextures.length;
-        frame = this.attackTexture(Math.min(n - 1, Math.floor(t * n)));
+        sample.sample(RIN_ATTACK_FRAMES, t * RIN_ATTACK_FRAMES.length, false, 0.35);
       }
       mirrored = true;
     } else if (holdActive) {
       mirrored = true;
       if (holding) {
-        const h = ((fc.vt + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
-        const k = Math.min(RIN_HOLD_FRAMES.length - 1, Math.floor(h * RIN_HOLD_FRAMES.length));
-        frame = this.attackTexture(RIN_HOLD_FRAMES[k] ?? 4);
+        const h = ((this.rinTime + 0.13) % HOLD_PERIOD) / HOLD_PERIOD;
+        // 完整起手、挥下、收势、回到举镰，避免 7 → 4 直接倒跳。
+        sample.sample(RIN_ATTACK_FRAMES, h * RIN_ATTACK_FRAMES.length, true, 0.35);
       } else {
         // 暂停 / 续按宽限：举镰等待。
-        frame = this.attackTexture(2);
+        sample.sample(RIN_ATTACK_FRAMES, 2, false);
       }
     } else if (pairP > 0) {
       mirrored = true;
-      if (pairP < 0.16) frame = this.attackTexture(1);
-      else if (pairP < 0.58) frame = this.attackTexture(2);
-      else if (pairP < 0.8) frame = this.attackTexture(pairP < 0.7 ? 5 : 6);
-      else frame = this.attackTexture(7);
+      const position =
+        pairP < 0.16
+          ? 1 + pairP / 0.16
+          : pairP < 0.58
+            ? 2
+            : pairP < 0.8
+              ? 2 + ((pairP - 0.58) / 0.22) * 5
+              : 7 + ((pairP - 0.8) / 0.2) * 4;
+      sample.sample(RIN_ATTACK_FRAMES, position, false, 0.35);
     } else if (riding) {
-      const n = this.rinRideTextures.length;
-      frame = this.rideTexture(Math.floor(fc.vt * RIN_RIDE_FPS) % n);
+      textures = this.rinRideTextures;
+      sample.sample(RIN_RIDE_FRAMES, this.rinTime * RIN_RIDE_FPS, true);
     } else {
-      const n = this.rinIdleTextures.length;
-      frame = this.idleTexture(n > 0 ? Math.floor(fc.vt * RIN_IDLE_FPS) % n : 0);
+      textures = this.rinIdleTextures;
+      sample.sample(RIN_IDLE_FRAMES, this.rinTime * RIN_IDLE_FPS, true);
     }
 
     if (riding) this.positionRideSprite(s);
     else this.positionRinSprite(s, mirrored);
-    if (this.sprite.texture !== frame) this.sprite.texture = frame;
+    this.sprite.setFrames(
+      textures[sample.from] ?? Texture.EMPTY,
+      textures[sample.to] ?? Texture.EMPTY,
+      sample.mix,
+    );
     this.syncBurnAura(fc, riding);
   }
 
@@ -1107,8 +1116,6 @@ export class PlayerView {
     const show = fc.burning;
     this.burnAuraGlow.visible = show;
     if (!show) return;
-    const tex = this.sprite.texture;
-    if (this.burnAuraGlow.texture !== tex) this.burnAuraGlow.texture = tex;
     const ax = this.sprite.anchor.x;
     const ay = this.sprite.anchor.y;
     const px = this.sprite.position.x;
@@ -1116,6 +1123,7 @@ export class PlayerView {
     const sx = this.sprite.scale.x;
     const sy = this.sprite.scale.y;
     this.burnAuraGlow.anchor.set(ax, ay);
+    this.burnAuraGlow.copyFrames(this.sprite);
     this.burnAuraGlow.position.set(px, py);
     const pulse = 0.5 + 0.5 * Math.sin(fc.vt * 7);
     this.burnAuraGlow.scale.set(sx * (1.018 + pulse * 0.012), sy * (1.018 + pulse * 0.012));
@@ -1236,11 +1244,23 @@ export class PlayerView {
   private drawRinSpritePose(s: number, pose: SoulPose): void {
     const a = pose.batA;
     const attacking = pose.trail > 0.04 || a < -1.4;
-    const frame = attacking
-      ? this.attackTexture(a < -1.2 ? 2 : a < 0.4 ? 5 : a < 1.0 ? 6 : 7)
-      : this.idleTexture(0);
     this.positionRinSprite(s, attacking);
-    if (this.sprite.texture !== frame) this.sprite.texture = frame;
+    if (attacking) {
+      const position =
+        a < -1.2
+          ? 2
+          : a < 0.4
+            ? 2 + ((a + 1.2) / 1.6) * 3
+            : a < 1
+              ? 5 + (a - 0.4) / 0.6
+              : 6 + clamp((a - 1) / 0.2, 0, 1);
+      this.rinFrame.sample(RIN_ATTACK_FRAMES, position, false, 0.35);
+      this.sprite.setFrames(
+        this.attackTexture(this.rinFrame.from),
+        this.attackTexture(this.rinFrame.to),
+        this.rinFrame.mix,
+      );
+    } else this.sprite.setFrames(this.idleTexture(0));
   }
 
   destroy(): void {

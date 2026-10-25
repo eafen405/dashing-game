@@ -273,7 +273,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.stat span {
+.stat > span {
   font-size: 10px;
   color: var(--muted);
   letter-spacing: 1px;

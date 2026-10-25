@@ -21,7 +21,8 @@
 
 import { useEffect } from 'react';
 import type { ReactElement } from 'react';
-import { animate, motion, useMotionValue, useTransform } from 'motion/react';
+import { animate, useMotionValue, useTransform } from 'motion/react';
+import * as motion from 'motion/react-m';
 
 /** 分数面板属性。 */
 export interface ScorePanelProps {

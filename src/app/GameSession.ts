@@ -115,12 +115,12 @@ export class GameSession implements InputSink {
         }),
       );
     this.rng = createRng(options.seed);
-    this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
+    this.state = { ...createGameState(this.initialStateOptions(options.layout)), phase: 'idle' };
     // 表现层要知道角色在哪 —— FEVER 周身火花绕着角色发射。
     this.presentation.setLayout(options.layout);
   }
 
-  private initialStateOptions(): {
+  private initialStateOptions(layout: Layout): {
     diffLevel: Difficulty;
     seed: number;
     layout: Layout;
@@ -129,7 +129,7 @@ export class GameSession implements InputSink {
     return {
       diffLevel: this.diffLevel,
       seed: this.seed,
-      layout: this.options.layout,
+      layout,
       characterId: this.characterId,
     };
   }
@@ -358,7 +358,7 @@ export class GameSession implements InputSink {
 
   private resetToIdle(): void {
     this.rng = createRng(this.seed);
-    this.state = { ...createGameState(this.initialStateOptions()), phase: 'idle' };
+    this.state = { ...createGameState(this.initialStateOptions(this.state.layout)), phase: 'idle' };
     this.presentation.reset();
     this.lastT = 0;
     this.notifyPhase();

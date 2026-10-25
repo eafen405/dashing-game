@@ -13,10 +13,8 @@ import { describe, expect, it } from 'vitest';
  * 探测文件用 `lintText` + 虚拟路径，因此不往仓库里落任何故意违规的文件。
  */
 
-/** 仓库根目录（`tests/tooling/` → 上溯三级）。 */
-const repoRoot = decodeURIComponent(new URL('../../', import.meta.url).pathname);
-
-const eslint = new ESLint({ cwd: repoRoot });
+/** 使用项目测试进程的工作目录，避免手工转换 file URL 时破坏 Windows 盘符。 */
+const eslint = new ESLint();
 
 /** 在给定虚拟路径上跑一段代码，返回 ESLint 报出的消息。 */
 async function lintAt(filePath: string, code: string): Promise<Linter.LintMessage[]> {

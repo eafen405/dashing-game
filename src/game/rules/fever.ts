@@ -54,6 +54,6 @@ export function triggerFever(state: GameState, combo: number): FeverResult {
 export function endFever(state: GameState): { state: GameState; effects: Effect[] } {
   return {
     state: { ...state, frenzyActive: false, feverT: 0 },
-    effects: [{ type: 'toast', text: 'FEVER 结束', color: FEVER_END_COLOR }],
+    effects: [{ type: 'fever-end' }, { type: 'toast', text: 'FEVER 结束', color: FEVER_END_COLOR }],
   };
 }
