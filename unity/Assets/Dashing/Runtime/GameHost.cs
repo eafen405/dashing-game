@@ -18,6 +18,12 @@ namespace Dashing.Unity
         private Camera gameCamera;
         private Stage stage;
         private GameUI ui;
+        public MusicMode Music {get;private set;}
+        public void OpenMusic(){if(Game.S.Phase==Phase.Menu)Music.Open();}
+        public void SetMusicUI(bool active){ui.SetVisible(!active);}
+        public void ResetMusicStage(GameState state){stage.Reset(state);}
+        public bool MusicCharacterVisible {get {return stage.CharacterVisible;}}
+        public void MusicCue(Cue cue,GameState state){stage.Cue(cue,state);if(cue.Kind==CueKind.Hurt)audioSource.PlayOneShot(hurt);else if(cue.Kind==CueKind.Hit)audioSource.PlayOneShot(cue.Critical?critical:hit);}
         private AudioSource audioSource;
         private AudioClip hit,critical,hurt;
         private int screenW,screenH,keyLayout;
@@ -38,15 +44,15 @@ namespace Dashing.Unity
         public float FeverVisual {get {return feverVisual;}}
         private void Awake()
         {
-            Application.targetFrameRate=120;Application.runInBackground=false;
-            QualitySettings.vSyncCount=1;
+            Application.targetFrameRate=240;Application.runInBackground=false;
+            QualitySettings.vSyncCount=0;QualitySettings.maxQueuedFrames=1;
             QualitySettings.antiAliasing=4;
             SelectedCharacter=(Character)Mathf.Clamp(PlayerPrefs.GetInt("dashing.character",1),0,1);
             Difficulty=Mathf.Clamp(PlayerPrefs.GetInt("dashing.difficulty",1),1,4);keyLayout=Mathf.Clamp(PlayerPrefs.GetInt("dashing.keys",0),0,2);
             clarity=Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-clarity")>=0;
             smoke=clarity||Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-smoke")>=0;
             RefinedRin=smoke||PlayerPrefs.GetInt("dashing.rinClarity",1)==1;
-            inputProbe=Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-input-check")>=0;
+            inputProbe=Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-input-check")>=0||Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-music-input-check")>=0||Array.IndexOf(Environment.GetCommandLineArgs(),"--dashing-music-smoke")>=0;
             horizontal=PlayerPrefs.GetInt("dashing.pointer",0)==1;
             if(!smoke&&!inputProbe&&!PlayerPrefs.HasKey("dashing.settingsVersion"))
             {
@@ -63,6 +69,7 @@ namespace Dashing.Unity
             stage=new Stage(transform);stage.SetRinQuality(RefinedRin);Resize();stage.Reset(Game.S);ui=new GameUI(this);
             audioSource=gameObject.AddComponent<AudioSource>();audioSource.playOnAwake=false;audioSource.volume=.35f;
             hit=Tone(440,.07f);critical=Tone(880,.11f);hurt=Tone(95,.15f);
+            Music=gameObject.AddComponent<MusicMode>();Music.Initialize(this);
             if(clarity)gameObject.AddComponent<RinClarityPreview>().Begin(this);
             else if(smoke)StartCoroutine(SmokeTest());
         }
@@ -77,6 +84,7 @@ namespace Dashing.Unity
             screenW=Screen.width;screenH=Screen.height;double aspect=(double)Math.Max(screenW,1)/Math.Max(screenH,1);
             double h=aspect>=1?720:720/aspect,w=h*aspect;Game.Resize(new Layout(w,h));
             gameCamera.orthographicSize=(float)h/200;gameCamera.transform.localPosition=new Vector3((float)w/200,-(float)h/200,-10);
+            if(Music!=null)Music.Resize(Game.S.Layout);
         }
         public void StartOrResume()
         {
@@ -115,6 +123,7 @@ namespace Dashing.Unity
         private void Update()
         {
             if(Screen.width!=screenW||Screen.height!=screenH)Resize();
+            if(Music!=null&&Music.Active){float musicDt=Mathf.Min(Time.unscaledDeltaTime,.05f);Music.Tick(musicDt);return;}
             if(!smoke)ReadInput();
             float dt=Mathf.Min(Time.unscaledDeltaTime,.05f);Game.Tick(dt);
             foreach(var cue in Game.Cues){stage.Cue(cue,Game.S);ui.ShowCue(cue);if(cue.Kind==CueKind.Hurt)audioSource.PlayOneShot(hurt);else if(cue.Kind==CueKind.Hit||cue.Kind==CueKind.Pair||cue.Kind==CueKind.Hold)audioSource.PlayOneShot(cue.Critical?critical:hit);}
@@ -123,9 +132,16 @@ namespace Dashing.Unity
             float target=Game.S.Fever&&Game.S.Phase!=Phase.Over?1:0;
             if(Game.S.Phase!=Phase.Paused)feverVisual=Mathf.MoveTowards(feverVisual,target,dt/.35f);
             gameCamera.backgroundColor=Color.Lerp(new Color(.025f,.045f,.085f),new Color(.12f,.055f,.08f),feverVisual);
-            stage.Draw(Game.S,dt);ui.Update(dt);
             if(Game.S.Phase==Phase.Over&&previousPhase!=Phase.Over)SaveBest();previousPhase=Game.S.Phase;
             if(inputProbe){probeTimer-=Time.unscaledDeltaTime;if(probeTimer<=0){probeTimer=.1f;WriteProbe();}}
+        }
+        private void LateUpdate()
+        {
+            // UGUI pointer-down runs during Update. Draw after it so mouse and keyboard
+            // rail changes both reach the camera in the same frame.
+            float dt=Mathf.Min(Time.unscaledDeltaTime,.05f);
+            if(Music!=null&&Music.Active){Music.UI.Tick();stage.Draw(Music.View,dt,Music.Screen==MusicScreen.Recording);return;}
+            stage.Draw(Game.S,dt);ui.Update(dt);
         }
         private void ReadInput()
         {
@@ -146,8 +162,8 @@ namespace Dashing.Unity
             }
         }
         private static bool PointerOverUI(int id){return UnityEngine.EventSystems.EventSystem.current!=null&&UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject(id);}
-        private void OnApplicationFocus(bool focus){if(!focus&&Game!=null&&!smoke)Game.Pause();}
-        private void OnApplicationPause(bool pause){if(pause&&Game!=null&&!smoke)Game.Pause();}
+        private void OnApplicationFocus(bool focus){if(!focus&&Music!=null&&Music.Active){if(Music.Running&&!Music.Paused)Music.TogglePause();return;}if(!focus&&Game!=null&&!smoke)Game.Pause();}
+        private void OnApplicationPause(bool pause){if(pause&&Music!=null&&Music.Active){if(Music.Running&&!Music.Paused)Music.TogglePause();return;}if(pause&&Game!=null&&!smoke)Game.Pause();}
         private void OnApplicationQuit(){if(Game!=null)SaveBest();}
         private void OnDestroy(){if(smoke)Application.logMessageReceived-=OnSmokeLog;}
         private void OnSmokeLog(string message,string stack,LogType type)
@@ -247,12 +263,25 @@ namespace Dashing.Unity
             VisualCheck(stage.Rin.IsRiding&&stage.Motion.Clock==clock&&stage.Rin.FrameFrom==frame&&stage.Rin.FrameMix==mix,"Pause freezes the riding frame without switching to standing");
             ToggleRinQuality();yield return null;VisualCheck(!stage.Rin.Refined&&!stage.Rin.UsingMotion&&stage.Rin.FrameFrom==frame&&stage.Rin.FrameMix==mix,"Original rendering switch preserves the frozen pose");
             ToggleRinQuality();yield return null;VisualCheck(stage.Rin.Refined&&stage.Rin.UsingMotion&&stage.Rin.FrameFrom==frame&&stage.Rin.FrameMix==mix,"Refined rendering switch restores the same pose");
-            Game.Resume();Game.Press(Lane.Top,"visual-jump");
-            while(Game.S.AirT>.5)yield return null;
-            VisualCheck(!stage.Rin.IsRiding&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Top))<5,"Upper attack reaches the parabolic jump apex");
+            Game.Resume();
+            foreach(Character character in new[]{Character.Rin,Character.Zhe})
+            {
+                Game.S.Character=character;
+                for(int i=0;i<12;i++)
+                {
+                    Lane rail=i%2==0?Lane.Top:Lane.Bottom;int inputFrame=Time.frameCount;
+                    Game.Press(rail,"visual-fast-rail");yield return new WaitForEndOfFrame();
+                    VisualCheck(Time.frameCount==inputFrame&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(rail))<.001&&
+                        Math.Abs(stage.Motion.BodyY-Game.S.Layout.Y(rail))<Game.S.Layout.PlayerR*.15,
+                        character+" rail switch renders in input frame "+i);
+                    yield return null;
+                }
+            }
+            Game.S.Character=Character.Rin;Game.Press(Lane.Top,"visual-jump");yield return new WaitForEndOfFrame();
+            VisualCheck(!stage.Rin.IsRiding&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Top))<.001,"Upper attack reaches upper rail in the input frame");
             yield return Capture(folder,"13-jump-apex.png");
-            Game.Press(Lane.Bottom,"visual-fall");yield return WaitVisual(.025f);
-            VisualCheck(stage.Motion.Airborne&&stage.Motion.Y<Game.S.Layout.Y(Lane.Bottom)-40,"Downward attack falls instead of teleporting to the ground");
+            Game.Press(Lane.Bottom,"visual-fall");yield return new WaitForEndOfFrame();
+            VisualCheck(!stage.Motion.Airborne&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Bottom))<.001,"Downward attack reaches lower rail in the input frame");
             yield return WaitVisual(.65f);VisualCheck(stage.Rin.IsRiding,"Riding resumes after an interrupted jump lands");
             Game.SpawnPair();foreach(var m in Game.S.Monsters)m.X=Game.S.Layout.HitX;
             Game.Press(Lane.Top,"visual-pair-top");Game.Press(Lane.Bottom,"visual-pair-bottom");

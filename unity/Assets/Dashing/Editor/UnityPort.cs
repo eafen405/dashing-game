@@ -21,7 +21,7 @@ namespace Dashing.Editor
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone,ScriptingImplementation.Mono2x);
             PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Standalone,ApiCompatibilityLevel.NET_Standard_2_0);
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone,"com.dashing.native2d");
-            QualitySettings.vSyncCount=1;
+            QualitySettings.vSyncCount=0;QualitySettings.maxQueuedFrames=1;
             QualitySettings.antiAliasing=4;
             foreach(var guid in AssetDatabase.FindAssets("t:Texture2D",new[]{"Assets/Resources/Rin"}))
             {
@@ -61,6 +61,7 @@ namespace Dashing.Editor
             var presentation=PresentationChecks.Run();File.WriteAllText("TestResults/presentation-checks.txt",presentation);Debug.Log(presentation);
             var clarity=RinClarityChecks.Run();File.WriteAllText("TestResults/rin-clarity-checks.txt",clarity);Debug.Log(clarity);
             var keys=KeyBindingChecks.Run();File.WriteAllText("TestResults/key-binding-checks.txt",keys);Debug.Log(keys);
+            var music=MusicChecks.Run();File.WriteAllText("TestResults/music-checks.txt",music);Debug.Log(music);
         }
         [MenuItem("Dashing/Build Windows Player")]
         public static void BuildWindows()

@@ -21,6 +21,8 @@ namespace Dashing.Unity
         private readonly Text heading,detail,charInfo,keyInfo,startLabel;
         private readonly Button start,character,difficulty,help,keys,quit;
         private readonly Button pointer;
+        private readonly Button music;
+        public void SetVisible(bool visible){canvas.gameObject.SetActive(visible);}
         private readonly KeyBindingsPanel keyPanel;
         public bool KeyEditorOpen {get {return keyPanel.IsOpen;}}
         public bool Listening {get {return keyPanel.Listening;}}
@@ -88,6 +90,8 @@ namespace Dashing.Unity
             start=Button("开始游戏",menu.transform,()=>{showHelp=false;host.StartOrResume();});Place(start.GetComponent<RectTransform>(),new Vector2(.5f,1),new Vector2(0,-454),new Vector2(360,56));
             start.GetComponent<Image>().color=new Color(.1f,.32f,.43f,.96f);startLabel=start.GetComponentInChildren<Text>();startLabel.fontSize=23;
             quit=Button("退出游戏",menu.transform,()=>host.ExitOrMenu());Place(quit.GetComponent<RectTransform>(),new Vector2(.5f,1),new Vector2(0,-524),new Vector2(220,38));
+            music=Button("音乐模式 / 自定义编谱",menu.transform,()=>host.OpenMusic());Place(music.GetComponent<RectTransform>(),new Vector2(.5f,1),new Vector2(-140,-524),new Vector2(280,38));
+            Place(quit.GetComponent<RectTransform>(),new Vector2(.5f,1),new Vector2(155,-524),new Vector2(250,38));
             keyPanel=new KeyBindingsPanel(host,canvas,font,()=>RefreshMenu());
             RefreshMenu();
         }
@@ -100,6 +104,8 @@ namespace Dashing.Unity
         private void RefreshMenu()
         {
             var s=host.Game.S;bool paused=s.Phase==Phase.Paused,over=s.Phase==Phase.Over;
+            music.gameObject.SetActive(!paused&&!over);
+            Place(quit.GetComponent<RectTransform>(),new Vector2(.5f,1),new Vector2(paused||over?0:155,-524),new Vector2(paused||over?220:250,38));
             heading.text=paused?"已暂停":over?"本轮结束":"选择角色 · 准备出发";
             detail.text=showHelp?"中心暴击 300 / 普攻 200 · 每 50 连击 FEVER ×1.5\n双生：0.18 秒内打双轨 · 长按：按住 2 秒，另一轨可灵魂出击":over?"得分 "+s.Score+"    最大连击 "+s.MaxCombo+"\n暴击 "+s.CritCount+"    普攻 "+s.NormalCount+"    存活 "+s.Now.ToString("F1")+" 秒":paused?"暂停后长按不会失败，继续后请重新按住。\n按 P / Esc 或点击继续，回到战场。":"击打两条轨道上的敌人，在中心判定区获得暴击。\n上轨为空中，下轨为地面。";
             character.GetComponentInChildren<Text>().text="角色 · "+(host.SelectedCharacter==Character.Rin?"凛 / 镰刀":"哲 / 棒球棍");

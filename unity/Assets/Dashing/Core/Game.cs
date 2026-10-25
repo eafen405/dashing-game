@@ -137,10 +137,35 @@ namespace Dashing.Core
             }
             if (S.HoldId != 0)
             { ResolveLane(lane); Cues.Add(new Cue(CueKind.Soul, S.Layout.HitX, S.Layout.Y(lane), lane)); return; }
+            Strike(lane); ResolveLane(lane);
+        }
+        private void Strike(Lane lane)
+        {
             if (S.AttackT <= AttackDuration * .42 || S.AttackLane != lane) { S.AttackT = AttackDuration; S.AttackLane = lane; }
             S.AirT = lane == Lane.Top ? (S.PlayerLane == Lane.Top ? S.AirT : 1) : 0;
             S.PlayerLane = lane;
-            Cues.Add(new Cue(CueKind.Swing, S.Layout.HitX, S.Layout.Y(lane), lane)); ResolveLane(lane);
+            Cues.Add(new Cue(CueKind.Swing, S.Layout.HitX, S.Layout.Y(lane), lane));
+        }
+        // Chart timing supplies the target; all rewards and character mechanics remain shared.
+        public void PressChart(Lane lane, Monster target, bool critical)
+        {
+            if(S.Phase!=Phase.Running)return;
+            Strike(lane);
+            if(target!=null&&!target.Removed&&target.Kind==MonsterKind.Normal&&target.Lane==lane)Kill(target,critical);
+        }
+        public void MissChart(Monster target)
+        {
+            if(S.Phase!=Phase.Running||target==null||target.Removed)return;
+            Breach(target);
+        }
+        private void Breach(Monster m)
+        {
+            bool collides = m.PartnerId != 0 || S.PlayerLane == m.Lane;
+            var mate = Find(m.PartnerId);
+            if (mate != null && !mate.Removed) { mate.Removed = true; mate.PartnerId = 0; m.PartnerId = 0; Emit(CueKind.Miss, mate); }
+            m.Removed = true; BreakCombo();
+            if (collides) { S.Hp = Math.Max(0, S.Hp - 20); Emit(CueKind.Hurt, m, false, "-20"); CheckOver(); }
+            else Emit(CueKind.Miss, m, false, "错过 · COMBO 清零");
         }
         private void Award(Monster m, string label)
         { int gain = MathEx.Round(200 * Multiplier); S.Score += gain; Emit(CueKind.Hold, m, false, label + " +" + gain); Heal(); }
@@ -231,18 +256,21 @@ namespace Dashing.Core
                 else { m.W = MathEx.Clamp(layout.Width * .055, 40, 62); m.H = MathEx.Clamp(layout.Height * .17, 40, 78); }
             }
         }
-        public void Tick(double dt)
+        public void Tick(double dt) { TickInternal(dt,false); }
+        public void TickChart(double dt) { TickInternal(dt,true); }
+        private void TickInternal(double dt,bool chartDriven)
         {
             double step = Math.Min(Math.Max(dt, 0), .05);
             if (S.Phase != Phase.Running) { if (S.Phase != Phase.Paused) S.AttackT = Math.Max(0, S.AttackT - step); return; }
             S.Now += step; S.Monsters.RemoveAll(m => m.Removed); S.SpawnTimer -= step;
-            if (S.SpawnTimer <= 0)
+            if (!chartDriven && S.SpawnTimer <= 0)
             { Spawn(); S.SpawnTimer = MathEx.Clamp(1.28 - Math.Min(S.Now * .075, 10) * .045 + Rng.Range(-.12, .16), .62, 1.45) / SpawnMultiplier(S.Difficulty); }
             if (S.PairCooldown > 0) S.PairCooldown -= step;
             if (S.LongCooldown > 0) S.LongCooldown -= step;
             breached.Clear(); expired.Clear(); double reachX = S.Layout.PlayerX + S.Layout.PlayerR * 1.15 + 8;
             foreach (var m in S.Monsters)
             {
+                if(chartDriven)continue;
                 if (m.Kind == MonsterKind.Hold)
                 {
                     if (m.Escaped) { m.X -= m.EscapeSpeed * step; m.Removed = m.X + m.Len < -60; }
@@ -268,12 +296,7 @@ namespace Dashing.Core
             {
                 if (S.Phase != Phase.Running) break;
                 var m = Find(id); if (m == null || m.Removed) continue;
-                bool collides = m.PartnerId != 0 || S.PlayerLane == m.Lane;
-                var mate = Find(m.PartnerId);
-                if (mate != null && !mate.Removed) { mate.Removed = true; mate.PartnerId = 0; m.PartnerId = 0; Emit(CueKind.Miss, mate); }
-                m.Removed = true; BreakCombo();
-                if (collides) { S.Hp = Math.Max(0, S.Hp - 20); Emit(CueKind.Hurt, m, false, "-20"); CheckOver(); }
-                else Emit(CueKind.Miss, m, false, "错过 · COMBO 清零");
+                Breach(m);
             }
             if (S.Fever) { S.FeverT -= step; if (S.FeverT <= 0) EndFever(); }
             if (S.Burning)

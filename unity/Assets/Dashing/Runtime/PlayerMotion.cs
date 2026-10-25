@@ -5,7 +5,7 @@ using Dashing.Core;
 namespace Dashing.Unity
 {
     // Presentation only: rule coordinates and attack / airtime clocks stay in Core.
-    // Timings and pose curves follow src/battlefield/pixi/player.ts.
+    // Rail changes are immediate; attack / hold / reward clocks stay authoritative in Core.
     public sealed class PlayerMotion
     {
         public float Clock { get; private set; }
@@ -22,16 +22,18 @@ namespace Dashing.Unity
         public bool HoldActive { get; private set; }
         public bool Holding { get; private set; }
         public bool Walking { get; private set; }
-        private float fallV, pairLeft;
+        private float pairLeft;
 
         public void Reset(GameState s)
         {
-            Clock=Landing=PairP=Squash=Tilt=Hurt=Fever=fallV=pairLeft=0;
-            Y=BodyY=(float)s.Layout.Y(Lane.Bottom);
+            Clock=Landing=PairP=Squash=Tilt=Hurt=Fever=pairLeft=0;
+            Y=BodyY=(float)s.Layout.Y(s.PlayerLane);
             Airborne=Riding=HoldActive=Holding=Walking=false;
         }
         public void Cue(Cue cue, GameState s)
         {
+            // A new strike interrupts the decorative twin finish without delaying rail input.
+            if(cue.Kind==CueKind.Swing)pairLeft=0;
             // A soul's twin kill must not pull the held body out of its lane.
             if(cue.Kind==CueKind.Pair && s.HoldId==0)pairLeft=.62f;
             if(cue.Kind==CueKind.Hurt)Hurt=.24f;
@@ -46,23 +48,11 @@ namespace Dashing.Unity
             foreach(var m in s.Monsters)
                 if(m.Kind==MonsterKind.Hold && m.Anchored && !m.Removed && !m.Escaped && m.Lane==s.PlayerLane)
                 {HoldActive=true;Holding=m.Holding&&s.HoldId==m.Id;break;}
-            float bottom=(float)s.Layout.Y(Lane.Bottom),top=(float)s.Layout.Y(Lane.Top),r=(float)s.Layout.PlayerR;
-            bool jumping=s.AirT>0 && !HoldActive, falling=false;
-            if(jumping)
-            {
-                float p=1-(float)MathEx.Clamp(s.AirT,0,1);
-                Y=bottom-(bottom-top)*4*p*(1-p);fallV=0;
-            }
-            else if(!HoldActive && s.PlayerLane==Lane.Bottom && Y<bottom-.5f)
-            {
-                // An interrupted top attack falls with gravity rather than teleporting.
-                fallV+=2400*dt;Y=Mathf.Min(bottom,Y+fallV*dt);falling=Y<bottom-.5f;
-            }
-            else
-            {
-                Y=Mathf.Lerp(Y,(float)s.Layout.Y(s.PlayerLane),1-Mathf.Exp(-11*dt));fallV=0;
-            }
-            bool airborneNow=jumping||falling;
+            float bottom=(float)s.Layout.Y(Lane.Bottom),r=(float)s.Layout.PlayerR;
+            // Do not wait for a tween, gravity, or the one-second rule airtime to reach a rail.
+            // Freeze the displayed position while paused, including window-layout changes.
+            if(s.Phase!=Phase.Paused)Y=(float)s.Layout.Y(s.PlayerLane);
+            bool airborneNow=s.PlayerLane==Lane.Top&&!HoldActive;
             if(Airborne&&!airborneNow&&s.PlayerLane==Lane.Bottom)Landing=.18f;
             Airborne=airborneNow;
             Walking=(s.Phase==Phase.Running||s.Phase==Phase.Paused) && s.AttackT<=0 && !HoldActive && PairP==0 &&
@@ -86,8 +76,7 @@ namespace Dashing.Unity
                 else if(t<.4f){Squash=Smooth((t-.2f)/.2f);Tilt=.13f*Squash;}
                 else {Squash=1-Smooth((t-.4f)/.6f);Tilt=.13f*Squash;}
             }
-            if(jumping)Tilt+=(s.AirT>.5?-.06f:.06f);
-            else if(falling)Tilt+=.05f;
+            if(Airborne)Tilt-=.04f;
             if(Walking&&!HoldActive)Tilt+=.05f;
             if(Landing>0)Squash=Mathf.Max(Squash,Landing/.18f*.45f);
             float bob=Airborne?0:Riding?Mathf.Sin(Clock*2.6f)*r*.035f:

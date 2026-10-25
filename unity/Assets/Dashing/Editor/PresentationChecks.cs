@@ -18,10 +18,10 @@ namespace Dashing.Editor
             s.Phase=Phase.Running;m.Tick(s,.016f);float clock=m.Clock,y=m.BodyY;
             g.Pause();m.Tick(s,.2f);check(m.Riding&&m.Clock==clock&&m.BodyY==y,"Paused ground pose and visual clock stay frozen");g.Resume();
             g.Press(Lane.Top,"jump");m.Tick(s,0);check(!m.Riding&&m.Airborne,"Top attack leaves ground riding");
-            s.AirT=.5;m.Tick(s,.016f);check(Math.Abs(m.Y-s.Layout.Y(Lane.Top))<.001,"Parabolic jump apex touches upper rail at 0.5 seconds");
-            float apex=m.Y;g.Press(Lane.Bottom,"interrupt");m.Tick(s,.016f);
-            check(m.Y>apex&&m.Y<s.Layout.Y(Lane.Bottom)&&m.Airborne,"Interrupted jump starts gravity fall without teleporting");
-            for(int i=0;i<70&&m.Airborne;i++)m.Tick(s,.016f);
+            check(Math.Abs(m.Y-s.Layout.Y(Lane.Top))<.001,"Top input reaches upper rail without advancing animation time");
+            s.AirT=.5;m.Tick(s,.016f);check(Math.Abs(m.Y-s.Layout.Y(Lane.Top))<.001,"Upper rail stays aligned throughout rule airtime");
+            g.Press(Lane.Bottom,"interrupt");m.Tick(s,0);
+            check(Math.Abs(m.Y-s.Layout.Y(Lane.Bottom))<.001&&!m.Airborne,"Bottom input interrupts airtime and reaches lower rail immediately");
             check(!m.Airborne&&m.Landing>0&&m.Squash>0,"Touchdown produces landing compression");
             s.AttackT=0;for(int i=0;i<20;i++)m.Tick(s,.016f);check(m.Riding,"Ground riding resumes after landing");
             var h=g.SpawnLong(Lane.Bottom);h.X=s.Layout.HitX-h.H*.46;g.Press(Lane.Bottom,"hold");m.Tick(s,.016f);
@@ -30,11 +30,48 @@ namespace Dashing.Editor
             g.CancelHold();s.Monsters.Clear();s.AttackT=0;m.Cue(new Cue(CueKind.Pair,0,0,Lane.Bottom),s);m.Tick(s,.3f);
             check(m.PairP>.16f&&m.PairP<.58f&&m.BodyY<m.Y-s.Layout.PlayerR*2,"Twin finish has the source 0.62 second jump / slam");
             float pair=m.PairP;s.Phase=Phase.Paused;m.Tick(s,.2f);check(m.PairP==pair,"Pause freezes twin pose");s.Phase=Phase.Running;
+            g.Press(Lane.Top,"interrupt-pair");foreach(var cue in g.Cues)m.Cue(cue,s);g.Cues.Clear();m.Tick(s,0);
+            check(m.PairP==0&&Math.Abs(m.BodyY-s.Layout.Y(Lane.Top))<s.Layout.PlayerR*.15,"New strike interrupts twin finish and puts body on the requested rail");
             m.Reset(s);s.HoldId=99;m.Cue(new Cue(CueKind.Pair,0,0,Lane.Top),s);m.Tick(s,.016f);check(m.PairP==0,"Soul twin finish never makes held body jump");s.HoldId=0;
             m.Cue(new Cue(CueKind.Hurt,0,0,Lane.Bottom),s);m.Tick(s,.016f);check(m.Hurt>0,"Hurt flash starts");m.Tick(s,.3f);check(m.Hurt==0,"Hurt flash clears");
             s.Fever=true;m.Tick(s,.35f);check(m.Fever==1,"FEVER halo follows rule state");s.Fever=false;m.Tick(s,.35f);check(m.Fever==0,"FEVER halo fully clears after 0.35 seconds");
             m.Reset(s);s.AttackT=0;s.AirT=0;s.PlayerLane=Lane.Bottom;s.Phase=Phase.Over;m.Tick(s,.016f);check(!m.Riding,"Game over stops ground riding");
+            CheckRailResponse(check);
             log.AppendLine("DASHING_PRESENTATION_CHECKS_PASS "+count+" assertions");return log.ToString();
+        }
+        private static void CheckRailResponse(Action<bool,string> check)
+        {
+            foreach(Character character in new[]{Character.Rin,Character.Zhe})
+            {
+                foreach(float dt in new[]{0f,.001f,1f/240,1f/60,1f/30,.05f})
+                {
+                    var game=new Game(12345,1,character);game.S.SpawnTimer=999;
+                    var motion=new PlayerMotion();motion.Reset(game.S);
+                    bool aligned=true;
+                    for(int i=0;i<100;i++)
+                    {
+                        Lane rail=i%2==0?Lane.Top:Lane.Bottom;game.Press(rail,"rapid");
+                        foreach(var cue in game.Cues)motion.Cue(cue,game.S);game.Cues.Clear();motion.Tick(game.S,dt);
+                        aligned&=Math.Abs(motion.Y-game.S.Layout.Y(rail))<.001&&
+                            Math.Abs(motion.BodyY-game.S.Layout.Y(rail))<game.S.Layout.PlayerR*.15;
+                    }
+                    check(aligned,character+" follows 100 alternating inputs without travel lag at dt="+dt);
+                }
+                var chart=new MusicChart{title="Rail response",duration=10};
+                chart.notes.Add(new RhythmNote(1,Lane.Top));chart.notes.Add(new RhythmNote(1.001,Lane.Bottom));
+                var battle=new RhythmBattle(chart,character);var view=new PlayerMotion();view.Reset(battle.State);
+                battle.Advance(1);var upper=battle.Press(Lane.Top,1);view.Tick(battle.State,0);
+                check(upper.judgment==RhythmJudgment.Perfect&&Math.Abs(view.Y-battle.State.Layout.Y(Lane.Top))<.001,character+" chart hit and upper-rail visual agree in the input frame");
+                battle.Advance(1.001);var lower=battle.Press(Lane.Bottom,1.001);view.Tick(battle.State,0);
+                check(lower.judgment==RhythmJudgment.Perfect&&Math.Abs(view.Y-battle.State.Layout.Y(Lane.Bottom))<.001,character+" chart can reverse rails one millisecond later");
+                var holdGame=new Game(12345,1,character);var holdMotion=new PlayerMotion();holdMotion.Reset(holdGame.S);
+                var hold=holdGame.SpawnLong(Lane.Top);hold.X=holdGame.S.Layout.HitX-hold.H*.46;
+                holdGame.Press(Lane.Top,"hold");holdMotion.Tick(holdGame.S,0);float heldY=holdMotion.Y;
+                holdGame.Press(Lane.Bottom,"soul");foreach(var cue in holdGame.Cues)holdMotion.Cue(cue,holdGame.S);holdMotion.Tick(holdGame.S,0);
+                check(holdMotion.Holding&&holdMotion.Y==heldY&&holdGame.S.PlayerLane==Lane.Top,character+" soul strike preserves held body despite immediate rail presentation");
+                holdGame.Pause();float before=holdMotion.BodyY;holdMotion.Tick(holdGame.S,.05f);
+                check(holdMotion.BodyY==before,character+" pause freezes fast rail presentation");
+            }
         }
     }
 }

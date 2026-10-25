@@ -9,6 +9,39 @@
 双击 `Play.cmd`，或者运行 `Builds/Windows/Dashing.exe`。
 发布给其他电脑时，需要一并保留整个 `Builds/Windows` 文件夹，不能只复制 exe。
 
+## 音乐模式 / 自定义编谱
+
+1. 主菜单点击「音乐模式 / 自定义编谱」。
+2. 点击「选择 MP3」打开 Windows 文件选择器，或粘贴完整文件路径后点击「导入并编谱」。
+3. 可修改关卡名称，然后点击「开始录谱」。两秒倒计时后开始播放；
+   跟着节奏点击屏幕上的上轨 / 下轨区域，或使用当前绑定的上下轨按键。
+   系统记录按下瞬间对应的音乐时间，支持两轨同时输入。录谱时不显示角色，
+   上下轨记录点位于屏幕中央；每次有效点击都会立即在对应记录点生成怪物，向左移出。
+4. 点击「结束录制」或等待歌曲播放结束。可以撤销最后一拍、试听、重新录制，
+   或点击「保存为本地关卡」。离开未保存的录谱时会要求确认。
+5. 保存后回到关卡库，点击关卡进入角色选择，选择凛或哲后开始游玩；退出程序再打开仍能找到。
+   未保存草稿的「试听 / 游玩」也先进入角色选择，结束试听后仍可继续编辑和保存。
+
+录谱和游玩都支持 P / Esc 或按钮暂停；切出窗口自动暂停。音乐、怪物位置和判定
+使用同一个 DSP 时间基准。输入补偿可在录谱准备 / 回顾界面以 10 ms 步长调整，
+范围 ±250 ms；正值将输入时间提前，设置在本机保留。
+
+谱面与音乐副本保存在 Unity 的 Application.persistentDataPath 下：
+Windows 通常为 %USERPROFILE%\AppData\LocalLow\Dashing Game\双轨打怪\MusicLevels\。
+每个关卡有独立目录，包含 chart.json 和 music.mp3；保存后移动原始 MP3 不影响游玩。
+失败的保存不覆盖已有关卡，损坏条目会被跳过并提示。
+
+当前版本支持本地 MP3（非空、最大 150 MB、最长 30 分钟），每张谱面 1–50000 个
+单击音符，同轨最小间隔 25 ms。暴击（Perfect）为 ±60 ms / 基础 300 分，
+普攻（Good）为 ±150 ms / 基础 200 分，超时为漏怪（Miss）。
+自制谱游玩复用生存模式的血量、命中回血、燃魂、FEVER、连击和死亡机制：
+凛初始 125 / 250 HP，命中回血 +5，满血燃魂得分 ×2；哲初始 300 / 300 HP。
+每 50 连击触发 10 秒 FEVER ×1.5，可与燃魂叠加。同轨漏怪扣 20 HP，异轨擦过不扣血，
+两者均清空连击与 FEVER；生命耗尽提前结算，剩余音符计为漏怪。
+结算显示实际得分、准确率、最大连击、各项判定和剩余血量。
+怪物生成由谱面时间决定，不额外随机生成。当前为手动单击录谱；自动分析音乐生成谱面、
+长按 / 双生谱面和时间轴精修尚未实现。
+
 ## 用 Unity 继续开发
 
 1. Unity Hub → Add / 添加磁盘中的项目 → 选择本目录 `unity`。
@@ -100,6 +133,8 @@ Tools/                     构建、资源格式转换、TypeScript 对照回放
 规则遵循 Web 版本 `src/game` 的数值、判定和时序。表现层使用 Unity 原生实现，
 怪物、地面、菜单、反馈和短音效重新制作，不是 Pixi 滤镜逐像素复刻。
 原生版已支持每轨 1–3 键编辑、冲突检查和持久化；设置与 Web 版本分别保存。
+角色切轨与输入当帧对齐，不再等待起跳 / 下落；新出刀可打断双生收尾。
+原生运行目标为 240 FPS，关闭 VSync 并限制一帧渲染排队；实际显示延迟取决于帧率、设备与显示器，未承诺 1 ms。
 Windows 为本次实际构建 / 验证平台，其他平台未声称完成打包验证。
 
 ## 重建 / 校验
@@ -153,5 +188,29 @@ node unity/Tools/test-rin-clarity.mjs
 - `--dashing-clarity` 在原生窗口中比较同一时刻 / 尺寸的站姿、骑镰、出招及燃魂，
   保存 `TestResults/RinClarity/clarity-comparison.png` 等对比图；自动结束，不写入玩家设置。
 - 编辑器额外检查 26 张增强图的尺寸 / 导入方式和 24 张线性位移图。
+- TestResults/music-checks.txt 包含 70 项录谱、DSP 时钟、判定边界、谱面校验、
+  JSON 往返、原音乐移走后的加载、损坏条目、失败保存与生存战斗规则复用检查。
+- --dashing-music-smoke --music-fixture "完整 MP3 路径" 运行 22 项真实解码 /
+  中央出怪 / 录制 / 保存 / 选角 / 回放检查；只使用可移动的测试文件，不要传入自己的原始音乐。
+  测试使用独立临时关卡库，会短暂移动测试 MP3 来验证保存副本；通过后自动还原并退出。
+- Tools/Test-MusicInput.ps1 的 42 项检查验证系统文件选择器、真实上下轨键鼠录制、
+  无角色的中央出怪左移、暂停、撤销、重录确认、草稿试听、改名、保存、跨进程重启、
+  两角色选择和血量、同轨受伤 / 异轨擦过与结算，测试不修改玩家关卡库。
+  报告和实际窗口截图在 TestResults/Music/，测试会自动打开并关闭游戏窗口。
+
+音乐测试可使用原创合成的短 MP3。生成器只用于验证，不进入游戏运行依赖：
+
+~~~powershell
+# 在父工程目录执行，lamejs 仅下载到已忽略的测试目录。
+New-Item -ItemType Directory -Path unity/TestResults/MusicFixture -Force
+npm.cmd pack lamejs@1.2.1 --pack-destination unity/TestResults/MusicFixture --silent
+tar -xf unity/TestResults/MusicFixture/lamejs-1.2.1.tgz -C unity/TestResults/MusicFixture
+node unity/Tools/music-fixture.mjs
+node unity/Tools/music-fixture.mjs 20
+& '.\unity\Tools\Test-MusicInput.ps1'
+~~~
+
+首次运行前创建 unity/TestResults/MusicFixture 目录；4 秒样例用于原生自动检查，
+20 秒样例用于真实键鼠测试。测试文件、编码器、截图和报告均不进入 Git。
 
 两套工程可分别构建。源码与原画由 Git 管理；构建、测试报告与截图保留在本地，不进入版本库。

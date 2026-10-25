@@ -16,6 +16,9 @@ namespace Dashing.Unity
         private readonly SpriteRenderer floor, slash;
         private readonly PlayerMotion motion=new PlayerMotion();
         private readonly CharacterEffects characterEffects;
+        private readonly Transform characterEffectsRoot;
+        private readonly SpriteRenderer recordingLine;
+        public bool CharacterVisible {get;private set;}
         public PlayerMotion Motion {get {return motion;}}
         public RinView Rin {get {return rin;}}
         public bool FeverEffectsVisible {get {return characterEffects.FeverVisible;}}
@@ -43,7 +46,9 @@ namespace Dashing.Unity
                 zones[i]=new HitZoneView(root,lane);
             }
             for(int i=0;i<50;i++) scenery.Add(Art.Part("Scrolling ground",root,Art.Square,new Color(.12f,.24f,.24f,.5f),-8));
-            characterEffects=new CharacterEffects(root);
+            characterEffectsRoot=new GameObject("Character effects").transform;characterEffectsRoot.SetParent(root,false);
+            characterEffects=new CharacterEffects(characterEffectsRoot);
+            recordingLine=Art.Part("Central recording line",root,Art.Square,Art.Sky,2);recordingLine.enabled=false;
             rin=new RinView(root,"Rin native animation",10); soul=new RinView(root,"Soul proxy",12);soul.Root.SetActive(false);
             zhe=new GameObject("Zhe native character").transform;zhe.SetParent(root,false);
             leg1=Art.Part("Leg L",zhe,Art.Square,new Color(.17f,.2f,.35f),6);leg2=Art.Part("Leg R",zhe,Art.Square,new Color(.17f,.2f,.35f),6);
@@ -80,7 +85,7 @@ namespace Dashing.Unity
                 p.Life=p.MaxLife=(float)(.18+random.NextDouble()*.3);p.Color=c;p.Sprite.enabled=true;p.Sprite.transform.localScale=Vector3.one*(float)(.02+random.NextDouble()*.04);
             }
         }
-        public void Draw(GameState s,float dt)
+        public void Draw(GameState s,float dt,bool recording=false)
         {
             var l=s.Layout;bool animate=s.Phase!=Phase.Paused;
             if(animate) {visualClock+=dt;scroll+=(float)(dt*(s.Phase==Phase.Running?165:38));swingT=Mathf.Max(0,swingT-dt);if(soulT>=0)soulT+=dt;}
@@ -95,14 +100,17 @@ namespace Dashing.Unity
                 var lane=(Lane)i;Color c=s.Fever?Art.Gold:Art.LaneColor(lane);
                 rails[i].color=new Color(c.r,c.g,c.b,.35f);
                 Art.Place(rails[i],l.Width/2,l.Y(lane)+l.PlayerR*.94,l.Width,1.5);
-                zones[i].Draw(s,visualClock);
+                zones[i].Draw(s,visualClock,recording);
             }
-            rin.Root.SetActive(s.Character==Character.Rin);zhe.gameObject.SetActive(s.Character==Character.Zhe);
-            if(s.Character==Character.Rin) rin.Draw(s,visualClock,playerY,motion);else DrawZhe(s);
-            characterEffects.Draw(s,motion);
-            soul.Root.SetActive(soulT>=0 && soulT<.5f && s.Character==Character.Rin);
+            CharacterVisible=!recording;
+            recordingLine.enabled=recording;
+            if(recording)Art.Place(recordingLine,l.Width/2,(l.Y(Lane.Top)+l.Y(Lane.Bottom))/2,2,l.Y(Lane.Bottom)-l.Y(Lane.Top)+100);
+            rin.Root.SetActive(!recording&&s.Character==Character.Rin);zhe.gameObject.SetActive(!recording&&s.Character==Character.Zhe);
+            characterEffectsRoot.gameObject.SetActive(!recording);
+            if(!recording){if(s.Character==Character.Rin)rin.Draw(s,visualClock,playerY,motion);else DrawZhe(s);characterEffects.Draw(s,motion);}
+            soul.Root.SetActive(!recording&&soulT>=0 && soulT<.5f && s.Character==Character.Rin);
             if(soul.Root.activeSelf)soul.Draw(s,visualClock,playerY,motion,true,soulT,soulLane);
-            slash.enabled=swingT>0 || (soulT>=0&&soulT<.2);
+            slash.enabled=!recording&&(swingT>0 || (soulT>=0&&soulT<.2));
             if(slash.enabled){Lane lane=swingT>0?swingLane:soulLane;slash.color=new Color(1,.9f,.6f,Mathf.Clamp01(swingT/.22f));Art.Place(slash,l.HitX,l.Y(lane),l.ZoneHalf*1.4,l.ZoneHalf*.7,-25);}
             int used=0;
             foreach(var m in s.Monsters)
