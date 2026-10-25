@@ -175,7 +175,7 @@ namespace Dashing.Unity
                 Art.Place(eyeL,face-m.H*.15,-m.H*.06,m.H*.13,m.H*.19);Art.Place(eyeR,face+m.H*.12,-m.H*.06,m.H*.13,m.H*.19);
                 Art.Place(browL,face-m.H*.16,-m.H*.18,m.H*.22,m.H*.07,-20);Art.Place(browR,face+m.H*.12,-m.H*.18,m.H*.22,m.H*.07,20);
                 hornL.enabled=hornR.enabled=!hold;Art.Place(hornL,-m.W*.3,-m.H*.43,m.W*.3,m.H*.32,20);Art.Place(hornR,m.W*.3,-m.H*.43,m.W*.3,m.H*.32,-20);
-                fill.enabled=hold;if(hold)Art.Place(fill,m.Len*m.HoldT/4,m.H*.27,m.Len*m.HoldT/2,4);
+                fill.enabled=hold;if(hold){double progress=MathEx.Clamp(m.HoldT/m.HoldDuration,0,1);Art.Place(fill,m.Len*progress/2,m.H*.27,m.Len*progress,4);}
                 chain.enabled=m.Kind==MonsterKind.Twin&&m.PartnerId!=0&&m.Lane==Lane.Top;
                 if(chain.enabled){chain.startColor=chain.endColor=new Color(.78f,.57f,1,.45f);chain.SetPosition(0,Vector3.zero);chain.SetPosition(1,Art.At(0,s.Layout.Y(Lane.Bottom)-m.Y));}
             }

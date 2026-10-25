@@ -70,6 +70,7 @@ namespace Dashing.Core
         public double X, Y, W, H, Vx, Sf, Phase, Wob, PairT;
         public bool Removed, PairPending, PairCrit;
         public double Len, HoldT, WaitT = 6, TipT = -9, EscapeSpeed = 980;
+        public double HoldDuration = 2;
         public bool Anchored, Escaped, Holding, HeadAwarded, MidAwarded;
         public double HeadX { get { return X + H * .46; } }
     }

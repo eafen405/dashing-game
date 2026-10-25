@@ -16,6 +16,7 @@ namespace Dashing.Unity
         private readonly Button[] levelButtons = new Button[5];
         private readonly Button record, replay, save, undo, restart, finish, pause;
         private readonly Button rin,zhe;
+        private readonly Button twinEditor, twinRecording;
         private readonly Text selectedCharacter,topHint,bottomHint;
         private readonly RectTransform[] railTargets = new RectTransform[2];
         private readonly CanvasGroup[] railHints = new CanvasGroup[2];
@@ -56,6 +57,7 @@ namespace Dashing.Unity
             undo = Button("撤销最后一拍", editor.transform, music.Undo, new Vector2(-205, -55), new Vector2(350, 46));
             restart = Button("重新录制", editor.transform, music.RestartRecording, new Vector2(205, -55), new Vector2(350, 46));
             save = Button("保存为本地关卡", editor.transform, music.Save, new Vector2(0, -125), new Vector2(450, 52));
+            twinEditor = Button("", editor.transform, music.ToggleRecordTwins, new Vector2(0, -169), new Vector2(560, 30));
             Button("返回关卡库", editor.transform, music.BackToLibrary, new Vector2(0, -329), new Vector2(230, 38));
             offset = Label("", editor.transform, 15, Art.Mint, new Vector2(0, -208), new Vector2(680, 48));
             Button("−10 ms", editor.transform, () => music.SetOffset(-10), new Vector2(-360, -208), new Vector2(120, 36));
@@ -79,6 +81,7 @@ namespace Dashing.Unity
             recordLabels=Container("Recording point labels",transport.transform);
             Label("← 上轨记录点",recordLabels.transform,16,Art.Sky,new Vector2(0,207),new Vector2(220,32));
             Label("← 下轨记录点",recordLabels.transform,16,Art.Mint,new Vector2(0,-110),new Vector2(220,32));
+            twinRecording = Button("", transport.transform, music.ToggleRecordTwins, new Vector2(0, -238), new Vector2(450, 34));
             confirm = Box("Discard modal blocker", root.transform, new Color(0, 0, 0, .7f)); Stretch(confirm.GetComponent<RectTransform>());
             var dialog = Box("Discard confirmation", confirm.transform, new Color(.07f, .09f, .15f, .99f)); Place(dialog.GetComponent<RectTransform>(), Vector2.zero, new Vector2(790, 240));
             Label("当前录谱尚未保存", confirm.transform, 25, Art.Gold, new Vector2(0, 65), new Vector2(740, 55));
@@ -93,8 +96,15 @@ namespace Dashing.Unity
             panel.SetActive(!running); library.SetActive(lib); editor.SetActive(!lib && !running && music.Screen != MusicScreen.Loading&&!choosing); transport.SetActive(running);selection.SetActive(choosing);
             recordLabels.SetActive(music.Screen==MusicScreen.Recording);
             bool recording = music.Screen == MusicScreen.Recording;
-            topHint.text = recording ? "上轨  /  点击录入" : "上轨  /  点击出刀";
-            bottomHint.text = recording ? "下轨  /  点击录入" : "下轨  /  点击出刀";
+            string recordHint = music.RecordTwins ? "双生录入" : "点击或按住";
+            topHint.text = recording ? "上轨  /  " + recordHint : "上轨  /  点击出刀";
+            bottomHint.text = recording ? "下轨  /  " + recordHint : "下轨  /  点击出刀";
+            twinEditor.gameObject.SetActive(music.Draft);
+            twinRecording.gameObject.SetActive(recording);
+            string twinText = music.RecordTwins ? "双生：开 · 点任一轨录入一对（点此关闭）" : "双生：关 · 点此开启，一次录入一对";
+            twinEditor.GetComponentInChildren<Text>().text = twinText;
+            twinRecording.GetComponentInChildren<Text>().text = twinText;
+            twinRecording.interactable = !music.Paused;
             for (int i = 0; i < railPulse.Length; i++) railPulse[i] = 0;
             UpdateRailControls();
             bool useRin=music.SelectedCharacter==Character.Rin;
@@ -102,7 +112,7 @@ namespace Dashing.Unity
             zhe.GetComponentInChildren<Text>().text=(!useRin?"✓ ":"")+"哲 · 棒球棍";
             selectedCharacter.text=useRin?"凛 · 初始 125 / 250 HP\n命中回血 +5；满血燃魂，得分 ×2\n燃魂期间持续消耗生命，最低回落至 125 HP":"哲 · 初始 300 / 300 HP\n生命更高，适合熟悉自己的谱面\n沿用生存模式的棒球棍动作与判定反馈";
             confirm.SetActive(music.ConfirmDiscard); status.text = music.Status;
-            header.text = music.Screen == MusicScreen.Loading ? "正在读取本地音乐…" : choosing?music.Chart.title:lib ? "选择关卡，或导入自己的 MP3 来编谱" : music.Screen == MusicScreen.Results ? "演奏完成" : "听音乐、打节奏，再把它保存为关卡";
+            header.text = music.Screen == MusicScreen.Loading ? "正在读取本地音乐…" : choosing?music.Chart.title:lib ? "选择关卡，或导入自己的 MP3 来编谱" : music.Screen == MusicScreen.Results ? "演奏完成" : "短按录单击；按住至少 0.2 秒录长按；开启双生录入后点一次生成一对";
             for (int i = 0; i < levelButtons.Length; i++)
             {
                 int index = music.Page * 5 + i; levelButtons[i].gameObject.SetActive(index < music.Levels.Count);
@@ -118,8 +128,8 @@ namespace Dashing.Unity
             finish.GetComponentInChildren<Text>().text = music.Screen == MusicScreen.Recording ? "结束录制" : "结束游玩";
             if (music.Chart != null)
             {
-                int top = 0; foreach (var note in music.Chart.notes) if (note.rail == Lane.Top) top++;
-                summary.text = music.Chart.duration.ToString("F1") + " 秒    ·    " + music.Chart.notes.Count + " 音符（上 " + top + " / 下 " + (music.Chart.notes.Count - top) + "）\n" + music.Host.KeyDescription;
+                int top = 0, holds = 0, twins = 0; foreach (var note in music.Chart.notes) { if (note.rail == Lane.Top) top++; if (note.kind == MonsterKind.Hold) holds++; if (note.kind == MonsterKind.Twin) twins++; }
+                summary.text = music.Chart.duration.ToString("F1") + " 秒    ·    " + music.Chart.notes.Count + " 音符（上 " + top + " / 下 " + (music.Chart.notes.Count - top) + "）\n长按 " + holds + " 个 · 双生 " + twins/2 + " 对\n" + music.Host.KeyDescription;
                 if (music.Screen == MusicScreen.Results && music.Session != null) summary.text = Results();
             }
         }
@@ -135,8 +145,19 @@ namespace Dashing.Unity
             UpdateRailControls();
             double t = music.SongTime;
             time.text = (music.Screen == MusicScreen.Recording ? "● 录谱" : "▶ 演奏") + "  ·  " + music.Chart.title + "  ·  " + Math.Max(0, t).ToString("F2") + " / " + music.Duration.ToString("F1") + " 秒";
-            score.text = music.Screen == MusicScreen.Recording ? "已录 " + music.Recorder.Notes.Count + " 个音符    ·    " + music.Host.KeyDescription : Results();
+            score.text = music.Screen == MusicScreen.Recording ? "已录 " + music.Recorder.Notes.Count + " 个音符    ·    " + music.Host.KeyDescription + "\n短按单击 · 按住 ≥0.2 秒录长按（记录实际时长） · 双生开关可一键录入一对" : Results();
             feedback.text = music.Paused ? "已暂停 · 点击继续" : t < 0 ? "准备  " + Math.Ceiling(-t).ToString("F0") : music.Feedback;
+            if (!music.Paused && music.Screen == MusicScreen.Recording)
+                foreach (var note in music.Recorder.HeldNotes)
+                {
+                    double length = music.Recorder.PreviewDuration(note, t - music.OffsetMs / 1000.0);
+                    if (length >= ChartRecorder.HoldThreshold) feedback.text = "录制长按 · " + (note.rail == Lane.Top ? "上轨 " : "下轨 ") + length.ToString("F2") + " 秒 · 松开完成";
+                }
+            if (!music.Paused && music.Screen == MusicScreen.Playing && music.View.HoldId != 0)
+            {
+                var held = music.Battle.Combat.Find(music.View.HoldId);
+                if (held != null) feedback.text = "长按中  " + held.HoldT.ToString("F2") + " / " + held.HoldDuration.ToString("F2") + " 秒 · 另一轨可出刀";
+            }
             pause.GetComponentInChildren<Text>().text = music.Paused ? "继续" : "暂停";
         }
         private Text RailControl(Lane rail)
@@ -202,10 +223,11 @@ namespace Dashing.Unity
         private static void Stretch(RectTransform rect) { rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero; }
     }
 
-    public sealed class MusicRailPointer : MonoBehaviour, IPointerDownHandler
+    public sealed class MusicRailPointer : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
         private MusicMode music; private Lane rail;
         public void Initialize(MusicMode mode, Lane value) { music = mode; rail = value; }
-        public void OnPointerDown(PointerEventData data) { if (data.button == PointerEventData.InputButton.Left) music.Tap(rail); }
+        public void OnPointerDown(PointerEventData data) { if (data.button == PointerEventData.InputButton.Left) music.Press(rail,"pointer:" + data.pointerId); }
+        public void OnPointerUp(PointerEventData data) { if (data.button == PointerEventData.InputButton.Left) music.Release("pointer:" + data.pointerId); }
     }
 }

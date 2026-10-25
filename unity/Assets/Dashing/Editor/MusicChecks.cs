@@ -111,7 +111,100 @@ namespace Dashing.Editor
                 rejects(() => MusicLevelStore.CheckAudio(Path.Combine(root, "source.wav")), "Reject unsupported extension");
             }
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+            CheckAuthoredMonsters(check, rejects);
             log.AppendLine("DASHING_MUSIC_CHECKS_PASS " + count + " assertions"); return log.ToString();
+        }
+        private static MusicChart HoldChart(double length)
+        {
+            var chart = new MusicChart { title = "Recorded hold", duration = 12 };
+            chart.notes.Add(new RhythmNote(1, Lane.Top, MonsterKind.Hold, length)); return chart;
+        }
+        private static MusicChart TwinChart()
+        {
+            var chart = new MusicChart { title = "Recorded twins", duration = 6 };
+            chart.notes.Add(new RhythmNote(1, Lane.Top, MonsterKind.Twin, 0, 7));
+            chart.notes.Add(new RhythmNote(1, Lane.Bottom, MonsterKind.Twin, 0, 7)); return chart;
+        }
+        private static void CheckAuthoredMonsters(Action<bool, string> check, Action<Action, string> rejects)
+        {
+            var recorder = new ChartRecorder();
+            check(recorder.Press(1, Lane.Top, 12, "W"), "Press begins a recording immediately");
+            check(!recorder.Press(1.1, Lane.Top, 12, "W") && !recorder.Press(1.1, Lane.Top, 12, "Up"), "Held input and same-rail alternate key do not duplicate notes");
+            check(recorder.Release("W", 1.1, 12) && recorder.Notes[0].kind == MonsterKind.Normal, "Short press stays a normal monster");
+            recorder.Press(2, Lane.Bottom, 12, "S"); recorder.Release("S", 4.735, 12);
+            check(recorder.Notes[1].kind == MonsterKind.Hold && Math.Abs(recorder.Notes[1].duration - 2.735) < 1e-9, "Record exact long press duration without fixed two-second rounding");
+            recorder.Press(5, Lane.Top, 12, "W"); recorder.Release("W", 5.2, 12);
+            check(recorder.Notes[2].kind == MonsterKind.Hold, "Two-hundred-millisecond hold threshold is inclusive");
+            recorder.Press(6, Lane.Bottom, 12, "S", true);
+            check(recorder.Notes.Count == 5 && recorder.Notes[3].kind == MonsterKind.Twin && recorder.Notes[3].pairId == recorder.Notes[4].pairId && recorder.Notes[3].time == recorder.Notes[4].time && recorder.Notes[3].rail != recorder.Notes[4].rail, "Twin input records both rails atomically");
+            check(recorder.Undo() && recorder.Notes.Count == 3 && recorder.Notes.TrueForAll(n => n.kind != MonsterKind.Twin), "Undo removes both halves of authored twins");
+            recorder.Press(10, Lane.Bottom, 12, "S"); recorder.Finish(13, 12);
+            check(recorder.Notes[3].duration == 2, "Finish clips held note to song end");
+            var ended = new MusicChart { title = "End trim", duration = 12, notes = recorder.Notes }; ended.Validate();
+            var pending = new ChartRecorder(); pending.Press(1, Lane.Top, 10, "W"); pending.Undo();
+            check(!pending.Release("W", 3, 10) && pending.Notes.Count == 0, "Undo held note cannot resurrect it on release");
+            var overlap = new ChartRecorder(); overlap.Press(1, Lane.Top, 10, "W"); overlap.Press(1.2, Lane.Bottom, 10, "S");
+            overlap.Release("W", 2, 10); overlap.Release("S", 2.2, 10);
+            check(overlap.Notes[0].kind == MonsterKind.Hold && overlap.Notes[1].kind == MonsterKind.Normal && overlap.Warning != null, "Overlapping two-body holds retain a tap with explicit warning");
+            var pauseClock = new SongTimeline(); pauseClock.Start(0, 0); var pausedRecorder = new ChartRecorder();
+            pausedRecorder.Press(pauseClock.Time(1), Lane.Top, 10, "W"); pauseClock.Pause(1.4); pauseClock.Resume(100);
+            pausedRecorder.Release("W", pauseClock.Time(100.3), 10);
+            check(Math.Abs(pausedRecorder.Notes[0].duration - .7) < 1e-9, "Recorded duration excludes paused wall-clock time");
+            foreach (double invalid in new[] { -.2, 0, .199, double.NaN, double.PositiveInfinity, 12 })
+            { var bad = HoldChart(invalid); rejects(() => bad.Validate(), "Reject invalid authored hold duration " + invalid); }
+            var badKind = Sample(); badKind.notes[0].kind = (MonsterKind)9; rejects(() => badKind.Validate(), "Reject unknown monster kind");
+            var badTap = Sample(); badTap.notes[0].duration = 1; rejects(() => badTap.Validate(), "Reject duration on tap monster");
+            var overlapChart = HoldChart(2); overlapChart.notes.Add(new RhythmNote(2, Lane.Top)); rejects(() => overlapChart.Validate(), "Reject other monsters inside held rail");
+            var bothHeld = HoldChart(2); bothHeld.notes.Add(new RhythmNote(1.5, Lane.Bottom, MonsterKind.Hold, 2)); rejects(() => bothHeld.Validate(), "Reject overlapping long holds on both rails");
+            var missingTwin = TwinChart(); missingTwin.notes.RemoveAt(1); rejects(() => missingTwin.Validate(), "Reject orphan twin");
+            var sameRail = TwinChart(); sameRail.notes[1].rail = Lane.Top; rejects(() => sameRail.Validate(), "Reject twin on same rail");
+            var shiftedTwin = TwinChart(); shiftedTwin.notes[1].time += .01; rejects(() => shiftedTwin.Validate(), "Reject mismatched twin onset");
+            var wrongPair = TwinChart(); wrongPair.notes[0].pairId = 0; rejects(() => wrongPair.Validate(), "Reject missing twin pair identifier");
+            var holdCopy = HoldChart(2.735).Copy(); check(holdCopy.notes[0].kind == MonsterKind.Hold && holdCopy.notes[0].duration == 2.735, "Chart copy preserves authored hold metadata");
+            var twinCopy = TwinChart().Copy(); check(twinCopy.notes[1].pairId == 7 && twinCopy.notes[1].kind == MonsterKind.Twin, "Chart copy preserves twin links");
+            var legacy = JsonUtility.FromJson<MusicChart>("{\"version\":1,\"title\":\"Legacy\",\"audioFile\":\"music.mp3\",\"duration\":4,\"notes\":[{\"time\":1,\"rail\":0}]}"); legacy.Validate();
+            check(legacy.notes[0].kind == MonsterKind.Normal && legacy.notes[0].duration == 0, "Existing tap-only JSON remains playable");
+            var roundtrip = JsonUtility.FromJson<MusicChart>(JsonUtility.ToJson(HoldChart(2.735))); roundtrip.Validate();
+            check(roundtrip.notes[0].duration == 2.735 && roundtrip.notes[0].kind == MonsterKind.Hold, "JSON roundtrip preserves exact hold duration");
+            var twinRoundtrip = JsonUtility.FromJson<MusicChart>(JsonUtility.ToJson(TwinChart())); twinRoundtrip.Validate();
+            check(twinRoundtrip.notes[0].pairId == twinRoundtrip.notes[1].pairId, "JSON roundtrip preserves twin pairing");
+            foreach (Character character in new[] { Character.Rin, Character.Zhe })
+            {
+                foreach (double length in new[] { .2, .375, 1.25, 2.735, 5.0 })
+                {
+                    var battle = new RhythmBattle(HoldChart(length), character); battle.Advance(1);
+                    var head = battle.Press(Lane.Top, 1, "held");
+                    check(head.index == 0 && head.judgment == RhythmJudgment.Pending && battle.State.HoldId != 0 && battle.State.Score == 200, character + " authored hold starts and awards head " + length);
+                    battle.Advance(1 + length - .001);
+                    check(battle.Session.Perfect == 0 && battle.State.HoldId != 0 && Math.Abs(battle.MonsterAt(0).HoldT - (length - .001)) < 1e-7, character + " hold lasts its actual recorded duration " + length);
+                    battle.Release("other", 1 + length - .001); check(battle.State.HoldId != 0, character + " unrelated input release cannot break hold " + length);
+                    battle.Advance(1 + length);
+                    check(battle.State.HoldId == 0 && battle.MonsterAt(0).Removed && battle.Session.Perfect == 1 && battle.State.Score == 600 && battle.State.Combo == 1, character + " custom hold completes exactly once with shared three-part rewards " + length);
+                    battle.Advance(1 + length + .1); battle.Release("held", 1 + length + .1);
+                    check(battle.State.Score == 600 && battle.Session.Perfect == 1, character + " release after completed hold does not score twice " + length);
+                }
+                var earlyRelease = new RhythmBattle(HoldChart(2.735), character); earlyRelease.Advance(1); earlyRelease.Press(Lane.Top, 1, "held"); earlyRelease.Advance(1.2); earlyRelease.Release("held", 1.2);
+                check(earlyRelease.Session.Miss == 1 && earlyRelease.State.HoldId == 0 && earlyRelease.State.Combo == 0 && earlyRelease.State.Score == 200, character + " early release fails and releases body without full reward");
+                earlyRelease.Advance(6); check(earlyRelease.Session.Miss == 1 && earlyRelease.State.Score == 200, character + " failed hold cannot complete later");
+                var soulChart = HoldChart(2.735); soulChart.notes.Add(new RhythmNote(2, Lane.Bottom));
+                var soul = new RhythmBattle(soulChart, character); soul.Advance(1); soul.Press(Lane.Top, 1, "held"); soul.Advance(2); soul.Press(Lane.Bottom, 2, "soul");
+                check(soul.State.HoldId != 0 && soul.State.PlayerLane == Lane.Top && soul.Combat.Cues.Exists(c => c.Kind == CueKind.Soul), character + " opposite-rail normal hit uses soul proxy during chart hold");
+                soul.State.Phase = Phase.Paused; double now = soul.State.Now, progress = soul.MonsterAt(0).HoldT; soul.Advance(3);
+                check(soul.State.Now == now && soul.MonsterAt(0).HoldT == progress, character + " paused chart freezes hold progress");
+                soul.State.Phase = Phase.Running; soul.Advance(3.735);
+                check(soul.Session.Perfect == 2 && soul.State.Score == 900 && soul.State.HoldId == 0, character + " soul and hold both settle independently");
+                var twins = new RhythmBattle(TwinChart(), character); twins.Advance(1);
+                check(twins.MonsterAt(0).Kind == MonsterKind.Twin && twins.MonsterAt(0).PartnerId == twins.MonsterAt(1).Id, character + " authored twins show linked pair");
+                twins.Press(Lane.Top, 1); twins.Press(Lane.Top, 1.01); twins.Advance(1.05); twins.Press(Lane.Bottom, 1.05);
+                check(twins.Session.Perfect == 2 && twins.State.Score == 1000 && twins.State.Combo == 2 && twins.MonsterAt(0).Removed && twins.MonsterAt(1).Removed, character + " twin two-rail critical uses survival pair reward");
+                var lateTwin = new RhythmBattle(TwinChart(), character); lateTwin.Advance(1); lateTwin.Press(Lane.Bottom, 1); lateTwin.Advance(1.18); lateTwin.Press(Lane.Top, 1.18);
+                check(lateTwin.Session.Good == 2 && lateTwin.Session.Miss == 0 && lateTwin.State.Score == 700, character + " twin second rail accepts inclusive 180ms window beyond ordinary late window");
+                var solo = new RhythmBattle(TwinChart(), character); solo.Advance(1); solo.Press(Lane.Top, 1); int hp = solo.State.Hp; solo.Advance(1.181);
+                check(solo.Session.Perfect == 1 && solo.Session.Miss == 1 && solo.State.Score == 300 && solo.State.Hp == hp + (character == Character.Rin ? 5 : 0) - 20, character + " twin timeout awards single hit and self-destructs other half once");
+                solo.Advance(4); check(solo.Session.Miss == 1 && solo.State.Score == 300, character + " twin timeout cannot resolve twice");
+                var twinMiss = new RhythmBattle(TwinChart(), character); int initialHp = twinMiss.State.Hp; twinMiss.Advance(1.151);
+                check(twinMiss.Session.Miss == 2 && twinMiss.State.Hp == initialHp - 20, character + " unstruck twin pair causes one shared breach penalty");
+            }
         }
         private static MusicChart Sample()
         {

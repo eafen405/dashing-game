@@ -126,8 +126,7 @@ namespace Dashing.Unity
             if(Music!=null&&Music.Active){float musicDt=Mathf.Min(Time.unscaledDeltaTime,.05f);Music.Tick(musicDt);return;}
             if(!smoke)ReadInput();
             float dt=Mathf.Min(Time.unscaledDeltaTime,.05f);Game.Tick(dt);
-            foreach(var cue in Game.Cues){stage.Cue(cue,Game.S);ui.ShowCue(cue);if(cue.Kind==CueKind.Hurt)audioSource.PlayOneShot(hurt);else if(cue.Kind==CueKind.Hit||cue.Kind==CueKind.Pair||cue.Kind==CueKind.Hold)audioSource.PlayOneShot(cue.Critical?critical:hit);}
-            Game.Cues.Clear();
+            FlushGameCues();
             // No event can leave a post effect stuck: FEVER glow follows authoritative state.
             float target=Game.S.Fever&&Game.S.Phase!=Phase.Over?1:0;
             if(Game.S.Phase!=Phase.Paused)feverVisual=Mathf.MoveTowards(feverVisual,target,dt/.35f);
@@ -141,7 +140,12 @@ namespace Dashing.Unity
             // rail changes both reach the camera in the same frame.
             float dt=Mathf.Min(Time.unscaledDeltaTime,.05f);
             if(Music!=null&&Music.Active){Music.UI.Tick();stage.Draw(Music.View,dt,Music.Screen==MusicScreen.Recording);return;}
-            stage.Draw(Game.S,dt);ui.Update(dt);
+            FlushGameCues();stage.Draw(Game.S,dt);ui.Update(dt);
+        }
+        private void FlushGameCues()
+        {
+            foreach(var cue in Game.Cues){stage.Cue(cue,Game.S);ui.ShowCue(cue);if(cue.Kind==CueKind.Hurt)audioSource.PlayOneShot(hurt);else if(cue.Kind==CueKind.Hit||cue.Kind==CueKind.Pair||cue.Kind==CueKind.Hold)audioSource.PlayOneShot(cue.Critical?critical:hit);}
+            Game.Cues.Clear();
         }
         private void ReadInput()
         {
@@ -282,6 +286,24 @@ namespace Dashing.Unity
             yield return Capture(folder,"13-jump-apex.png");
             Game.Press(Lane.Bottom,"visual-fall");yield return new WaitForEndOfFrame();
             VisualCheck(!stage.Motion.Airborne&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Bottom))<.001,"Downward attack reaches lower rail in the input frame");
+            foreach(Character character in new[]{Character.Rin,Character.Zhe})
+            {
+                Game.S.Character=character;Game.Press(Lane.Top,"visual-idle-fall");yield return new WaitForEndOfFrame();
+                VisualCheck(Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Top))<.001,character+" idle-fall setup reaches upper rail immediately");
+                yield return WaitVisual(.35f);
+                VisualCheck(stage.Motion.Airborne&&stage.Motion.Y>Game.S.Layout.Y(Lane.Top)+5&&
+                    stage.Motion.Y<Game.S.Layout.Y(Lane.Bottom)-40,character+" visibly descends gradually without lower input");
+                if(character==Character.Rin)yield return Capture(folder,"18-natural-fall.png");
+                Game.Pause();float fallY=stage.Motion.Y;yield return new WaitForSecondsRealtime(.15f);
+                VisualCheck(stage.Motion.Y==fallY,character+" pause freezes natural descent");Game.Resume();
+                Game.Press(Lane.Top,"visual-rebound");yield return new WaitForEndOfFrame();
+                VisualCheck(Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Top))<.001,character+" upper strike interrupts falling immediately");
+                yield return WaitVisual(.15f);Game.Press(Lane.Bottom,"visual-fast-down");yield return new WaitForEndOfFrame();
+                VisualCheck(!stage.Motion.Airborne&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Bottom))<.001,character+" lower strike interrupts falling immediately");
+                Game.Press(Lane.Top,"visual-full-fall");yield return new WaitForEndOfFrame();yield return WaitVisual(1.05f);
+                VisualCheck(!stage.Motion.Airborne&&Math.Abs(stage.Motion.Y-Game.S.Layout.Y(Lane.Bottom))<.001,character+" natural descent finishes on lower rail");
+            }
+            Game.S.Character=Character.Rin;
             yield return WaitVisual(.65f);VisualCheck(stage.Rin.IsRiding,"Riding resumes after an interrupted jump lands");
             Game.SpawnPair();foreach(var m in Game.S.Monsters)m.X=Game.S.Layout.HitX;
             Game.Press(Lane.Top,"visual-pair-top");Game.Press(Lane.Bottom,"visual-pair-bottom");

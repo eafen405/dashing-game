@@ -33,6 +33,7 @@ namespace Dashing.Unity
         public double Duration { get { return Chart == null ? 0 : Chart.duration; } }
         public int OffsetMs { get; private set; }
         public int Page { get; private set; }
+        public bool RecordTwins { get; private set; }
         public GameHost Host { get; private set; }
         public MusicModeUI UI { get; private set; }
         private MusicAudio clock;
@@ -42,6 +43,8 @@ namespace Dashing.Unity
         private readonly Dictionary<int, Monster> visible = new Dictionary<int, Monster>();
         private readonly List<int> staleVisuals = new List<int>();
         private int nextVisual;
+        private readonly Dictionary<string, Lane> activeInputs = new Dictionary<string, Lane>();
+        private readonly List<string> pausedReleases = new List<string>();
         private float feedbackLeft;
         private bool isSmoke;
         private bool inputCheck, restartPending;
@@ -119,6 +122,7 @@ namespace Dashing.Unity
             { Destroy(loaded); Screen = MusicScreen.Library; Status = "关卡音频时长与谱面不一致，请检查音频文件。"; UI.Rebuild(); yield break; }
             ReleaseClip(); clip = loaded; audioPath = path; Draft = saved == null; Dirty = false; ConfirmDiscard = false;
             Recorder = new ChartRecorder(); Session = null; Battle=null;
+            RecordTwins = false;
             Chart = saved == null ? new MusicChart { title = Path.GetFileNameWithoutExtension(path).Substring(0, Math.Min(60, Path.GetFileNameWithoutExtension(path).Length)), duration = loaded.length } : saved.Copy();
             UI.TitleText = Chart.title;
             Screen = MusicScreen.Ready; Status = Draft ? "音乐已导入。开始后有 2 秒倒计时，点击时间将按音乐原样记录。" : "已加载关卡，可以开始游玩。";
@@ -165,17 +169,26 @@ namespace Dashing.Unity
         }
         private void StartRun(MusicScreen screen)
         {
+            activeInputs.Clear(); pausedReleases.Clear();
             Screen = screen; ConfirmDiscard = false; Status = ""; feedbackLeft = 1; ResetView(Phase.Running); clock.Start(clip); UI.Rebuild();
         }
         public void TogglePause()
         {
             if (!Running) return;
-            if (Paused) { clock.Resume(); View.Phase = Phase.Running; } else { clock.Pause(); View.Phase = Phase.Paused; }
+            if (Paused)
+            {
+                clock.Resume(); View.Phase = Phase.Running;
+                foreach (string input in pausedReleases) ReleasePlaying(input);
+                pausedReleases.Clear();
+            }
+            else { clock.Pause(); View.Phase = Phase.Paused; }
             UI.Rebuild();
         }
         public void StopRun()
         {
             if (!Running) return;
+            if (Screen == MusicScreen.Recording) Recorder.Finish(clock.Time - OffsetMs / 1000.0, Chart.duration);
+            activeInputs.Clear(); pausedReleases.Clear();
             clock.Stop(); View.Phase = Phase.Menu;
             if (Screen == MusicScreen.Recording) { SyncDraft(); Screen = MusicScreen.Review; Status = "录制完成，" + Chart.notes.Count + " 个音符。可以撤销、试听、保存或重新录制。"; }
             else { Screen = returnScreen; Status = "已结束试听 / 游玩。"; }
@@ -184,7 +197,13 @@ namespace Dashing.Unity
         public void Undo()
         {
             if (!Draft || Recorder == null || Screen == MusicScreen.Playing) return;
-            if (Recorder.Undo()) { Dirty = true; SyncDraft(); Feedback = "已撤销最后一个音符"; feedbackLeft = 1; Status = Feedback; UI.Rebuild(); }
+            if (Recorder.Undo())
+            {
+                staleVisuals.Clear(); foreach (var pair in visible) if (pair.Key >= Recorder.Notes.Count) staleVisuals.Add(pair.Key);
+                foreach (int key in staleVisuals) RemoveVisual(key);
+                nextVisual = Math.Min(nextVisual, Recorder.Notes.Count);
+                Dirty = true; SyncDraft(); Feedback = "已撤销最后一次录入（双生成对撤销）"; feedbackLeft = 1; Status = Feedback; UI.Rebuild();
+            }
         }
         public void Save()
         {
@@ -218,7 +237,12 @@ namespace Dashing.Unity
         }
         private void SyncDraft()
         {
-            Chart.notes.Clear(); foreach (var note in Recorder.Notes) Chart.notes.Add(new RhythmNote(note.time, note.rail));
+            Chart.notes.Clear(); foreach (var note in Recorder.Notes) Chart.notes.Add(new RhythmNote(note.time, note.rail, note.kind, note.duration, note.pairId));
+        }
+        public void ToggleRecordTwins()
+        {
+            if (!Draft || (Running && Screen != MusicScreen.Recording)) return;
+            RecordTwins = !RecordTwins; UI.Rebuild();
         }
         private void ResetView(Phase phase)
         {
@@ -256,9 +280,18 @@ namespace Dashing.Unity
             }
             foreach (var pair in visible)
             {
+                if (pair.Value.Removed) continue;
                 var note = notes[pair.Key]; pair.Value.X = layout.HitX + (note.time - now) / RhythmSession.Approach * (layout.Width + 60 - layout.HitX);
                 pair.Value.Y = layout.Y(note.rail); pair.Value.Phase = now * 5;
+                if (note.kind == MonsterKind.Hold)
+                {
+                    var monster = pair.Value; monster.H = 38; monster.Len = monster.W = MathEx.Clamp(note.duration * (layout.Width + 60 - layout.HitX) / RhythmSession.Approach, 80, layout.Width * 4);
+                    monster.X -= monster.H * .46;
+                    if (monster.Anchored) monster.X = layout.HitX - monster.H * .46;
+                }
             }
+            staleVisuals.Clear(); foreach (var pair in visible) if (pair.Value.Removed) staleVisuals.Add(pair.Key);
+            foreach (int index in staleVisuals) visible.Remove(index);
             View.Monsters.RemoveAll(m => m.Removed);
         }
         private void RemoveVisual(int index) { Monster m; if (visible.TryGetValue(index, out m)) { m.Removed = true; visible.Remove(index); } }
@@ -266,29 +299,44 @@ namespace Dashing.Unity
         {
             double corrected=raw-OffsetMs/1000.0;
             staleVisuals.Clear();
-            foreach(var pair in visible)if(pair.Key>=Recorder.Notes.Count||corrected-Recorder.Notes[pair.Key].time>3)staleVisuals.Add(pair.Key);
-            foreach(int key in staleVisuals)RemoveVisual(key);
-            for(int i=Recorder.Notes.Count-1;i>=0;i--)
+            nextVisual = Math.Min(nextVisual, Recorder.Notes.Count);
+            while (nextVisual < Recorder.Notes.Count)
             {
-                var note=Recorder.Notes[i];double age=corrected-note.time;if(age>3)break;
-                Monster monster;if(!visible.TryGetValue(i,out monster))
-                {monster=new Monster {Id=i+1,Kind=MonsterKind.Normal,Lane=note.rail,W=42,H=42,Sf=1};visible.Add(i,monster);View.Monsters.Add(monster);}
+                int i = nextVisual++; var note = Recorder.Notes[i];
+                var monster = new Monster { Id=i+1,Kind=note.kind,Lane=note.rail,W=42,H=42,Sf=1,PairId=note.pairId };
+                if (note.kind == MonsterKind.Twin) monster.PartnerId = note.rail == Lane.Top ? i+2 : i;
+                visible.Add(i,monster); View.Monsters.Add(monster);
+            }
+            foreach (var pair in visible)
+            {
+                if (pair.Key >= Recorder.Notes.Count) { staleVisuals.Add(pair.Key); continue; }
+                var note = Recorder.Notes[pair.Key]; var monster = pair.Value;
+                double age=corrected-note.time, length=Recorder.PreviewDuration(note,Math.Min(corrected,Chart.duration));
+                if (age-length>3) { staleVisuals.Add(pair.Key); continue; }
+                monster.Kind=length>=ChartRecorder.HoldThreshold?MonsterKind.Hold:note.kind;
+                if(monster.Kind==MonsterKind.Hold)
+                {monster.H=38;monster.HoldDuration=Math.Max(ChartRecorder.HoldThreshold,length);monster.Len=monster.W=MathEx.Clamp(length*(View.Layout.Width/2+60)/3,80,View.Layout.Width*4);}
                 monster.X=View.Layout.Width/2-Math.Max(0,age)*(View.Layout.Width/2+60)/3;
+                if(monster.Kind==MonsterKind.Hold)monster.X-=monster.H*.46;
                 monster.Y=View.Layout.Y(note.rail);monster.Phase=raw*5;
             }
+            foreach(int key in staleVisuals)RemoveVisual(key);
             View.Monsters.RemoveAll(m=>m.Removed);
         }
         private void FlushCombatCues()
         {foreach(var cue in Battle.Combat.Cues)Host.MusicCue(cue,View);Battle.Combat.Cues.Clear();}
         public void Tap(Lane rail)
+        { string input = "tap:" + rail; Press(rail, input); Release(input); }
+        public void Press(Lane rail, string input)
         {
-            if (!Running || Paused) return;
+            if (!Running || Paused || string.IsNullOrEmpty(input) || activeInputs.ContainsKey(input)) return;
             double raw = clock.Time; if (raw < 0 || raw >= Chart.duration + RhythmSession.GoodWindow) return;
+            activeInputs.Add(input, rail);
             UI.PulseRail(rail);
             double corrected = raw - OffsetMs / 1000.0;
             if (Screen == MusicScreen.Recording)
             {
-                if (!Recorder.Record(corrected, rail, Chart.duration)) return;
+                if (!Recorder.Press(corrected, rail, Chart.duration, input, RecordTwins)) return;
                 Dirty = true; Feedback = (rail == Lane.Top ? "上轨" : "下轨") + "  " + corrected.ToString("F3") + "s  ·  已录 " + Recorder.Notes.Count; feedbackLeft = .75f;
                 UpdateRecordingNotes(raw);
                 Host.MusicCue(new Cue(CueKind.Hit, View.Layout.Width/2, View.Layout.Y(rail), rail, true), View);
@@ -296,25 +344,56 @@ namespace Dashing.Unity
             else
             {
                 Battle.Advance(corrected); foreach (var expired in Session.Expired) RemoveVisual(expired.index);
-                var result = Battle.Press(rail, corrected);FlushCombatCues();
+                var result = Battle.Press(rail, corrected, input);FlushCombatCues();
                 if (result.index < 0) { Feedback = "空击"; feedbackLeft = .3f; return; }
-                RemoveVisual(result.index);
-                Feedback = (result.judgment==RhythmJudgment.Perfect?"暴击":"普攻") + "  " + (result.error < 0 ? "Early " : "Late +") + (result.error * 1000).ToString("F0") + " ms"; feedbackLeft = .7f;
+                if (result.judgment == RhythmJudgment.Pending)
+                    Feedback = Session.Chart.notes[result.index].kind == MonsterKind.Hold ? "长按中 · 保持 " + Session.Chart.notes[result.index].duration.ToString("F2") + " 秒" : "双生 · 180 毫秒内击打另一轨";
+                else
+                {
+                    Feedback = (result.judgment==RhythmJudgment.Perfect?"暴击":"普攻") + "  " + (result.error < 0 ? "Early " : "Late +") + (result.error * 1000).ToString("F0") + " ms";
+                    UpdateNotes(raw);
+                }
+                feedbackLeft = .7f;
             }
+        }
+        public void Release(string input)
+        {
+            if (!activeInputs.Remove(input) || !Running) return;
+            if (Screen == MusicScreen.Recording)
+            {
+                if (Recorder.Release(input, clock.Time - OffsetMs / 1000.0, Chart.duration))
+                { Dirty = true; Feedback = Recorder.Warning ?? (Recorder.LastReleased.kind == MonsterKind.Hold ? "长按已记录 · " + Recorder.LastReleased.duration.ToString("F3") + " 秒" : "单击已记录"); feedbackLeft = .7f; UpdateRecordingNotes(clock.Time); }
+            }
+            else if (Paused) pausedReleases.Add(input);
+            else ReleasePlaying(input);
+        }
+        private void ReleasePlaying(string input)
+        {
+            double corrected = clock.Time - OffsetMs / 1000.0;
+            Battle.Advance(corrected); var result = Battle.Release(input, corrected); FlushCombatCues();
+            if (result.index >= 0 && result.judgment == RhythmJudgment.Miss) { Feedback = "长按时长不足 · 连击清零"; feedbackLeft = .7f; }
+            UpdateNotes(clock.Time);
         }
         private void ReadControls()
         {
+            for (int rail = 0; rail < 2; rail++) for (int key = 0; key < Host.Keys.Count((Lane)rail); key++)
+            { var binding = Host.Keys.Get((Lane)rail,key); if (Input.GetKeyUp(binding)) Release("key:" + binding); }
             if (ConfirmDiscard) { if (Input.GetKeyDown(KeyCode.Escape)) CancelDiscard(); return; }
             if (UI.Typing) return;
             if(Screen==MusicScreen.CharacterSelect&&(Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.Space))){BeginPlay();return;}
             if (Input.GetKeyDown(KeyCode.F11)) Host.ToggleFullscreen();
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P)) { if (Running) TogglePause(); else if (Screen == MusicScreen.Library) Close(); else if (Screen != MusicScreen.Loading) BackToLibrary(); return; }
             if (!Running || Paused) return;
-            bool[] pressed = new bool[2];
             for (int rail = 0; rail < 2; rail++) for (int key = 0; key < Host.Keys.Count((Lane)rail); key++)
-                if (Input.GetKeyDown(Host.Keys.Get((Lane)rail, key))) pressed[rail] = true;
-            for (int rail = 0; rail < 2; rail++) if (pressed[rail]) Tap((Lane)rail);
+            { var binding = Host.Keys.Get((Lane)rail,key); if (Input.GetKeyDown(binding)) Press((Lane)rail,"key:" + binding); }
         }
+        private void OnApplicationFocus(bool focused)
+        {
+            if (focused || !Active || !Running) return;
+            if (!Paused) TogglePause();
+            foreach (string input in new List<string>(activeInputs.Keys)) Release(input);
+        }
+        private void OnApplicationPause(bool paused) { if (paused) OnApplicationFocus(false); }
         private void ReleaseClip() { clock.Stop(); if (clip != null) { Destroy(clip); clip = null; } }
         [Serializable]
         private sealed class InputState
@@ -323,6 +402,9 @@ namespace Dashing.Unity
             public string screen, status, root,character;
             public double time,recordX,firstMonsterX;
             public int notes, levels, perfect, good, miss, score,hp,maxHp,monsters;
+            public int holds, twins, holdId;
+            public double lastHoldDuration, holdProgress;
+            public bool recordTwins;
         }
         private void Update()
         {
@@ -333,6 +415,11 @@ namespace Dashing.Unity
                 perfect = Session == null ? 0 : Session.Perfect, good = Session == null ? 0 : Session.Good, miss = Session == null ? 0 : Session.Miss, score = View.Score,
                 characterVisible=Host.MusicCharacterVisible,character=View.Character.ToString(),hp=View.Hp,maxHp=View.MaxHp,fever=View.Fever,burning=View.Burning,monsters=View.Monsters.Count,
                 recordX=View.Layout.Width/2,firstMonsterX=View.Monsters.Count>0?View.Monsters[0].X:-1 };
+            var probeNotes = Draft && Recorder != null ? Recorder.Notes : Chart == null ? null : Chart.notes;
+            if (probeNotes != null) foreach (var note in probeNotes)
+            { if (note.kind == MonsterKind.Hold) { state.holds++; state.lastHoldDuration = note.duration; } if (note.kind == MonsterKind.Twin) state.twins++; }
+            state.recordTwins = RecordTwins; state.holdId = View.HoldId;
+            if (Battle != null && View.HoldId != 0) { var held = Battle.Combat.Find(View.HoldId); if (held != null) state.holdProgress = held.HoldT; }
             string output = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../TestResults/Music"));
             Directory.CreateDirectory(output); File.WriteAllText(Path.Combine(output, "input-state.json"), JsonUtility.ToJson(state));
         }

@@ -147,16 +147,43 @@ namespace Dashing.Core
             Cues.Add(new Cue(CueKind.Swing, S.Layout.HitX, S.Layout.Y(lane), lane));
         }
         // Chart timing supplies the target; all rewards and character mechanics remain shared.
-        public void PressChart(Lane lane, Monster target, bool critical)
+        public void PressChart(Lane lane, Monster target, bool critical, string input = "chart")
         {
             if(S.Phase!=Phase.Running)return;
-            Strike(lane);
-            if(target!=null&&!target.Removed&&target.Kind==MonsterKind.Normal&&target.Lane==lane)Kill(target,critical);
+            if (S.HoldId != 0)
+            {
+                var held = Find(S.HoldId); if (held != null && held.Lane == lane) return;
+                Cues.Add(new Cue(CueKind.Soul, S.Layout.HitX, S.Layout.Y(lane), lane));
+            }
+            else Strike(lane);
+            if (target == null || target.Removed || target.Lane != lane) return;
+            if (target.Kind == MonsterKind.Hold) StartHold(target, input, target.HoldDuration);
+            else if (target.Kind == MonsterKind.Twin && target.PartnerId != 0)
+            {
+                var mate = Find(target.PartnerId);
+                if (mate != null && mate.PairPending) KillPair(mate, target, critical && mate.PairCrit);
+                else if (!target.PairPending)
+                { target.PairPending = true; target.PairT = PairWindow; target.PairCrit = critical; Emit(CueKind.Hit, target, critical, "双生 · 请击打另一轨"); Heal(); }
+            }
+            else Kill(target,critical);
         }
+        public void TickChartHold(Monster target, double progress)
+        {
+            if (S.Phase != Phase.Running || target.Removed || !target.Holding) return;
+            target.HoldT = MathEx.Clamp(progress, 0, target.HoldDuration);
+            if (!target.MidAwarded && target.HoldT >= target.HoldDuration / 2)
+            { target.MidAwarded = true; Award(target, "长按中段"); }
+        }
+        public void CompleteChartHold(Monster target)
+        { if (S.Phase == Phase.Running && target != null && !target.Removed) { TickChartHold(target, target.HoldDuration); CompleteLong(target); } }
+        public void FailChartTwin(Monster target)
+        { if (S.Phase == Phase.Running && target != null && !target.Removed && target.PairPending) PairSolo(target); }
+        public void FailChartHold(Monster target)
+        { if (target != null && !target.Removed) { LongPenalty(target, "长按时长不足"); target.Removed = true; } }
         public void MissChart(Monster target)
         {
             if(S.Phase!=Phase.Running||target==null||target.Removed)return;
-            Breach(target);
+            if (target.Kind == MonsterKind.Hold) FailChartHold(target); else Breach(target);
         }
         private void Breach(Monster m)
         {
@@ -169,13 +196,13 @@ namespace Dashing.Core
         }
         private void Award(Monster m, string label)
         { int gain = MathEx.Round(200 * Multiplier); S.Score += gain; Emit(CueKind.Hold, m, false, label + " +" + gain); Heal(); }
-        private void StartHold(Monster m, string input)
+        private void StartHold(Monster m, string input, double duration = 2)
         {
             S.HoldId = m.Id; S.HoldInput = input; S.AttackT = AttackDuration;
             S.AttackLane = S.PlayerLane = m.Lane; S.AirT = 0;
             m.Holding = m.Anchored = true; m.WaitT = 6;
             if (!m.HeadAwarded) { m.HeadAwarded = true; Award(m, "长按头部"); }
-            Notice("长按中 · 保持 2 秒 / 另一轨可灵魂出击");
+            Notice(duration == 2 ? "长按中 · 保持 2 秒 / 另一轨可灵魂出击" : "长按中 · 保持 " + duration.ToString("F2") + " 秒 / 另一轨可灵魂出击");
         }
         public void Release(string input)
         { if (S.Phase == Phase.Running && S.HoldId != 0 && S.HoldInput == input) LongPenalty(Find(S.HoldId), "长按不足 2 秒"); }
@@ -280,6 +307,7 @@ namespace Dashing.Core
             }
             foreach (var m in S.Monsters)
             {
+                if (chartDriven) continue; // Chart holds use their recorded duration and song clock.
                 if (m.Kind != MonsterKind.Hold || m.Removed || m.Escaped || !m.Anchored) continue;
                 if (S.HoldId == m.Id)
                 {
@@ -289,7 +317,7 @@ namespace Dashing.Core
                 }
                 else { m.WaitT -= step; if (m.WaitT <= 0) { LongPenalty(m, "长按不足 2 秒"); break; } }
             }
-            foreach (var m in S.Monsters) if (m.Kind == MonsterKind.Twin && !m.Removed && m.PairPending) { m.PairT -= step; if (m.PairT <= 0) expired.Add(m.Id); }
+            foreach (var m in S.Monsters) if (!chartDriven && m.Kind == MonsterKind.Twin && !m.Removed && m.PairPending) { m.PairT -= step; if (m.PairT <= 0) expired.Add(m.Id); }
             foreach (var id in expired) { var m = Find(id); if (m != null && !m.Removed) PairSolo(m); if (S.Phase != Phase.Running) break; }
             if (S.PlayerLane == Lane.Top && S.HoldId == 0) { S.AirT = Math.Max(0, S.AirT - step); if (S.AirT <= 0) S.PlayerLane = Lane.Bottom; }
             foreach (var id in breached)

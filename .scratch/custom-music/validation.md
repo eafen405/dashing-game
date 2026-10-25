@@ -65,3 +65,41 @@ This is a same-frame presentation change, not a measured 1 ms device latency.
 - Visible-window smoke passed across 6682 gameplay frames, including 12 same-frame
   rail switches for each character, FEVER cleanup, resize, game over and restart.
 - All 42 music input checks and 37 survival input checks passed again.
+
+Natural descent refinement (2026-10-25): upper strikes still reach the upper rail
+in the input frame, but idle characters now accelerate downward and land after
+about one second. A lower strike lands immediately; another upper strike returns
+to the upper rail immediately, including during an existing upper-rail airtime.
+Hold/soul behavior and Core gameplay clocks are unchanged.
+
+- Rebuilt Windows with zero errors; 3162 rule checks and 82 presentation
+  assertions passed, including frame-rate-independent fall progress, pause,
+  natural landing and both interrupt directions for Rin and Zhe.
+- Visible-window smoke passed across 6675 gameplay frames, with both characters'
+  natural descent, pause, upper re-strike and immediate lower strike checked.
+  Reviewed the fresh 18-natural-fall.png capture.
+- All 42 real keyboard/mouse music checks passed again after this refinement.
+
+Authored hold and twin extension (2026-10-25): short input records a normal
+monster; holding for at least 200 ms records the actual music-clock duration.
+The recording UI shows the growing hold duration and has a twin switch that
+records one linked pair from either rail. Holds exclude pause time, finish at
+their recorded duration, fail on early release and allow opposite-rail soul
+proxy. Twins use the existing 180 ms completion window and shared rewards /
+self-destruction. Paired undo, optional JSON fields and legacy v1 tap charts
+are covered. Automatic chart generation and timeline editing remain out of scope.
+
+- Latest Windows build succeeded with zero errors and one warning.
+- All 3162 reference rule checks and 82 presentation assertions passed.
+- 172 music assertions passed, covering actual hold lengths from 200 ms to
+  5 seconds for both characters, early release, input ownership, pause, soul
+  proxy, hold overlap validation, twin boundary / solo / misses, JSON and legacy
+  compatibility. Existing survival rules continue to match the browser reference.
+- Native MP3 smoke passed 30 checks through mixed recording, pause, save,
+  original-audio independence, reload and successful hold / soul / twin playback.
+  The six-note mixed chart scored 2500 with zero misses and 165 HP as Rin.
+- All 52 real keyboard/mouse music checks passed. Physical 650 ms keyboard and
+  450 ms mouse holds retained their durations, one key press authored a twin
+  pair, and both metadata types survived saving and a full native process restart.
+- Reviewed fresh music-hold.png and music-twins.png captures from the real player.
+- All 37 real survival input / rebinding checks passed again on this build.

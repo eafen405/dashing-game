@@ -21,8 +21,21 @@ two-second countdown. Rin and Zhe use the same combat rules as survival:
 initial/max HP, 300 critical / 200 normal base score, combo, healing, Burning,
 FEVER, same-rail damage, opposite-rail graze and death. Chart timestamps supply
 normal monsters instead of random spawning. A death ends the run and counts
-all remaining notes as misses. Only single-tap notes are authored for now;
-hold and twin note types are outside this release.
+all remaining notes as misses.
+
+User extension (2026-10-25): short presses remain normal monsters. Presses held
+for at least 200 ms author hold monsters with their actual music-clock duration;
+pause time is excluded, and stopping clips open holds to the recorded song time.
+Playback requires the saved duration, supports early-release failure and
+opposite-rail soul proxy, and preserves shared head/middle/completion rewards.
+Only one body hold can run at a time; overlapping holds are retained as taps with
+a warning, and same-rail inputs cannot interrupt a recorded hold span.
+
+A visible twin-recording switch is available before and during recording.
+With it enabled, pressing either rail creates one simultaneous linked twin pair.
+The pair undoes atomically and replays with the shared 180 ms completion window,
+pair score and single-kill self-destruction rules. JSON includes optional monster
+kind, duration and pair identifier fields; existing v1 tap charts remain valid.
 
 Verification: deterministic rhythm tests, storage round trips and corrupt data,
 Unity compile and Windows build, real MP3 decode and record/save/reload/play

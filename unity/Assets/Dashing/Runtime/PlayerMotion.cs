@@ -5,7 +5,7 @@ using Dashing.Core;
 namespace Dashing.Unity
 {
     // Presentation only: rule coordinates and attack / airtime clocks stay in Core.
-    // Rail changes are immediate; attack / hold / reward clocks stay authoritative in Core.
+    // Strikes reach their rail immediately; idle descent uses presentation-only gravity.
     public sealed class PlayerMotion
     {
         public float Clock { get; private set; }
@@ -22,18 +22,22 @@ namespace Dashing.Unity
         public bool HoldActive { get; private set; }
         public bool Holding { get; private set; }
         public bool Walking { get; private set; }
-        private float pairLeft;
+        private const float FallDuration = 1;
+        private float pairLeft,fallSpeed;
+        private bool strikePending;
+        private Lane strikeLane;
 
         public void Reset(GameState s)
         {
-            Clock=Landing=PairP=Squash=Tilt=Hurt=Fever=pairLeft=0;
+            Clock=Landing=PairP=Squash=Tilt=Hurt=Fever=pairLeft=fallSpeed=0;strikePending=false;
             Y=BodyY=(float)s.Layout.Y(s.PlayerLane);
             Airborne=Riding=HoldActive=Holding=Walking=false;
         }
         public void Cue(Cue cue, GameState s)
         {
             // A new strike interrupts the decorative twin finish without delaying rail input.
-            if(cue.Kind==CueKind.Swing)pairLeft=0;
+            if(cue.Kind==CueKind.Swing&&s.HoldId==0)
+            {pairLeft=0;strikePending=true;strikeLane=cue.Lane;fallSpeed=0;}
             // A soul's twin kill must not pull the held body out of its lane.
             if(cue.Kind==CueKind.Pair && s.HoldId==0)pairLeft=.62f;
             if(cue.Kind==CueKind.Hurt)Hurt=.24f;
@@ -49,11 +53,22 @@ namespace Dashing.Unity
                 if(m.Kind==MonsterKind.Hold && m.Anchored && !m.Removed && !m.Escaped && m.Lane==s.PlayerLane)
                 {HoldActive=true;Holding=m.Holding&&s.HoldId==m.Id;break;}
             float bottom=(float)s.Layout.Y(Lane.Bottom),r=(float)s.Layout.PlayerR;
-            // Do not wait for a tween, gravity, or the one-second rule airtime to reach a rail.
-            // Freeze the displayed position while paused, including window-layout changes.
-            if(s.Phase!=Phase.Paused)Y=(float)s.Layout.Y(s.PlayerLane);
-            bool airborneNow=s.PlayerLane==Lane.Top&&!HoldActive;
-            if(Airborne&&!airborneNow&&s.PlayerLane==Lane.Bottom)Landing=.18f;
+            // Explicit strikes preempt falling, including repeated upper strikes.
+            // The rule's automatic Bottom transition must never be mistaken for a down strike.
+            if(s.Phase!=Phase.Paused)
+            {
+                if(HoldActive){Y=(float)s.Layout.Y(s.PlayerLane);fallSpeed=0;strikePending=false;}
+                else if(strikePending){Y=(float)s.Layout.Y(strikeLane);fallSpeed=0;strikePending=false;}
+                else if(Y<bottom)
+                {
+                    float gravity=2*(bottom-(float)s.Layout.Y(Lane.Top))/(FallDuration*FallDuration);
+                    Y=Mathf.Min(bottom,Y+fallSpeed*dt+.5f*gravity*dt*dt);
+                    fallSpeed=Y<bottom?fallSpeed+gravity*dt:0;
+                }
+                else {Y=bottom;fallSpeed=0;}
+            }
+            bool airborneNow=Y<bottom-.01f&&!HoldActive;
+            if(Airborne&&!airborneNow&&!HoldActive)Landing=.18f;
             Airborne=airborneNow;
             Walking=(s.Phase==Phase.Running||s.Phase==Phase.Paused) && s.AttackT<=0 && !HoldActive && PairP==0 &&
                 s.PlayerLane==Lane.Bottom && !Airborne && Mathf.Abs(Y-bottom)<1.5f;

@@ -80,7 +80,7 @@ function Send-Key([byte]$key) {
     Start-Sleep -Milliseconds 90
 }
 function Tap-Key([byte]$key) { Focus-Game; Send-Key $key }
-function Click-Game([int]$x,[int]$y) {
+function Click-Game([int]$x,[int]$y,[int]$holdMilliseconds=70) {
     Focus-Game
     [DashingMusicInput]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null
     $rect = [DashingMusicInput+Rect]::new()
@@ -91,7 +91,7 @@ function Click-Game([int]$x,[int]$y) {
     [DashingMusicInput]::SetCursorPos($point.X,$point.Y) | Out-Null
     Start-Sleep -Milliseconds 70
     [DashingMusicInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 70
+    Start-Sleep -Milliseconds $holdMilliseconds
     [DashingMusicInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
     Start-Sleep -Milliseconds 100
 }
@@ -181,8 +181,24 @@ try {
     $null = Await-State {param($s) $s.time -gt .1} 'Rerecord music starts'
     Tap-Key 87
     Click-Game 640 515
+    Focus-Game
+    [DashingMusicInput]::keybd_event(87,[byte][DashingMusicInput]::MapVirtualKey(87,0),0,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 650
+    [DashingMusicInput]::keybd_event(87,[byte][DashingMusicInput]::MapVirtualKey(87,0),2,[UIntPtr]::Zero)
+    $held = Await-State {param($s) $s.notes -eq 3 -and $s.holds -eq 1} 'Keyboard long press records a hold monster'
+    Assert-Check ($held.lastHoldDuration -ge .55 -and $held.lastHoldDuration -le .9) 'Keyboard hold preserves actual press-to-release duration'
+    Click-Game 640 515 450
+    $mouseHeld = Await-State {param($s) $s.notes -eq 4 -and $s.holds -eq 2} 'Mouse press and release records a hold monster'
+    Assert-Check ($mouseHeld.lastHoldDuration -ge .35 -and $mouseHeld.lastHoldDuration -le .7) 'Mouse hold preserves actual duration'
+    Click-Game 640 598
+    $null = Await-State {param($s) $s.recordTwins} 'Twin recording button enables paired input'
+    Tap-Key 87
+    $null = Await-State {param($s) $s.notes -eq 6 -and $s.twins -eq 2} 'One physical key press records both twin monsters'
+    Capture-Game 'ui-09-mixed-recording.png'
+    Click-Game 640 598
+    $null = Await-State {param($s) -not $s.recordTwins} 'Twin recording button restores tap and hold input'
     Click-Game 760 678
-    $null = Await-State {param($s) $s.screen -eq 'Review' -and $s.notes -eq 2} 'New recording replaces previous draft'
+    $null = Await-State {param($s) $s.screen -eq 'Review' -and $s.notes -eq 6} 'New mixed recording replaces previous draft'
     Click-Game 640 173
     [DashingMusicInput]::keybd_event(17,0,0,[UIntPtr]::Zero); Send-Key 65; [DashingMusicInput]::keybd_event(17,0,2,[UIntPtr]::Zero)
     [DashingMusicInput]::TypeText('UI music chart')
@@ -197,13 +213,15 @@ try {
     Click-Game 640 575
     $null = Await-State {param($s) $s.screen -eq 'Playing' -and $s.dirty -and $s.characterVisible -and $s.character -eq 'Zhe'} 'Selected character appears for draft audition'
     Click-Game 760 678
-    $null = Await-State {param($s) $s.screen -eq 'Review' -and $s.dirty -and $s.notes -eq 2} 'Ending audition retains editable draft'
+    $null = Await-State {param($s) $s.screen -eq 'Review' -and $s.dirty -and $s.notes -eq 6} 'Ending audition retains mixed editable draft'
     Click-Game 640 485
     $saved = Await-State {param($s) $s.screen -eq 'Library' -and $s.levels -eq 1 -and -not $s.dirty} 'Save button adds local playable level'
     Assert-Check ([IO.Path]::GetFullPath($saved.root) -eq [IO.Path]::GetFullPath($testRoot)) 'Test library isolated from player levels'
     $chartPath = @(Get-ChildItem -LiteralPath $testRoot -Filter chart.json -Recurse)[0].FullName
     $chart = Get-Content -LiteralPath $chartPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    Assert-Check ($chart.notes.Count -eq 2 -and $chart.notes[0].rail -eq 0 -and $chart.notes[1].rail -eq 1) 'Persisted chart matches keyboard and mouse rails'
+    Assert-Check ($chart.notes.Count -eq 6 -and $chart.notes[0].rail -eq 0 -and $chart.notes[1].rail -eq 1) 'Persisted chart matches keyboard and mouse rails'
+    Assert-Check ($chart.notes[2].kind -eq 2 -and $chart.notes[2].duration -ge .55 -and $chart.notes[3].kind -eq 2 -and $chart.notes[3].duration -ge .35) 'Saved chart retains keyboard and mouse hold durations'
+    Assert-Check ($chart.notes[4].kind -eq 1 -and $chart.notes[5].kind -eq 1 -and $chart.notes[4].pairId -eq $chart.notes[5].pairId -and $chart.notes[4].time -eq $chart.notes[5].time) 'Saved chart retains simultaneous linked twin pair'
     Assert-Check ($chart.title -eq 'UI music chart') 'Edited title persists in saved chart'
     Assert-Check (Test-Path -LiteralPath (Join-Path (Split-Path $chartPath) 'music.mp3')) 'Saved level includes MP3 copy'
     Capture-Game 'ui-05-saved.png'
@@ -212,13 +230,14 @@ try {
     Click-Game 500 599
     $null = Await-State {param($s) $s.active -and $s.levels -eq 1} 'Saved level survives process restart'
     Click-Game 640 294
-    $null = Await-State {param($s) $s.screen -eq 'CharacterSelect'} 'Saved library row opens character selection' 65
+    $reloaded = Await-State {param($s) $s.screen -eq 'CharacterSelect'} 'Saved library row opens character selection' 65
+    Assert-Check ($reloaded.holds -eq 2 -and $reloaded.twins -eq 2) 'Hold and twin metadata survives native process restart'
     Click-Game 845 265
     Click-Game 640 575
     $null = Await-State {param($s) $s.screen -eq 'Playing' -and $s.character -eq 'Zhe'} 'Chosen character starts saved chart'
     $null = Await-State {param($s) $s.time -gt 0 -and -not $s.paused} 'Saved music begins playing'
     Capture-Game 'ui-06-playing.png'
-    $null = Await-State {param($s) $s.screen -eq 'Results' -and $s.miss -eq 2 -and $s.hp -eq 280} 'Song results apply survival same-rail damage and opposite-rail graze' 35
+    $null = Await-State {param($s) $s.screen -eq 'Results' -and $s.miss -eq 6 -and $s.hp -eq 260} 'Mixed-chart misses apply shared hold, twin, breach and graze rules' 35
     Capture-Game 'ui-07-results.png'
     Click-Game 640 689
     $null = Await-State {param($s) $s.screen -eq 'Library'} 'Results return to library'
